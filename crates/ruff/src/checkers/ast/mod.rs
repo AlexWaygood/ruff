@@ -84,8 +84,6 @@ mod deferred;
 pub(crate) struct Checker<'a> {
     /// The [`Path`] to the file under analysis.
     path: &'a Path,
-    /// The [`Path`] to the package containing the current file.
-    package: Option<&'a Path>,
     /// The module representation of the current file (e.g., `foo.bar`).
     module_path: Option<&'a [String]>,
     /// Whether the current file is a stub (`.pyi`) file.
@@ -125,7 +123,6 @@ impl<'a> Checker<'a> {
         noqa_line_for: &'a NoqaMapping,
         noqa: flags::Noqa,
         path: &'a Path,
-        package: Option<&'a Path>,
         module: Module<'a>,
         locator: &'a Locator,
         stylist: &'a Stylist,
@@ -137,7 +134,6 @@ impl<'a> Checker<'a> {
             noqa_line_for,
             noqa,
             path,
-            package,
             module_path: module.path(),
             is_stub: is_python_stub_file(path),
             locator,
@@ -221,10 +217,6 @@ impl<'a> Checker<'a> {
 
     pub(crate) const fn semantic(&self) -> &SemanticModel<'a> {
         &self.semantic
-    }
-
-    pub(crate) const fn package(&self) -> Option<&'a Path> {
-        self.package
     }
 
     pub(crate) const fn path(&self) -> &'a Path {
@@ -5429,7 +5421,6 @@ pub(crate) fn check_ast(
         noqa_line_for,
         noqa,
         path,
-        package,
         module,
         locator,
         stylist,
