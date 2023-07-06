@@ -21,8 +21,6 @@ use crate::IOError;
 
 pub const JUPYTER_NOTEBOOK_EXT: &str = "ipynb";
 
-const MAGIC_PREFIX: [&str; 3] = ["%", "!", "?"];
-
 /// Run round-trip source code generation on a given Jupyter notebook file path.
 pub fn round_trip(path: &Path) -> anyhow::Result<String> {
     let mut notebook = Notebook::read(path).map_err(|err| {
@@ -61,26 +59,21 @@ impl Cell {
     /// Return `true` if it's a valid code cell.
     ///
     /// A valid code cell is a cell where the cell type is [`Cell::Code`] and the
-    /// source doesn't contain a magic, shell or help command.
+    /// source doesn't contain a cell magic.
     fn is_valid_code_cell(&self) -> bool {
         let source = match self {
             Cell::Code(cell) => &cell.source,
             _ => return false,
         };
-        // Ignore a cell if it contains a magic command. There could be valid
-        // Python code as well, but we'll ignore that for now.
-        // TODO(dhruvmanila): https://github.com/psf/black/blob/main/src/black/handle_ipynb_magics.py
+        // Ignore cells containing cell magic. This is different from line magic
+        // which is allowed and ignored by the parser.
         !match source {
-            SourceValue::String(string) => string.lines().any(|line| {
-                MAGIC_PREFIX
-                    .iter()
-                    .any(|prefix| line.trim_start().starts_with(prefix))
-            }),
-            SourceValue::StringArray(string_array) => string_array.iter().any(|line| {
-                MAGIC_PREFIX
-                    .iter()
-                    .any(|prefix| line.trim_start().starts_with(prefix))
-            }),
+            SourceValue::String(string) => string
+                .lines()
+                .any(|line| line.trim_start().starts_with("%%")),
+            SourceValue::StringArray(string_array) => string_array
+                .iter()
+                .any(|line| line.trim_start().starts_with("%%")),
         }
     }
 }
@@ -494,9 +487,10 @@ mod tests {
     }
 
     #[test_case(Path::new("markdown.json"), false; "markdown")]
-    #[test_case(Path::new("only_magic.json"), false; "only_magic")]
-    #[test_case(Path::new("code_and_magic.json"), false; "code_and_magic")]
+    #[test_case(Path::new("only_magic.json"), true; "only_magic")]
+    #[test_case(Path::new("code_and_magic.json"), true; "code_and_magic")]
     #[test_case(Path::new("only_code.json"), true; "only_code")]
+    #[test_case(Path::new("cell_magic.json"), false; "cell_magic")]
     fn test_is_valid_code_cell(path: &Path, expected: bool) -> Result<()> {
         assert_eq!(read_jupyter_cell(path)?.is_valid_code_cell(), expected);
         Ok(())
