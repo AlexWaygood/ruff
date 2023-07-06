@@ -6,6 +6,7 @@ use std::path::Path;
 
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
+use rustpython_parser::Mode;
 use serde::Serialize;
 use serde_json::error::Category;
 
@@ -151,7 +152,7 @@ impl Notebook {
                                 )
                             })?;
                             // Check if tokenizing was successful and the file is non-empty
-                            if (ruff_rustpython::tokenize(&contents))
+                            if (ruff_rustpython::tokenize(&contents, Mode::Module))
                                 .last()
                                 .map_or(true, Result::is_err)
                             {

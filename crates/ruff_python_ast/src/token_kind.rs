@@ -19,6 +19,8 @@ pub enum TokenKind {
     /// Token value for a newline that is not a logical line break. These are filtered out of
     /// the token stream prior to parsing.
     NonLogicalNewline,
+    /// Token value for a Jupyter magic command.
+    MagicCommand,
     /// Token value for an indent.
     Indent,
     /// Token value for a dedent.
@@ -342,6 +344,7 @@ impl TokenKind {
             Tok::Comment(_) => TokenKind::Comment,
             Tok::Newline => TokenKind::Newline,
             Tok::NonLogicalNewline => TokenKind::NonLogicalNewline,
+            Tok::MagicCommand(_) => TokenKind::MagicCommand,
             Tok::Indent => TokenKind::Indent,
             Tok::Dedent => TokenKind::Dedent,
             Tok::EndOfFile => TokenKind::EndOfFile,

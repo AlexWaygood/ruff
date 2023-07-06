@@ -9,6 +9,7 @@ use itertools::Itertools;
 use ruff_textwrap::dedent;
 use rustc_hash::FxHashMap;
 use rustpython_parser::lexer::LexResult;
+use rustpython_parser::Mode;
 
 use ruff_diagnostics::{AutofixKind, Diagnostic};
 use ruff_python_ast::source_code::{Indexer, Locator, SourceFileBuilder, Stylist};
@@ -97,8 +98,13 @@ pub(crate) fn max_iterations() -> usize {
 /// A convenient wrapper around [`check_path`], that additionally
 /// asserts that autofixes converge after a fixed number of iterations.
 fn test_contents(source_kind: &mut SourceKind, path: &Path, settings: &Settings) -> Vec<Message> {
+    let mode = if source_kind.is_jupyter() {
+        Mode::Jupyter
+    } else {
+        Mode::Module
+    };
     let contents = source_kind.content().to_string();
-    let tokens: Vec<LexResult> = ruff_rustpython::tokenize(&contents);
+    let tokens: Vec<LexResult> = ruff_rustpython::tokenize(&contents, mode);
     let locator = Locator::new(&contents);
     let stylist = Stylist::from_tokens(&tokens, &locator);
     let indexer = Indexer::from_tokens(&tokens, &locator);
@@ -160,7 +166,7 @@ fn test_contents(source_kind: &mut SourceKind, path: &Path, settings: &Settings)
                 notebook.update(&source_map, &fixed_contents);
             };
 
-            let tokens: Vec<LexResult> = ruff_rustpython::tokenize(&fixed_contents);
+            let tokens: Vec<LexResult> = ruff_rustpython::tokenize(&fixed_contents, mode);
             let locator = Locator::new(&fixed_contents);
             let stylist = Stylist::from_tokens(&tokens, &locator);
             let indexer = Indexer::from_tokens(&tokens, &locator);
