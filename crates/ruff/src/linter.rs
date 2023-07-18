@@ -134,12 +134,11 @@ pub fn check_path(
             .iter_enabled()
             .any(|rule_code| rule_code.lint_source().is_imports());
     if use_ast || use_imports || use_doc_lines {
-        let mode = if source_kind.map_or(false, |kind| kind.is_jupyter()) {
-            Mode::Jupyter
-        } else {
-            Mode::Module
-        };
-        match ruff_rustpython::parse_program_tokens(tokens, mode, &path.to_string_lossy()) {
+        match ruff_rustpython::parse_program_tokens(
+            tokens,
+            &path.to_string_lossy(),
+            kind.is_jupyter(),
+        ) {
             Ok(python_ast) => {
                 if use_ast {
                     diagnostics.extend(check_ast(

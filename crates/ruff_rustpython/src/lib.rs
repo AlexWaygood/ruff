@@ -19,9 +19,14 @@ pub fn tokenize(contents: &str, mode: Mode) -> Vec<LexResult> {
 /// Parse a full Python program from its tokens.
 pub fn parse_program_tokens(
     lxr: Vec<LexResult>,
-    mode: Mode,
     source_path: &str,
+    is_jupyter_notebook: bool,
 ) -> anyhow::Result<Suite, ParseError> {
+    let mode = if is_jupyter_notebook {
+        Mode::Jupyter
+    } else {
+        Mode::Module
+    };
     parser::parse_tokens(lxr, mode, source_path).map(|top| match top {
         Mod::Module(ModModule { body, .. }) => body,
         _ => unreachable!(),

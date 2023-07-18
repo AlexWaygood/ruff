@@ -37,6 +37,7 @@ use ruff_python_ast::statement_visitor::{walk_body, walk_stmt, StatementVisitor}
 use ruff_python_ast::visitor::{walk_expr, Visitor};
 use rustpython_ast::text_size::TextRange;
 use rustpython_ast::{Expr, Ranged, Stmt, Suite};
+use rustpython_parser::Mode;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::str;
@@ -284,9 +285,9 @@ fn minimization_step(
     pattern: &Regex,
     last_strategy_and_idx: Option<(&'static dyn Strategy, usize)>,
 ) -> Result<Option<(&'static dyn Strategy, usize, String)>> {
-    let tokens = ruff_rustpython::tokenize(input);
-    let ast =
-        ruff_rustpython::parse_program_tokens(tokens, "input.py").context("not valid python")?;
+    let tokens = ruff_rustpython::tokenize(input, Mode::Module);
+    let ast = ruff_rustpython::parse_program_tokens(tokens, "input.py", false)
+        .context("not valid python")?;
 
     // Try the last succeeding strategy first, skipping all that failed last time
     if let Some((last_strategy, last_idx)) = last_strategy_and_idx {
