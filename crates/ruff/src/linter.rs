@@ -327,7 +327,7 @@ pub fn lint_only(
     noqa: flags::Noqa,
     source_kind: Option<&SourceKind>,
 ) -> LinterResult<(Vec<Message>, Option<ImportMap>)> {
-    let mode = if source_kind.map_or(false, |source_kind| source_kind.is_jupyter()) {
+    let mode = if source_kind.map_or(false, SourceKind::is_jupyter) {
         Mode::Jupyter
     } else {
         Mode::Module
