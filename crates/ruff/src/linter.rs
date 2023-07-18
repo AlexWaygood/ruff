@@ -137,7 +137,7 @@ pub fn check_path(
         match ruff_rustpython::parse_program_tokens(
             tokens,
             &path.to_string_lossy(),
-            kind.is_jupyter(),
+            source_kind.map_or(false, SourceKind::is_jupyter),
         ) {
             Ok(python_ast) => {
                 if use_ast {
