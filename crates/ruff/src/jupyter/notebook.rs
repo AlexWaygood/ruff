@@ -553,6 +553,18 @@ print("after empty cells")
     }
 
     #[test]
+    fn test_line_magics() -> Result<()> {
+        let path = "line_magics.ipynb".to_string();
+        let (diagnostics, source_kind) = test_notebook_path(
+            &path,
+            Path::new("line_magics_expected.ipynb"),
+            &settings::Settings::for_rule(Rule::UnusedImport),
+        )?;
+        assert_messages!(diagnostics, path, source_kind);
+        Ok(())
+    }
+
+    #[test]
     fn test_json_consistency() -> Result<()> {
         let path = "before_fix.ipynb".to_string();
         let (_, source_kind) = test_notebook_path(
