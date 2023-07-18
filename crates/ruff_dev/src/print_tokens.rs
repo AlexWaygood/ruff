@@ -12,7 +12,7 @@ pub(crate) struct Args {
     /// Python file for which to generate the AST.
     #[arg(required = true)]
     file: PathBuf,
-    /// Run in Jupyter mode i.e., allow line magics (%), shell commands (!), and help (?).
+    /// Run in Jupyter mode i.e., allow line magics (`%`, `!`, `?`, `/`, `,`, `;`).
     #[arg(long)]
     jupyter: bool,
 }
