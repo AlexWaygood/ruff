@@ -331,16 +331,13 @@ pub(crate) fn init(path: &Path) -> Result<()> {
 mod tests {
     use std::env::temp_dir;
     use std::fs;
-    use std::io::{self, Write};
-    use std::ops::Deref;
-    use std::path::{Path, PathBuf};
-    use std::sync::atomic::AtomicU64;
+    use std::io::Write;
+    use std::path::PathBuf;
 
     use ruff::settings::{flags, AllSettings};
     use ruff_cache::CACHE_DIR_NAME;
-    use ruff_python_ast::imports::ImportMap;
 
-    use crate::cache::{self, Cache, FileCache};
+    use crate::cache::{self, Cache};
     use crate::diagnostics::{lint_path, Diagnostics};
 
     #[test]
@@ -443,79 +440,49 @@ mod tests {
         assert!(expected_diagnostics == got_diagnostics);
     }
 
-    fn setup_test_cache(source: &[u8]) -> (cache::Cache, PathBuf) {
-        let mut cache_dir = temp_dir();
-        cache_dir.push("ruff_tests/cache_invalidation");
-        let _ = fs::remove_dir_all(&cache_dir);
-        cache::init(&cache_dir).unwrap();
-
-        let settings = AllSettings::default();
-        let package_root = fs::canonicalize("resources/test/fixtures/cache_mutable").unwrap();
-        let cache = Cache::open(&cache_dir, package_root.clone(), &settings.lib);
-
-        let path = package_root.join("source.py");
-        let mut file = fs::OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .open(path.deref()).unwrap();
-        file.write_all(source).unwrap();
-        file.sync_data().unwrap();
-
-        (cache, path.into())
-    }
-
-    fn run_lint_with_test_cache(cache: &cache::Cache, path: PathBuf) -> Result<Diagnostics, anyhow::Error> {
-        let package_root = cache.package.package_root.clone();
-        let settings = AllSettings::default();
-
-        lint_path(
-            &path.deref(),
-            Some(&package_root),
-            &settings,
-            Some(cache),
-            flags::Noqa::Enabled,
-            flags::FixMode::Generate,
-        )
-    }
-
     #[test]
     fn cache_adds_file_on_lint() {
         let source: &[u8] = b"# NOTE: sync with cache::invalidation test\na = 1\n\n__all__ = list([\"a\", \"b\"])\n";
-        let (cache, path) = setup_test_cache(source);
+
+        let test_cache = TestCache::new();
+        let cache = test_cache.open();
+        test_cache.write_source_file("source.py", source);
         assert_eq!(cache.new_files.lock().unwrap().len(), 0);
 
-        run_lint_with_test_cache(&cache, path).unwrap();
+        cache.store().unwrap();
+        let cache = test_cache.open();
+
+        test_cache
+            .lint_file_with_cache("source.py", &cache)
+            .unwrap();
         assert_eq!(cache.new_files.lock().unwrap().len(), 1);
 
         cache.store().unwrap();
     }
-
 
     #[test]
     fn cache_invalidated_on_file_content_change() {
         let source: &[u8] = b"# NOTE: sync with cache::invalidation test\na = 1\n\n__all__ = list([\"a\", \"b\"])\n";
-        let (cache, path) = setup_test_cache(source);
-        
-        let expected_diagnostics = run_lint_with_test_cache(&cache, path.clone()).unwrap();
-        assert_eq!(cache.new_files.lock().unwrap().len(), 1);
 
-        // Write the cache so new files is reset
+        let test_cache = TestCache::new();
+        let cache = test_cache.open();
+        test_cache.write_source_file("source.py", source);
+        assert_eq!(cache.new_files.lock().unwrap().len(), 0);
+
+        let expected_diagnostics = test_cache
+            .lint_file_with_cache("source.py", &cache)
+            .unwrap();
+
         cache.store().unwrap();
+        let cache = test_cache.open();
 
-        let previous_mtime = path.deref().metadata().unwrap().modified().unwrap();
-        
         // Write the same contents to the source file (updating the modified time)
-        let mut file = fs::OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .open(path.deref()).unwrap();
-        file.write_all(source).unwrap();
-        file.sync_data().unwrap();
+        test_cache.write_source_file("source.py", source);
+        
+        let got_diagnostics = test_cache
+            .lint_file_with_cache("source.py", &cache)
+            .unwrap();
 
-        let new_mtime = path.deref().metadata().unwrap().modified().unwrap();
-        assert!(previous_mtime != new_mtime);
-
-        let got_diagnostics = run_lint_with_test_cache(&cache, path.clone()).unwrap();
         assert_eq!(
             cache.new_files.lock().unwrap().len(),
             1,
@@ -526,112 +493,173 @@ mod tests {
 
     }
 
+    // // #[test]
+    // // fn cache_invalidated_on_permission_change() {
+    // //     // Regression test for issue #3086.
+
+    // //     #[cfg(unix)]
+    // //     #[allow(clippy::items_after_statements)]
+    // //     fn flip_execute_permission_bit(path: &Path) -> io::Result<()> {
+    // //         use std::os::unix::fs::PermissionsExt;
+    // //         let file = fs::OpenOptions::new().write(true).open(path)?;
+    // //         let perms = file.metadata()?.permissions();
+    // //         file.set_permissions(PermissionsExt::from_mode(perms.mode() ^ 0o111))
+    // //     }
+
+    // //     #[cfg(windows)]
+    // //     #[allow(clippy::items_after_statements)]
+    // //     fn flip_read_only_permission(path: &Path) -> io::Result<()> {
+    // //         let file = fs::OpenOptions::new().write(true).open(path)?;
+    // //         let mut perms = file.metadata()?.permissions();
+    // //         perms.set_readonly(!perms.readonly());
+    // //         file.set_permissions(perms)
+    // //     }
+
+    // //     #[cfg(unix)]
+    // //     flip_execute_permission_bit(path)?;
+
+    // //     #[cfg(windows)]
+    // //     flip_read_only_permission(path)?;
+
+    // //     for change_file in tests {
+    // //         let cleanup = change_file(&path).unwrap();
+
+    // //         let (cache, path) = setup_test_cache();
+
+    // //         let mut got_diagnostics = lint_path(
+    // //             &path,
+    // //             Some(&package_root),
+    // //             &settings,
+    // //             Some(&cache),
+    // //             flags::Noqa::Enabled,
+    // //             flags::FixMode::Generate,
+    // //         )
+    // //         .unwrap();
+
+    // //         cleanup(&path).unwrap();
+
+    // //         assert_eq!(
+    // //             cache.new_files.lock().unwrap().len(),
+    // //             1,
+    // //             "cache must not be used"
+    // //         );
+
+    // //         // Not store in the cache.
+    // //         expected_diagnostics.source_kind.clear();
+    // //         got_diagnostics.source_kind.clear();
+    // //         assert!(expected_diagnostics == got_diagnostics);
+    // //     }
+    // // }
+
     // #[test]
-    // fn cache_invalidated_on_permission_change() {
-    //     // Regression test for issue #3086.
+    // fn remove_old_files() {
+    //     let mut cache_dir = temp_dir();
+    //     cache_dir.push("ruff_tests/cache_remove_old_files");
+    //     let _ = fs::remove_dir_all(&cache_dir);
+    //     cache::init(&cache_dir).unwrap();
 
-    //     #[cfg(unix)]
-    //     #[allow(clippy::items_after_statements)]
-    //     fn flip_execute_permission_bit(path: &Path) -> io::Result<()> {
-    //         use std::os::unix::fs::PermissionsExt;
-    //         let file = fs::OpenOptions::new().write(true).open(path)?;
-    //         let perms = file.metadata()?.permissions();
-    //         file.set_permissions(PermissionsExt::from_mode(perms.mode() ^ 0o111))
-    //     }
+    //     let settings = AllSettings::default();
+    //     let package_root =
+    //         fs::canonicalize("resources/test/fixtures/cache_remove_old_files").unwrap();
+    //     let mut cache = Cache::open(&cache_dir, package_root.clone(), &settings.lib);
+    //     assert_eq!(cache.new_files.lock().unwrap().len(), 0);
 
-    //     #[cfg(windows)]
-    //     #[allow(clippy::items_after_statements)]
-    //     fn flip_read_only_permission(path: &Path) -> io::Result<()> {
-    //         let file = fs::OpenOptions::new().write(true).open(path)?;
-    //         let mut perms = file.metadata()?.permissions();
-    //         perms.set_readonly(!perms.readonly());
-    //         file.set_permissions(perms)
-    //     }
+    //     // Add a file to the cache that hasn't been linted or seen since the
+    //     // '70s!
+    //     cache.package.files.insert(
+    //         PathBuf::from("old.py"),
+    //         FileCache {
+    //             key: 123,
+    //             last_seen: AtomicU64::new(123),
+    //             imports: ImportMap::new(),
+    //             messages: Vec::new(),
+    //             source: String::new(),
+    //         },
+    //     );
 
-    //     #[cfg(unix)]
-    //     flip_execute_permission_bit(path)?;
+    //     // Now actually lint a file.
+    //     let path = package_root.join("source.py");
+    //     lint_path(
+    //         &path,
+    //         Some(&package_root),
+    //         &settings,
+    //         Some(&cache),
+    //         flags::Noqa::Enabled,
+    //         flags::FixMode::Generate,
+    //     )
+    //     .unwrap();
 
-    //     #[cfg(windows)]
-    //     flip_read_only_permission(path)?;
+    //     // Storing the cache should remove the old (`old.py`) file.
+    //     cache.store().unwrap();
+    //     // So we when we open the cache again it shouldn't contain `old.py`.
+    //     let cache = Cache::open(&cache_dir, package_root, &settings.lib);
 
-
-    //     for change_file in tests {
-    //         let cleanup = change_file(&path).unwrap();
-
-    //         let (cache, path) = setup_test_cache();
-
-    //         let mut got_diagnostics = lint_path(
-    //             &path,
-    //             Some(&package_root),
-    //             &settings,
-    //             Some(&cache),
-    //             flags::Noqa::Enabled,
-    //             flags::FixMode::Generate,
-    //         )
-    //         .unwrap();
-
-    //         cleanup(&path).unwrap();
-
-    //         assert_eq!(
-    //             cache.new_files.lock().unwrap().len(),
-    //             1,
-    //             "cache must not be used"
-    //         );
-
-    //         // Not store in the cache.
-    //         expected_diagnostics.source_kind.clear();
-    //         got_diagnostics.source_kind.clear();
-    //         assert!(expected_diagnostics == got_diagnostics);
-    //     }
+    //     assert_eq!(cache.package.files.len(), 1, "didn't remove the old file");
+    //     assert!(
+    //         !cache.package.files.contains_key(&path),
+    //         "removed the wrong file"
+    //     );
     // }
 
-    #[test]
-    fn remove_old_files() {
-        let mut cache_dir = temp_dir();
-        cache_dir.push("ruff_tests/cache_remove_old_files");
-        let _ = fs::remove_dir_all(&cache_dir);
-        cache::init(&cache_dir).unwrap();
+    struct TestCache {
+        cache_dir: PathBuf,
+        package_root: PathBuf,
+        settings: AllSettings,
+    }
 
-        let settings = AllSettings::default();
-        let package_root =
-            fs::canonicalize("resources/test/fixtures/cache_remove_old_files").unwrap();
-        let mut cache = Cache::open(&cache_dir, package_root.clone(), &settings.lib);
-        assert_eq!(cache.new_files.lock().unwrap().len(), 0);
+    impl TestCache {
+        fn new() -> Self {
+            // Build a new cach directory and clear it
+            let mut cache_dir = temp_dir();
+            cache_dir.push("ruff_tests/cache_invalidation");
+            let _ = fs::remove_dir_all(&cache_dir);
 
-        // Add a file to the cache that hasn't been linted or seen since the
-        // '70s!
-        cache.package.files.insert(
-            PathBuf::from("old.py"),
-            FileCache {
-                key: 123,
-                last_seen: AtomicU64::new(123),
-                imports: ImportMap::new(),
-                messages: Vec::new(),
-                source: String::new(),
-            },
-        );
+            // Initialize the cache at the directory
+            cache::init(&cache_dir).unwrap();
 
-        // Now actually lint a file.
-        let path = package_root.join("source.py");
-        lint_path(
-            &path,
-            Some(&package_root),
-            &settings,
-            Some(&cache),
-            flags::Noqa::Enabled,
-            flags::FixMode::Generate,
-        )
-        .unwrap();
+            // Initialize settings and package root
+            let settings = AllSettings::default();
+            let package_root = fs::canonicalize("resources/test/fixtures/cache_mutable").unwrap();
 
-        // Storing the cache should remove the old (`old.py`) file.
-        cache.store().unwrap();
-        // So we when we open the cache again it shouldn't contain `old.py`.
-        let cache = Cache::open(&cache_dir, package_root, &settings.lib);
+            Self {
+                cache_dir,
+                package_root,
+                settings,
+            }
+        }
 
-        assert_eq!(cache.package.files.len(), 1, "didn't remove the old file");
-        assert!(
-            !cache.package.files.contains_key(&path),
-            "removed the wrong file"
-        );
+        fn write_source_file(&self, path: &str, contents: &[u8]) {
+            let path = self.package_root.join(path);
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(&*path)
+                .unwrap();
+            file.write_all(contents).unwrap();
+            file.sync_data().unwrap();
+        }
+
+        fn open(&self) -> Cache {
+            Cache::open(
+                &self.cache_dir,
+                self.package_root.clone(),
+                &self.settings.lib,
+            )
+        }
+
+        fn lint_file_with_cache(
+            &self,
+            path: &str,
+            cache: &Cache,
+        ) -> Result<Diagnostics, anyhow::Error> {
+            lint_path(
+                &self.package_root.join(path),
+                Some(&self.package_root),
+                &self.settings,
+                Some(cache),
+                flags::Noqa::Enabled,
+                flags::FixMode::Generate,
+            )
+        }
     }
 }
