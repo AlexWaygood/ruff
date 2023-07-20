@@ -5241,6 +5241,8 @@ impl Ranged for AnyNodeRef<'_> {
             AnyNodeRef::Decorator(node) => node.range(),
             AnyNodeRef::ElifElseClause(node) => node.range(),
             AnyNodeRef::TypeParamTypeVar(node) => node.range(),
+            AnyNodeRef::TypeParamTypeVarTuple(node) => node.range(),
+            AnyNodeRef::TypeParamParamSpec(node) => node.range(),
         }
     }
 }
@@ -5328,4 +5330,5 @@ pub enum NodeKind {
     ElifElseClause,
     TypeParamTypeVar,
     TypeParamTypeVarTuple,
+    TypeParamParamSpec,
 }
