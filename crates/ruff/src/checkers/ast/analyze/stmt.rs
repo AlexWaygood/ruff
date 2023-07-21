@@ -2,7 +2,7 @@ use rustpython_parser::ast::{self, Expr, Ranged, Stmt};
 
 use ruff_diagnostics::Diagnostic;
 use ruff_python_ast::helpers;
-use ruff_python_ast::identifier::Identifier;
+
 use ruff_python_ast::types::Node;
 use ruff_python_semantic::analyze::typing;
 use ruff_python_semantic::ScopeKind;
@@ -19,7 +19,7 @@ use crate::rules::{
 use crate::settings::types::PythonVersion;
 
 /// Run lint rules over a [`Stmt`] syntax node.
-pub(crate) fn analyze_stmt(stmt: &Stmt, checker: &mut Checker) {
+pub(crate) fn stmt(stmt: &Stmt, checker: &mut Checker) {
     match stmt {
         Stmt::Global(ast::StmtGlobal { names, range: _ }) => {
             if checker.enabled(Rule::AmbiguousVariableName) {

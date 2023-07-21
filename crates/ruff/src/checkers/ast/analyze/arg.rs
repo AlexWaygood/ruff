@@ -5,7 +5,7 @@ use crate::codes::Rule;
 use crate::rules::{flake8_builtins, pep8_naming, pycodestyle};
 
 /// Run lint rules over an [`Stmt`] syntax node.
-pub(crate) fn analyze_arg(arg: &Arg, checker: &mut Checker) {
+pub(crate) fn arg(arg: &Arg, checker: &mut Checker) {
     if checker.enabled(Rule::AmbiguousVariableName) {
         if let Some(diagnostic) = pycodestyle::rules::ambiguous_variable_name(&arg.arg, arg.range())
         {

@@ -36,7 +36,7 @@ use rustpython_parser::ast::{
     Expr, ExprContext, Keyword, Pattern, Ranged, Stmt, Suite, UnaryOp,
 };
 
-use ruff_diagnostics::{Diagnostic, Fix, IsolationLevel};
+use ruff_diagnostics::{Diagnostic, IsolationLevel};
 use ruff_python_ast::all::{extract_all_names, DunderAllFlags};
 use ruff_python_ast::helpers::{extract_handled_exceptions, to_module_path};
 use ruff_python_ast::identifier::Identifier;
@@ -44,44 +44,27 @@ use ruff_python_ast::source_code::{Generator, Indexer, Locator, Quote, Stylist};
 use ruff_python_ast::str::trailing_quote;
 use ruff_python_ast::typing::{parse_type_annotation, AnnotationKind};
 use ruff_python_ast::visitor::{walk_except_handler, walk_pattern, Visitor};
-use ruff_python_ast::{cast, helpers, str, visitor};
-use ruff_python_semantic::analyze::{branch_detection, typing, visibility};
+use ruff_python_ast::{helpers, str, visitor};
+use ruff_python_semantic::analyze::{typing, visibility};
 use ruff_python_semantic::{
-    Binding, BindingFlags, BindingId, BindingKind, ContextualizedDefinition, Exceptions,
-    ExecutionContext, Export, FromImport, Globals, Import, Module, ModuleKind, ScopeId, ScopeKind,
-    SemanticModel, SemanticModelFlags, StarImport, SubmoduleImport,
+    BindingFlags, BindingId, BindingKind, Exceptions, ExecutionContext, Export, FromImport,
+    Globals, Import, Module, ModuleKind, ScopeId, ScopeKind, SemanticModel, SemanticModelFlags,
+    StarImport, SubmoduleImport,
 };
 use ruff_python_stdlib::builtins::{BUILTINS, MAGIC_GLOBALS};
 use ruff_python_stdlib::path::is_python_stub_file;
 
-use crate::checkers::ast::arg::analyze_arg;
-use crate::checkers::ast::arguments::analyze_arguments;
-use crate::checkers::ast::body::analyze_body;
 use crate::checkers::ast::deferred::Deferred;
-use crate::checkers::ast::except_handler::analyze_except_handler;
-use crate::checkers::ast::expr::analyze_expr;
-use crate::checkers::ast::stmt::analyze_stmt;
 use crate::docstrings::extraction::ExtractionTarget;
-use crate::docstrings::Docstring;
-use crate::fs::relativize_path;
 use crate::importer::Importer;
 use crate::noqa::NoqaMapping;
 use crate::registry::Rule;
-use crate::rules::{
-    flake8_annotations, flake8_bugbear, flake8_import_conventions, flake8_pyi,
-    flake8_type_checking, flake8_unused_arguments, perflint, pydocstyle, pyflakes, pylint,
-    pyupgrade,
-};
+use crate::rules::{flake8_pyi, flake8_type_checking, pyflakes, pyupgrade};
 use crate::settings::{flags, Settings};
-use crate::{docstrings, noqa, warn_user};
+use crate::{docstrings, noqa};
 
-mod arg;
-mod arguments;
-mod body;
+mod analyze;
 mod deferred;
-mod except_handler;
-mod expr;
-mod stmt;
 
 pub(crate) struct Checker<'a> {
     /// The [`Path`] to the file under analysis.
@@ -295,7 +278,7 @@ where
         let flags_snapshot = self.semantic.flags;
 
         // Step 1: Analysis
-        analyze_stmt(stmt, self);
+        analyze::stmt(stmt, self);
 
         // Step 2: Binding
         match stmt {
@@ -793,7 +776,7 @@ where
         }
 
         // Step 1: Analysis
-        analyze_expr(expr, self);
+        analyze::expr(expr, self);
 
         // Step 2: Binding
         match expr {
@@ -1196,7 +1179,7 @@ where
         self.semantic.flags |= SemanticModelFlags::EXCEPTION_HANDLER;
 
         // Step 1: Analysis
-        analyze_except_handler(except_handler, self);
+        analyze::except_handler(except_handler, self);
 
         // Step 2: Binding
         let binding = match except_handler {
@@ -1254,7 +1237,7 @@ where
 
     fn visit_arguments(&mut self, arguments: &'b Arguments) {
         // Step 1: Analysis
-        analyze_arguments(arguments, self);
+        analyze::arguments(arguments, self);
 
         // Step 2: Binding.
         // Bind, but intentionally avoid walking default expressions, as we handle them
@@ -1278,7 +1261,7 @@ where
 
     fn visit_arg(&mut self, arg: &'b Arg) {
         // Step 1: Analysis
-        analyze_arg(arg, self);
+        analyze::arg(arg, self);
 
         // Step 2: Binding.
         // Bind, but intentionally avoid walking the annotation, as we handle it
@@ -1318,7 +1301,7 @@ where
 
     fn visit_body(&mut self, body: &'b [Stmt]) {
         // Step 1: Analysis
-        analyze_body(body, self);
+        analyze::body(body, self);
 
         // Step 3: Traversal
         for stmt in body {
@@ -1330,9 +1313,8 @@ where
 impl<'a> Checker<'a> {
     /// Visit a [`Module`]. Returns `true` if the module contains a module-level docstring.
     fn visit_module(&mut self, python_ast: &'a Suite) -> bool {
-        if self.enabled(Rule::FStringDocstring) {
-            flake8_bugbear::rules::f_string_docstring(self, python_ast);
-        }
+        analyze::module(python_ast, self);
+
         let docstring = docstrings::extraction::docstring_from(python_ast);
         docstring.is_some()
     }
@@ -1665,7 +1647,7 @@ impl<'a> Checker<'a> {
         scope.add(id, binding_id);
     }
 
-    fn check_deferred_future_type_definitions(&mut self) {
+    fn visit_deferred_future_type_definitions(&mut self) {
         while !self.deferred.future_type_definitions.is_empty() {
             let type_definitions = std::mem::take(&mut self.deferred.future_type_definitions);
             for (expr, snapshot) in type_definitions {
@@ -1678,7 +1660,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_deferred_string_type_definitions(&mut self, allocator: &'a typed_arena::Arena<Expr>) {
+    fn visit_deferred_string_type_definitions(&mut self, allocator: &'a typed_arena::Arena<Expr>) {
         while !self.deferred.string_type_definitions.is_empty() {
             let type_definitions = std::mem::take(&mut self.deferred.string_type_definitions);
             for (range, value, snapshot) in type_definitions {
@@ -1722,7 +1704,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_deferred_functions(&mut self) {
+    fn visit_deferred_functions(&mut self) {
         while !self.deferred.functions.is_empty() {
             let deferred_functions = std::mem::take(&mut self.deferred.functions);
             for snapshot in deferred_functions {
@@ -1742,7 +1724,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_deferred_lambdas(&mut self) {
+    fn visit_deferred_lambdas(&mut self) {
         while !self.deferred.lambdas.is_empty() {
             let lambdas = std::mem::take(&mut self.deferred.lambdas);
             for (expr, snapshot) in lambdas {
@@ -1763,141 +1745,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_deferred_for_loops(&mut self) {
-        while !self.deferred.for_loops.is_empty() {
-            let for_loops = std::mem::take(&mut self.deferred.for_loops);
-            for snapshot in for_loops {
-                self.semantic.restore(snapshot);
-
-                if let Stmt::For(ast::StmtFor {
-                    target, iter, body, ..
-                })
-                | Stmt::AsyncFor(ast::StmtAsyncFor {
-                    target, iter, body, ..
-                }) = &self.semantic.stmt()
-                {
-                    if self.enabled(Rule::UnusedLoopControlVariable) {
-                        flake8_bugbear::rules::unused_loop_control_variable(self, target, body);
-                    }
-                    if self.enabled(Rule::IncorrectDictIterator) {
-                        perflint::rules::incorrect_dict_iterator(self, target, iter);
-                    }
-                } else {
-                    unreachable!("Expected Expr::For | Expr::AsyncFor");
-                }
-            }
-        }
-    }
-
-    /// Run any lint rules that operate over a single [`UnresolvedReference`].
-    fn check_unresolved_references(&mut self) {
-        if !self.any_enabled(&[Rule::UndefinedLocalWithImportStarUsage, Rule::UndefinedName]) {
-            return;
-        }
-
-        for reference in self.semantic.unresolved_references() {
-            if reference.is_wildcard_import() {
-                if self.enabled(Rule::UndefinedLocalWithImportStarUsage) {
-                    self.diagnostics.push(Diagnostic::new(
-                        pyflakes::rules::UndefinedLocalWithImportStarUsage {
-                            name: reference.name(self.locator).to_string(),
-                        },
-                        reference.range(),
-                    ));
-                }
-            } else {
-                if self.enabled(Rule::UndefinedName) {
-                    // Avoid flagging if `NameError` is handled.
-                    if reference.exceptions().contains(Exceptions::NAME_ERROR) {
-                        continue;
-                    }
-
-                    // Allow __path__.
-                    if self.path.ends_with("__init__.py") {
-                        if reference.name(self.locator) == "__path__" {
-                            continue;
-                        }
-                    }
-
-                    self.diagnostics.push(Diagnostic::new(
-                        pyflakes::rules::UndefinedName {
-                            name: reference.name(self.locator).to_string(),
-                        },
-                        reference.range(),
-                    ));
-                }
-            }
-        }
-    }
-
-    /// Run any lint rules that operate over a single [`Binding`].
-    fn check_bindings(&mut self) {
-        if !self.any_enabled(&[
-            Rule::InvalidAllFormat,
-            Rule::InvalidAllObject,
-            Rule::UnaliasedCollectionsAbcSetImport,
-            Rule::UnconventionalImportAlias,
-            Rule::UnusedVariable,
-        ]) {
-            return;
-        }
-
-        for binding in self.semantic.bindings.iter() {
-            if self.enabled(Rule::UnusedVariable) {
-                if binding.kind.is_bound_exception() && !binding.is_used() {
-                    let mut diagnostic = Diagnostic::new(
-                        pyflakes::rules::UnusedVariable {
-                            name: binding.name(self.locator).to_string(),
-                        },
-                        binding.range,
-                    );
-                    if self.patch(Rule::UnusedVariable) {
-                        diagnostic.try_set_fix(|| {
-                            pyflakes::fixes::remove_exception_handler_assignment(
-                                binding,
-                                self.locator,
-                            )
-                            .map(Fix::automatic)
-                        });
-                    }
-                    self.diagnostics.push(diagnostic);
-                }
-            }
-            if self.enabled(Rule::InvalidAllFormat) {
-                if let Some(diagnostic) = pylint::rules::invalid_all_format(binding) {
-                    self.diagnostics.push(diagnostic);
-                }
-            }
-            if self.enabled(Rule::InvalidAllObject) {
-                if let Some(diagnostic) = pylint::rules::invalid_all_object(binding) {
-                    self.diagnostics.push(diagnostic);
-                }
-            }
-            if self.enabled(Rule::UnconventionalImportAlias) {
-                if let Some(diagnostic) =
-                    flake8_import_conventions::rules::unconventional_import_alias(
-                        self,
-                        binding,
-                        &self.settings.flake8_import_conventions.aliases,
-                    )
-                {
-                    self.diagnostics.push(diagnostic);
-                }
-            }
-            if self.is_stub {
-                if self.enabled(Rule::UnaliasedCollectionsAbcSetImport) {
-                    if let Some(diagnostic) =
-                        flake8_pyi::rules::unaliased_collections_abc_set_import(self, binding)
-                    {
-                        self.diagnostics.push(diagnostic);
-                    }
-                }
-            }
-        }
-    }
-
     /// Run any lint rules that operate over the module exports (i.e., members of `__all__`).
-    fn check_exports(&mut self) {
+    fn visit_exports(&mut self) {
         let exports: Vec<(&str, TextRange)> = self
             .semantic
             .global_scope()
@@ -1938,573 +1787,6 @@ impl<'a> Checker<'a> {
                             ));
                         }
                     }
-                }
-            }
-        }
-    }
-
-    fn check_deferred_scopes(&mut self) {
-        if !self.any_enabled(&[
-            Rule::GlobalVariableNotAssigned,
-            Rule::ImportShadowedByLoopVar,
-            Rule::RedefinedWhileUnused,
-            Rule::RuntimeImportInTypeCheckingBlock,
-            Rule::TypingOnlyFirstPartyImport,
-            Rule::TypingOnlyStandardLibraryImport,
-            Rule::TypingOnlyThirdPartyImport,
-            Rule::UndefinedLocal,
-            Rule::UnusedAnnotation,
-            Rule::UnusedClassMethodArgument,
-            Rule::UnusedFunctionArgument,
-            Rule::UnusedImport,
-            Rule::UnusedLambdaArgument,
-            Rule::UnusedMethodArgument,
-            Rule::UnusedStaticMethodArgument,
-            Rule::UnusedVariable,
-        ]) {
-            return;
-        }
-
-        // Identify any valid runtime imports. If a module is imported at runtime, and
-        // used at runtime, then by default, we avoid flagging any other
-        // imports from that model as typing-only.
-        let enforce_typing_imports = if self.is_stub {
-            false
-        } else {
-            self.any_enabled(&[
-                Rule::RuntimeImportInTypeCheckingBlock,
-                Rule::TypingOnlyFirstPartyImport,
-                Rule::TypingOnlyThirdPartyImport,
-                Rule::TypingOnlyStandardLibraryImport,
-            ])
-        };
-        let runtime_imports: Vec<Vec<&Binding>> = if enforce_typing_imports {
-            if self.settings.flake8_type_checking.strict {
-                vec![]
-            } else {
-                self.semantic
-                    .scopes
-                    .iter()
-                    .map(|scope| {
-                        scope
-                            .binding_ids()
-                            .map(|binding_id| self.semantic.binding(binding_id))
-                            .filter(|binding| {
-                                flake8_type_checking::helpers::is_valid_runtime_import(
-                                    binding,
-                                    &self.semantic,
-                                )
-                            })
-                            .collect()
-                    })
-                    .collect::<Vec<_>>()
-            }
-        } else {
-            vec![]
-        };
-
-        let mut diagnostics: Vec<Diagnostic> = vec![];
-        for scope_id in self.deferred.scopes.iter().rev().copied() {
-            let scope = &self.semantic.scopes[scope_id];
-
-            if self.enabled(Rule::UndefinedLocal) {
-                pyflakes::rules::undefined_local(self, scope_id, scope, &mut diagnostics);
-            }
-
-            if self.enabled(Rule::GlobalVariableNotAssigned) {
-                for (name, binding_id) in scope.bindings() {
-                    let binding = self.semantic.binding(binding_id);
-                    if binding.kind.is_global() {
-                        diagnostics.push(Diagnostic::new(
-                            pylint::rules::GlobalVariableNotAssigned {
-                                name: (*name).to_string(),
-                            },
-                            binding.range,
-                        ));
-                    }
-                }
-            }
-
-            if self.enabled(Rule::ImportShadowedByLoopVar) {
-                for (name, binding_id) in scope.bindings() {
-                    for shadow in self.semantic.shadowed_bindings(scope_id, binding_id) {
-                        // If the shadowing binding isn't a loop variable, abort.
-                        let binding = &self.semantic.bindings[shadow.binding_id()];
-                        if !binding.kind.is_loop_var() {
-                            continue;
-                        }
-
-                        // If the shadowed binding isn't an import, abort.
-                        let shadowed = &self.semantic.bindings[shadow.shadowed_id()];
-                        if !matches!(
-                            shadowed.kind,
-                            BindingKind::Import(..)
-                                | BindingKind::FromImport(..)
-                                | BindingKind::SubmoduleImport(..)
-                                | BindingKind::FutureImport
-                        ) {
-                            continue;
-                        }
-
-                        // If the bindings are in different forks, abort.
-                        if shadowed.source.map_or(true, |left| {
-                            binding.source.map_or(true, |right| {
-                                branch_detection::different_forks(left, right, &self.semantic.stmts)
-                            })
-                        }) {
-                            continue;
-                        }
-
-                        #[allow(deprecated)]
-                        let line = self.locator.compute_line_index(shadowed.range.start());
-
-                        self.diagnostics.push(Diagnostic::new(
-                            pyflakes::rules::ImportShadowedByLoopVar {
-                                name: name.to_string(),
-                                line,
-                            },
-                            binding.range,
-                        ));
-                    }
-                }
-            }
-
-            if self.enabled(Rule::RedefinedWhileUnused) {
-                for (name, binding_id) in scope.bindings() {
-                    for shadow in self.semantic.shadowed_bindings(scope_id, binding_id) {
-                        // If the shadowing binding is a loop variable, abort, to avoid overlap
-                        // with F402.
-                        let binding = &self.semantic.bindings[shadow.binding_id()];
-                        if binding.kind.is_loop_var() {
-                            continue;
-                        }
-
-                        // If the shadowed binding is used, abort.
-                        let shadowed = &self.semantic.bindings[shadow.shadowed_id()];
-                        if shadowed.is_used() {
-                            continue;
-                        }
-
-                        // If the shadowing binding isn't considered a "redefinition" of the
-                        // shadowed binding, abort.
-                        if !binding.redefines(shadowed) {
-                            continue;
-                        }
-
-                        if shadow.same_scope() {
-                            // If the symbol is a dummy variable, abort, unless the shadowed
-                            // binding is an import.
-                            if !matches!(
-                                shadowed.kind,
-                                BindingKind::Import(..)
-                                    | BindingKind::FromImport(..)
-                                    | BindingKind::SubmoduleImport(..)
-                                    | BindingKind::FutureImport
-                            ) && self.settings.dummy_variable_rgx.is_match(name)
-                            {
-                                continue;
-                            }
-
-                            // If this is an overloaded function, abort.
-                            if shadowed.kind.is_function_definition()
-                                && visibility::is_overload(
-                                    cast::decorator_list(
-                                        self.semantic.stmts[shadowed.source.unwrap()],
-                                    ),
-                                    &self.semantic,
-                                )
-                            {
-                                continue;
-                            }
-                        } else {
-                            // Only enforce cross-scope shadowing for imports.
-                            if !matches!(
-                                shadowed.kind,
-                                BindingKind::Import(..)
-                                    | BindingKind::FromImport(..)
-                                    | BindingKind::SubmoduleImport(..)
-                                    | BindingKind::FutureImport
-                            ) {
-                                continue;
-                            }
-                        }
-
-                        // If the bindings are in different forks, abort.
-                        if shadowed.source.map_or(true, |left| {
-                            binding.source.map_or(true, |right| {
-                                branch_detection::different_forks(left, right, &self.semantic.stmts)
-                            })
-                        }) {
-                            continue;
-                        }
-
-                        #[allow(deprecated)]
-                        let line = self.locator.compute_line_index(shadowed.range.start());
-                        let mut diagnostic = Diagnostic::new(
-                            pyflakes::rules::RedefinedWhileUnused {
-                                name: (*name).to_string(),
-                                line,
-                            },
-                            binding.range,
-                        );
-                        if let Some(range) = binding.parent_range(&self.semantic) {
-                            diagnostic.set_parent(range.start());
-                        }
-                        diagnostics.push(diagnostic);
-                    }
-                }
-            }
-
-            if matches!(
-                scope.kind,
-                ScopeKind::Function(_) | ScopeKind::AsyncFunction(_) | ScopeKind::Lambda(_)
-            ) {
-                if self.enabled(Rule::UnusedVariable) {
-                    pyflakes::rules::unused_variable(self, scope, &mut diagnostics);
-                }
-
-                if self.enabled(Rule::UnusedAnnotation) {
-                    pyflakes::rules::unused_annotation(self, scope, &mut diagnostics);
-                }
-
-                if !self.is_stub {
-                    if self.any_enabled(&[
-                        Rule::UnusedFunctionArgument,
-                        Rule::UnusedMethodArgument,
-                        Rule::UnusedClassMethodArgument,
-                        Rule::UnusedStaticMethodArgument,
-                        Rule::UnusedLambdaArgument,
-                    ]) {
-                        flake8_unused_arguments::rules::unused_arguments(
-                            self,
-                            scope,
-                            &mut diagnostics,
-                        );
-                    }
-                }
-            }
-
-            if matches!(
-                scope.kind,
-                ScopeKind::Function(_) | ScopeKind::AsyncFunction(_) | ScopeKind::Module
-            ) {
-                if enforce_typing_imports {
-                    let runtime_imports: Vec<&Binding> =
-                        if self.settings.flake8_type_checking.strict {
-                            vec![]
-                        } else {
-                            self.semantic
-                                .scopes
-                                .ancestor_ids(scope_id)
-                                .flat_map(|scope_id| runtime_imports[scope_id.as_usize()].iter())
-                                .copied()
-                                .collect()
-                        };
-
-                    if self.enabled(Rule::RuntimeImportInTypeCheckingBlock) {
-                        flake8_type_checking::rules::runtime_import_in_type_checking_block(
-                            self,
-                            scope,
-                            &mut diagnostics,
-                        );
-                    }
-
-                    if self.any_enabled(&[
-                        Rule::TypingOnlyFirstPartyImport,
-                        Rule::TypingOnlyThirdPartyImport,
-                        Rule::TypingOnlyStandardLibraryImport,
-                    ]) {
-                        flake8_type_checking::rules::typing_only_runtime_import(
-                            self,
-                            scope,
-                            &runtime_imports,
-                            &mut diagnostics,
-                        );
-                    }
-                }
-
-                if self.enabled(Rule::UnusedImport) {
-                    pyflakes::rules::unused_import(self, scope, &mut diagnostics);
-                }
-            }
-        }
-        self.diagnostics.extend(diagnostics);
-    }
-
-    /// Visit all the [`Definition`] nodes in the AST.
-    ///
-    /// This phase is expected to run after the AST has been traversed in its entirety; as such,
-    /// it is expected that all [`Definition`] nodes have been visited by the time, and that this
-    /// method will not recurse into any other nodes.
-    fn check_definitions(&mut self) {
-        let enforce_annotations = self.any_enabled(&[
-            Rule::MissingTypeFunctionArgument,
-            Rule::MissingTypeArgs,
-            Rule::MissingTypeKwargs,
-            Rule::MissingTypeSelf,
-            Rule::MissingTypeCls,
-            Rule::MissingReturnTypeUndocumentedPublicFunction,
-            Rule::MissingReturnTypePrivateFunction,
-            Rule::MissingReturnTypeSpecialMethod,
-            Rule::MissingReturnTypeStaticMethod,
-            Rule::MissingReturnTypeClassMethod,
-            Rule::AnyType,
-        ]);
-        let enforce_stubs = self.is_stub
-            && self.any_enabled(&[Rule::DocstringInStub, Rule::IterMethodReturnIterable]);
-        let enforce_docstrings = self.any_enabled(&[
-            Rule::UndocumentedPublicModule,
-            Rule::UndocumentedPublicClass,
-            Rule::UndocumentedPublicMethod,
-            Rule::UndocumentedPublicFunction,
-            Rule::UndocumentedPublicPackage,
-            Rule::UndocumentedMagicMethod,
-            Rule::UndocumentedPublicNestedClass,
-            Rule::UndocumentedPublicInit,
-            Rule::FitsOnOneLine,
-            Rule::NoBlankLineBeforeFunction,
-            Rule::NoBlankLineAfterFunction,
-            Rule::OneBlankLineBeforeClass,
-            Rule::OneBlankLineAfterClass,
-            Rule::BlankLineAfterSummary,
-            Rule::IndentWithSpaces,
-            Rule::UnderIndentation,
-            Rule::OverIndentation,
-            Rule::NewLineAfterLastParagraph,
-            Rule::SurroundingWhitespace,
-            Rule::BlankLineBeforeClass,
-            Rule::MultiLineSummaryFirstLine,
-            Rule::MultiLineSummarySecondLine,
-            Rule::SectionNotOverIndented,
-            Rule::SectionUnderlineNotOverIndented,
-            Rule::TripleSingleQuotes,
-            Rule::EscapeSequenceInDocstring,
-            Rule::EndsInPeriod,
-            Rule::NonImperativeMood,
-            Rule::NoSignature,
-            Rule::FirstLineCapitalized,
-            Rule::DocstringStartsWithThis,
-            Rule::CapitalizeSectionName,
-            Rule::NewLineAfterSectionName,
-            Rule::DashedUnderlineAfterSection,
-            Rule::SectionUnderlineAfterName,
-            Rule::SectionUnderlineMatchesSectionLength,
-            Rule::NoBlankLineAfterSection,
-            Rule::NoBlankLineBeforeSection,
-            Rule::BlankLinesBetweenHeaderAndContent,
-            Rule::BlankLineAfterLastSection,
-            Rule::EmptyDocstringSection,
-            Rule::EndsInPunctuation,
-            Rule::SectionNameEndsInColon,
-            Rule::UndocumentedParam,
-            Rule::OverloadWithDocstring,
-            Rule::EmptyDocstring,
-        ]);
-
-        if !enforce_annotations && !enforce_docstrings && !enforce_stubs {
-            return;
-        }
-
-        // Compute visibility of all definitions.
-        let exports: Option<Vec<&str>> = {
-            self.semantic
-                .global_scope()
-                .get_all("__all__")
-                .map(|binding_id| &self.semantic.bindings[binding_id])
-                .filter_map(|binding| match &binding.kind {
-                    BindingKind::Export(Export { names }) => Some(names.iter().copied()),
-                    _ => None,
-                })
-                .fold(None, |acc, names| {
-                    Some(acc.into_iter().flatten().chain(names).collect())
-                })
-        };
-
-        let definitions = std::mem::take(&mut self.semantic.definitions);
-        let mut overloaded_name: Option<String> = None;
-        for ContextualizedDefinition {
-            definition,
-            visibility,
-        } in definitions.resolve(exports.as_deref()).iter()
-        {
-            let docstring = docstrings::extraction::extract_docstring(definition);
-
-            // flake8-annotations
-            if enforce_annotations {
-                // TODO(charlie): This should be even stricter, in that an overload
-                // implementation should come immediately after the overloaded
-                // interfaces, without any AST nodes in between. Right now, we
-                // only error when traversing definition boundaries (functions,
-                // classes, etc.).
-                if !overloaded_name.map_or(false, |overloaded_name| {
-                    flake8_annotations::helpers::is_overload_impl(
-                        definition,
-                        &overloaded_name,
-                        &self.semantic,
-                    )
-                }) {
-                    self.diagnostics
-                        .extend(flake8_annotations::rules::definition(
-                            self,
-                            definition,
-                            *visibility,
-                        ));
-                }
-                overloaded_name =
-                    flake8_annotations::helpers::overloaded_name(definition, &self.semantic);
-            }
-
-            // flake8-pyi
-            if enforce_stubs {
-                if self.is_stub {
-                    if self.enabled(Rule::DocstringInStub) {
-                        flake8_pyi::rules::docstring_in_stubs(self, docstring);
-                    }
-                    if self.enabled(Rule::IterMethodReturnIterable) {
-                        flake8_pyi::rules::iter_method_return_iterable(self, definition);
-                    }
-                }
-            }
-
-            // pydocstyle
-            if enforce_docstrings {
-                if pydocstyle::helpers::should_ignore_definition(
-                    definition,
-                    &self.settings.pydocstyle.ignore_decorators,
-                    &self.semantic,
-                ) {
-                    continue;
-                }
-
-                // Extract a `Docstring` from a `Definition`.
-                let Some(expr) = docstring else {
-                    pydocstyle::rules::not_missing(self, definition, *visibility);
-                    continue;
-                };
-
-                let contents = self.locator.slice(expr.range());
-
-                let indentation = self.locator.slice(TextRange::new(
-                    self.locator.line_start(expr.start()),
-                    expr.start(),
-                ));
-
-                if pydocstyle::helpers::should_ignore_docstring(contents) {
-                    #[allow(deprecated)]
-                    let location = self.locator.compute_source_location(expr.start());
-                    warn_user!(
-                        "Docstring at {}:{}:{} contains implicit string concatenation; ignoring...",
-                        relativize_path(self.path),
-                        location.row,
-                        location.column
-                    );
-                    continue;
-                }
-
-                // SAFETY: Safe for docstrings that pass `should_ignore_docstring`.
-                let body_range = str::raw_contents_range(contents).unwrap();
-                let docstring = Docstring {
-                    definition,
-                    expr,
-                    contents,
-                    body_range,
-                    indentation,
-                };
-
-                if !pydocstyle::rules::not_empty(self, &docstring) {
-                    continue;
-                }
-                if self.enabled(Rule::FitsOnOneLine) {
-                    pydocstyle::rules::one_liner(self, &docstring);
-                }
-                if self.any_enabled(&[
-                    Rule::NoBlankLineBeforeFunction,
-                    Rule::NoBlankLineAfterFunction,
-                ]) {
-                    pydocstyle::rules::blank_before_after_function(self, &docstring);
-                }
-                if self.any_enabled(&[
-                    Rule::OneBlankLineBeforeClass,
-                    Rule::OneBlankLineAfterClass,
-                    Rule::BlankLineBeforeClass,
-                ]) {
-                    pydocstyle::rules::blank_before_after_class(self, &docstring);
-                }
-                if self.enabled(Rule::BlankLineAfterSummary) {
-                    pydocstyle::rules::blank_after_summary(self, &docstring);
-                }
-                if self.any_enabled(&[
-                    Rule::IndentWithSpaces,
-                    Rule::UnderIndentation,
-                    Rule::OverIndentation,
-                ]) {
-                    pydocstyle::rules::indent(self, &docstring);
-                }
-                if self.enabled(Rule::NewLineAfterLastParagraph) {
-                    pydocstyle::rules::newline_after_last_paragraph(self, &docstring);
-                }
-                if self.enabled(Rule::SurroundingWhitespace) {
-                    pydocstyle::rules::no_surrounding_whitespace(self, &docstring);
-                }
-                if self.any_enabled(&[
-                    Rule::MultiLineSummaryFirstLine,
-                    Rule::MultiLineSummarySecondLine,
-                ]) {
-                    pydocstyle::rules::multi_line_summary_start(self, &docstring);
-                }
-                if self.enabled(Rule::TripleSingleQuotes) {
-                    pydocstyle::rules::triple_quotes(self, &docstring);
-                }
-                if self.enabled(Rule::EscapeSequenceInDocstring) {
-                    pydocstyle::rules::backslashes(self, &docstring);
-                }
-                if self.enabled(Rule::EndsInPeriod) {
-                    pydocstyle::rules::ends_with_period(self, &docstring);
-                }
-                if self.enabled(Rule::NonImperativeMood) {
-                    pydocstyle::rules::non_imperative_mood(
-                        self,
-                        &docstring,
-                        &self.settings.pydocstyle.property_decorators,
-                    );
-                }
-                if self.enabled(Rule::NoSignature) {
-                    pydocstyle::rules::no_signature(self, &docstring);
-                }
-                if self.enabled(Rule::FirstLineCapitalized) {
-                    pydocstyle::rules::capitalized(self, &docstring);
-                }
-                if self.enabled(Rule::DocstringStartsWithThis) {
-                    pydocstyle::rules::starts_with_this(self, &docstring);
-                }
-                if self.enabled(Rule::EndsInPunctuation) {
-                    pydocstyle::rules::ends_with_punctuation(self, &docstring);
-                }
-                if self.enabled(Rule::OverloadWithDocstring) {
-                    pydocstyle::rules::if_needed(self, &docstring);
-                }
-                if self.any_enabled(&[
-                    Rule::MultiLineSummaryFirstLine,
-                    Rule::SectionNotOverIndented,
-                    Rule::SectionUnderlineNotOverIndented,
-                    Rule::CapitalizeSectionName,
-                    Rule::NewLineAfterSectionName,
-                    Rule::DashedUnderlineAfterSection,
-                    Rule::SectionUnderlineAfterName,
-                    Rule::SectionUnderlineMatchesSectionLength,
-                    Rule::NoBlankLineAfterSection,
-                    Rule::NoBlankLineBeforeSection,
-                    Rule::BlankLinesBetweenHeaderAndContent,
-                    Rule::BlankLineAfterLastSection,
-                    Rule::EmptyDocstringSection,
-                    Rule::SectionNameEndsInColon,
-                    Rule::UndocumentedParam,
-                ]) {
-                    pydocstyle::rules::sections(
-                        self,
-                        &docstring,
-                        self.settings.pydocstyle.convention.as_ref(),
-                    );
                 }
             }
         }
@@ -2562,24 +1844,24 @@ pub(crate) fn check_ast(
     // Iterate over the AST.
     checker.visit_body(python_ast);
 
-    // Check any deferred statements.
-    checker.check_deferred_functions();
-    checker.check_deferred_lambdas();
-    checker.check_deferred_future_type_definitions();
+    // Visit any deferred syntax nodes.
+    checker.visit_deferred_functions();
+    checker.visit_deferred_lambdas();
+    checker.visit_deferred_future_type_definitions();
     let allocator = typed_arena::Arena::new();
-    checker.check_deferred_string_type_definitions(&allocator);
-    checker.check_deferred_for_loops();
+    checker.visit_deferred_string_type_definitions(&allocator);
+    checker.visit_exports();
 
-    // Check docstrings, exports, bindings, and unresolved references.
-    checker.check_definitions();
-    checker.check_exports();
-    checker.check_bindings();
-    checker.check_unresolved_references();
+    // Check docstrings, bindings, and unresolved references.
+    analyze::for_loops(&mut checker);
+    analyze::definitions(&mut checker);
+    analyze::bindings(&mut checker);
+    analyze::unresolved_references(&mut checker);
 
     // Reset the scope to module-level, and check all consumed scopes.
     checker.semantic.scope_id = ScopeId::global();
     checker.deferred.scopes.push(ScopeId::global());
-    checker.check_deferred_scopes();
+    analyze::scopes(&mut checker);
 
     checker.diagnostics
 }

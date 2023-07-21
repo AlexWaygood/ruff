@@ -5,7 +5,7 @@ use crate::codes::Rule;
 use crate::rules::flake8_pie;
 
 /// Run lint rules over a suite of [`Stmt`] syntax nodes.
-pub(crate) fn analyze_body(suite: &[Stmt], checker: &mut Checker) {
+pub(crate) fn body(suite: &[Stmt], checker: &mut Checker) {
     if checker.enabled(Rule::UnnecessaryPass) {
         flake8_pie::rules::no_unnecessary_pass(checker, suite);
     }

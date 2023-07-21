@@ -1,7 +1,5 @@
 use rustpython_parser::ast::{self, ExceptHandler, Ranged};
 
-use ruff_python_ast::identifier::Identifier;
-
 use crate::checkers::ast::Checker;
 use crate::registry::Rule;
 use crate::rules::{
@@ -10,7 +8,7 @@ use crate::rules::{
 };
 
 /// Run lint rules over an [`ExceptHandler`] syntax node.
-pub(crate) fn analyze_except_handler(except_handler: &ExceptHandler, checker: &mut Checker) {
+pub(crate) fn except_handler(except_handler: &ExceptHandler, checker: &mut Checker) {
     match except_handler {
         ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
             type_,
