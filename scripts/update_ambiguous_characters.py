@@ -14,11 +14,12 @@ use phf::phf_map;
 
 /// Via: <https://github.com/hediet/vscode-unicode-data/blob/main/out/ambiguous.json>
 /// See: <https://github.com/microsoft/vscode/blob/095ddabc52b82498ee7f718a34f9dd11d59099a8/src/vs/base/common/strings.ts#L1094>
-#[allow(clippy::unreadable_literal)]
-pub(crate) static CONFUSABLES: phf::Map<u32, u8> = phf_map! {
+pub(crate) fn confusable(c: u32) -> Option<u8> {
+  match c {
+
 """.lstrip()
 
-postlude = """};"""
+postlude = """_ => None, }}"""
 
 
 def get_mapping_data() -> dict:
@@ -45,7 +46,7 @@ def format_confusables_rs(raw_data: dict[str, list[int]]) -> str:
         for i in range(0, len(items), 2):
             flattened_items.add((items[i], items[i + 1]))
 
-    tuples = [f"    {left}u32 => {right},\n" for left, right in sorted(flattened_items)]
+    tuples = [f"    {left}u32 => Some({right}),\n" for left, right in sorted(flattened_items)]
 
     print(f"{len(tuples)} confusable tuples.")
 
