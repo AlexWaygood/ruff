@@ -252,3 +252,11 @@ raise ValueError(
 
 # The dictionary should be parenthesized.
 "{}".format({0: 1}())
+
+# The double-braces in the first part of the implicitly concatenated string
+# should be collapsed to single braces in the fixed-up string
+b = ("{{hello}}" "{}").format(1)
+
+# The double-braces in the first part of the implicitly concatenated string
+# should be collapsed to single braces in the fixed-up string
+'{{ ' '{} {}'.format(1, 2)
