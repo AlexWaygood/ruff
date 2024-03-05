@@ -12,7 +12,7 @@ use crate::{
     function::{ArgumentList, parse_arguments, validate_pos_params, validate_arguments},
     context::set_context,
     string::{StringType, concatenated_strings, parse_fstring_literal_element, parse_string_literal},
-    token::{self, StringKind},
+    token::{self, QuoteKind, StringKind},
     invalid,
 };
 use lalrpop_util::ParseError;
@@ -1619,8 +1619,8 @@ StringLiteralOrFString: StringType = {
 
 StringLiteral: StringType = {
     <location:@L> <string:string> <end_location:@R> =>? {
-        let (source, kind, triple_quoted) = string;
-        Ok(parse_string_literal(source, kind, triple_quoted, (location..end_location).into())?)
+        let (source, kind, quote_kind) = string;
+        Ok(parse_string_literal(source, kind, quote_kind, (location..end_location).into())?)
     }
 };
 
@@ -2001,8 +2001,8 @@ extern {
         Dedent => token::Tok::Dedent,
         StartModule => token::Tok::StartModule,
         StartExpression => token::Tok::StartExpression,
-        FStringStart => token::Tok::FStringStart,
-        FStringEnd => token::Tok::FStringEnd,
+        FStringStart => token::Tok::FStringStart(quote_kind),
+        FStringEnd => token::Tok::FStringEnd(quote_kind),
         "!" => token::Tok::Exclamation,
         "?" => token::Tok::Question,
         "+" => token::Tok::Plus,
@@ -2095,12 +2095,12 @@ extern {
         string => token::Tok::String {
             value: <Box<str>>,
             kind: <StringKind>,
-            triple_quoted: <bool>
+            quote_kind: <QuoteKind>
         },
         fstring_middle => token::Tok::FStringMiddle {
             value: <Box<str>>,
             is_raw: <bool>,
-            triple_quoted: <bool>
+            quote_kind: <QuoteKind>
         },
         name => token::Tok::Name { name: <Box<str>> },
         ipy_escape_command => token::Tok::IpyEscapeCommand {

@@ -4,14 +4,16 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            TripleQuotedDouble,
+        ),
         0..4,
     ),
     (
         FStringMiddle {
             value: "\n# not a comment ",
             is_raw: false,
-            triple_quoted: true,
+            quote_kind: TripleQuotedDouble,
         },
         4..21,
     ),
@@ -47,12 +49,14 @@ expression: lex_source(source)
         FStringMiddle {
             value: " # not a comment\n",
             is_raw: false,
-            triple_quoted: true,
+            quote_kind: TripleQuotedDouble,
         },
         42..59,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            TripleQuotedDouble,
+        ),
         59..62,
     ),
     (

@@ -42,7 +42,7 @@ use crate::lexer::indentation::{Indentation, Indentations};
 use crate::{
     soft_keywords::SoftKeywordTransformer,
     string::FStringErrorType,
-    token::{StringKind, Tok},
+    token::{QuoteKind, StringKind, Tok},
     Mode,
 };
 
@@ -549,8 +549,9 @@ impl<'source> Lexer<'source> {
             flags |= FStringContextFlags::TRIPLE;
         }
 
+        let quote_kind = QuoteKind::from(&flags);
         self.fstrings.push(FStringContext::new(flags, self.nesting));
-        Tok::FStringStart
+        Tok::FStringStart(quote_kind)
     }
 
     /// Lex a f-string middle or end token.
@@ -563,10 +564,10 @@ impl<'source> Lexer<'source> {
         if fstring.is_triple_quoted() {
             let quote_char = fstring.quote_char();
             if self.cursor.eat_char3(quote_char, quote_char, quote_char) {
-                return Ok(Some(Tok::FStringEnd));
+                return Ok(Some(Tok::FStringEnd(fstring.quote_kind())));
             }
         } else if self.cursor.eat_char(fstring.quote_char()) {
-            return Ok(Some(Tok::FStringEnd));
+            return Ok(Some(Tok::FStringEnd(fstring.quote_kind())));
         }
 
         // We have to decode `{{` and `}}` into `{` and `}` respectively. As an
@@ -681,10 +682,17 @@ impl<'source> Lexer<'source> {
             normalized.push_str(&self.source[TextRange::new(last_offset, self.offset())]);
             normalized
         };
+        let quote_kind = match (fstring.quote_char(), fstring.is_triple_quoted()) {
+            ('"', false) => QuoteKind::Double,
+            ('\'', false) => QuoteKind::Single,
+            ('"', true) => QuoteKind::TripleQuotedDouble,
+            ('\'', true) => QuoteKind::TripleQuotedSingle,
+            _ => unreachable!("Unknown quote kind {}", fstring.quote_char()),
+        };
         Ok(Some(Tok::FStringMiddle {
             value: value.into_boxed_str(),
             is_raw: fstring.is_raw_string(),
-            triple_quoted: fstring.is_triple_quoted(),
+            quote_kind,
         }))
     }
 
@@ -827,12 +835,20 @@ impl<'source> Lexer<'source> {
             }
         };
 
+        let quote_kind = match (quote, triple_quoted) {
+            ('"', false) => QuoteKind::Double,
+            ('\'', false) => QuoteKind::Single,
+            ('"', true) => QuoteKind::TripleQuotedDouble,
+            ('\'', true) => QuoteKind::TripleQuotedSingle,
+            _ => unreachable!("Unknown quote kind {quote}"),
+        };
+
         Ok(Tok::String {
             value: self.source[TextRange::new(value_start, value_end)]
                 .to_string()
                 .into_boxed_str(),
             kind,
-            triple_quoted,
+            quote_kind,
         })
     }
 
@@ -843,7 +859,7 @@ impl<'source> Lexer<'source> {
             if !fstring.is_in_expression(self.nesting) {
                 match self.lex_fstring_middle_or_end() {
                     Ok(Some(tok)) => {
-                        if tok == Tok::FStringEnd {
+                        if tok.is_f_string_end() {
                             self.fstrings.pop();
                         }
                         return Ok((tok, self.token_range()));

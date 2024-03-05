@@ -6,7 +6,7 @@ use ruff_python_ast::{self as ast, Expr};
 use ruff_text_size::{Ranged, TextRange, TextSize};
 
 use crate::lexer::{LexicalError, LexicalErrorType};
-use crate::token::{StringKind, Tok};
+use crate::token::{QuoteKind, StringKind, Tok};
 
 pub(crate) enum StringType {
     Str(ast::StringLiteral),
@@ -422,12 +422,12 @@ impl StringParser {
 pub(crate) fn parse_string_literal(
     source: Box<str>,
     kind: StringKind,
-    triple_quoted: bool,
+    quote_kind: QuoteKind,
     range: TextRange,
 ) -> Result<StringType, LexicalError> {
     let start_location = range.start()
         + kind.prefix_len()
-        + if triple_quoted {
+        + if quote_kind.is_triple_quoted() {
             TextSize::from(3)
         } else {
             TextSize::from(1)

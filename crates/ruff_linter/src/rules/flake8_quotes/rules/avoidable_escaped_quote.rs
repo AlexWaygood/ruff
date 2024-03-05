@@ -1,6 +1,6 @@
 use ruff_diagnostics::{AlwaysFixableViolation, Diagnostic, Edit, Fix};
 use ruff_macros::{derive_message_formats, violation};
-use ruff_python_ast::str::{is_triple_quote, leading_quote};
+use ruff_python_ast::str::leading_quote;
 use ruff_python_parser::lexer::LexResult;
 use ruff_python_parser::Tok;
 use ruff_source_file::Locator;
@@ -158,7 +158,7 @@ pub(crate) fn avoidable_escaped_quote(
             // ```python
             // f'"foo" {'nested'}"
             // ```
-            if matches!(tok, Tok::String { .. } | Tok::FStringStart) {
+            if matches!(tok, Tok::String { .. } | Tok::FStringStart(_)) {
                 if let Some(fstring_context) = fstrings.last_mut() {
                     fstring_context.ignore_escaped_quotes();
                     continue;
@@ -170,9 +170,9 @@ pub(crate) fn avoidable_escaped_quote(
             Tok::String {
                 value: string_contents,
                 kind,
-                triple_quoted,
+                quote_kind,
             } => {
-                if kind.is_raw() || *triple_quoted {
+                if kind.is_raw() || quote_kind.is_triple_quoted() {
                     continue;
                 }
 
@@ -206,11 +206,11 @@ pub(crate) fn avoidable_escaped_quote(
                     diagnostics.push(diagnostic);
                 }
             }
-            Tok::FStringStart => {
+            Tok::FStringStart(quote_kind) => {
                 let text = locator.slice(tok_range);
                 // Check for escaped quote only if we're using the preferred quotation
                 // style and it isn't a triple-quoted f-string.
-                let check_for_escaped_quote = !is_triple_quote(text)
+                let check_for_escaped_quote = !quote_kind.is_triple_quoted()
                     && contains_quote(text, quotes_settings.inline_quotes.as_char());
                 fstrings.push(FStringContext::new(
                     check_for_escaped_quote,
@@ -221,7 +221,7 @@ pub(crate) fn avoidable_escaped_quote(
             Tok::FStringMiddle {
                 value: string_contents,
                 is_raw,
-                triple_quoted: _,
+                quote_kind: _,
             } if !is_raw => {
                 let Some(context) = fstrings.last_mut() else {
                     continue;
@@ -243,7 +243,7 @@ pub(crate) fn avoidable_escaped_quote(
                     context.push_fstring_middle_range(tok_range);
                 }
             }
-            Tok::FStringEnd => {
+            Tok::FStringEnd(_) => {
                 let Some(context) = fstrings.pop() else {
                     continue;
                 };
@@ -315,9 +315,9 @@ pub(crate) fn unnecessary_escaped_quote(
             Tok::String {
                 value: string_contents,
                 kind,
-                triple_quoted,
+                quote_kind,
             } => {
-                if kind.is_raw() || *triple_quoted {
+                if kind.is_raw() || quote_kind.is_triple_quoted() {
                     continue;
                 }
 
@@ -343,11 +343,11 @@ pub(crate) fn unnecessary_escaped_quote(
                 )));
                 diagnostics.push(diagnostic);
             }
-            Tok::FStringStart => {
+            Tok::FStringStart(quote_kind) => {
                 let text = locator.slice(tok_range);
                 // Check for escaped quote only if we're using the preferred quotation
                 // style and it isn't a triple-quoted f-string.
-                let check_for_escaped_quote = !is_triple_quote(text);
+                let check_for_escaped_quote = !quote_kind.is_triple_quoted();
                 let quote_style = if contains_quote(text, Quote::Single.as_char()) {
                     Quote::Single
                 } else {
@@ -362,7 +362,7 @@ pub(crate) fn unnecessary_escaped_quote(
             Tok::FStringMiddle {
                 value: string_contents,
                 is_raw,
-                triple_quoted: _,
+                quote_kind: _,
             } if !is_raw => {
                 let Some(context) = fstrings.last_mut() else {
                     continue;
@@ -375,7 +375,7 @@ pub(crate) fn unnecessary_escaped_quote(
                     context.push_fstring_middle_range(tok_range);
                 }
             }
-            Tok::FStringEnd => {
+            Tok::FStringEnd(_) => {
                 let Some(context) = fstrings.pop() else {
                     continue;
                 };

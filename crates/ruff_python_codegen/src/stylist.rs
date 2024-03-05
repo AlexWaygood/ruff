@@ -52,13 +52,10 @@ impl<'a> Stylist<'a> {
 
 fn detect_quote(tokens: &[LexResult], locator: &Locator) -> Quote {
     let quote_range = tokens.iter().flatten().find_map(|(t, range)| match t {
-        Tok::String {
-            triple_quoted: false,
-            ..
-        } => Some(*range),
+        Tok::String { quote_kind, .. } if !quote_kind.is_triple_quoted() => Some(*range),
         // No need to check if it's triple-quoted as f-strings cannot be used
         // as docstrings.
-        Tok::FStringStart => Some(*range),
+        Tok::FStringStart(_) => Some(*range),
         _ => None,
     });
 

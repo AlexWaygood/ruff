@@ -4,14 +4,16 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            Single,
+        ),
         0..2,
     ),
     (
         FStringMiddle {
             value: "\\",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         2..3,
     ),
@@ -30,18 +32,22 @@ expression: lex_source(source)
         7..8,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Single,
+        ),
         8..9,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Single,
+        ),
         10..12,
     ),
     (
         FStringMiddle {
             value: "\\\\",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         12..14,
     ),
@@ -60,39 +66,49 @@ expression: lex_source(source)
         18..19,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Single,
+        ),
         19..20,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Single,
+        ),
         21..23,
     ),
     (
         FStringMiddle {
             value: "\\{foo}",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         23..31,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Single,
+        ),
         31..32,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Single,
+        ),
         33..35,
     ),
     (
         FStringMiddle {
             value: "\\\\{foo}",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         35..44,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Single,
+        ),
         44..45,
     ),
     (

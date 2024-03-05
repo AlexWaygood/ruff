@@ -4,7 +4,9 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         0..2,
     ),
     (
@@ -44,7 +46,9 @@ expression: lex_source(source)
         15..16,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         16..17,
     ),
     (
@@ -52,7 +56,9 @@ expression: lex_source(source)
         17..18,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         18..20,
     ),
     (
@@ -100,7 +106,9 @@ expression: lex_source(source)
         35..36,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         36..37,
     ),
     (

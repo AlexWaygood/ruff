@@ -4,14 +4,16 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         0..2,
     ),
     (
         FStringMiddle {
             value: "\\",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         2..3,
     ),
@@ -33,7 +35,7 @@ expression: lex_source(source)
         FStringMiddle {
             value: "\\\"\\",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         6..9,
     ),
@@ -59,12 +61,14 @@ expression: lex_source(source)
         FStringMiddle {
             value: " \\\"\\\"\\\n end",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         13..24,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         24..25,
     ),
     (

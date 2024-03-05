@@ -4,46 +4,56 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            TripleQuotedDouble,
+        ),
         0..4,
     ),
     (
         FStringMiddle {
             value: "\nhello\n    world\n",
             is_raw: false,
-            triple_quoted: true,
+            quote_kind: TripleQuotedDouble,
         },
         4..21,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            TripleQuotedDouble,
+        ),
         21..24,
     ),
     (
-        FStringStart,
+        FStringStart(
+            TripleQuotedSingle,
+        ),
         25..29,
     ),
     (
         FStringMiddle {
             value: "\n    world\nhello\n",
             is_raw: false,
-            triple_quoted: true,
+            quote_kind: TripleQuotedSingle,
         },
         29..46,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            TripleQuotedSingle,
+        ),
         46..49,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         50..52,
     ),
     (
         FStringMiddle {
             value: "some ",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         52..57,
     ),
@@ -52,14 +62,16 @@ expression: lex_source(source)
         57..58,
     ),
     (
-        FStringStart,
+        FStringStart(
+            TripleQuotedDouble,
+        ),
         58..62,
     ),
     (
         FStringMiddle {
             value: "multiline\nallowed ",
             is_raw: false,
-            triple_quoted: true,
+            quote_kind: TripleQuotedDouble,
         },
         62..80,
     ),
@@ -78,7 +90,9 @@ expression: lex_source(source)
         82..83,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            TripleQuotedDouble,
+        ),
         83..86,
     ),
     (
@@ -89,12 +103,14 @@ expression: lex_source(source)
         FStringMiddle {
             value: " string",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         87..94,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         94..95,
     ),
     (

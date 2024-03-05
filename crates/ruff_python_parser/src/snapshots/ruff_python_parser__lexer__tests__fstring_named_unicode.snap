@@ -4,19 +4,23 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         0..2,
     ),
     (
         FStringMiddle {
             value: "\\N{BULLET} normal \\Nope \\N",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         2..28,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         28..29,
     ),
     (

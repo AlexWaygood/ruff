@@ -4,59 +4,79 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         0..2,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         2..3,
     ),
     (
         String {
             value: "",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         4..6,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         7..9,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         9..10,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Single,
+        ),
         11..13,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Single,
+        ),
         13..14,
     ),
     (
         String {
             value: "",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         15..17,
     ),
     (
-        FStringStart,
+        FStringStart(
+            TripleQuotedDouble,
+        ),
         18..22,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            TripleQuotedDouble,
+        ),
         22..25,
     ),
     (
-        FStringStart,
+        FStringStart(
+            TripleQuotedSingle,
+        ),
         26..30,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            TripleQuotedSingle,
+        ),
         30..33,
     ),
     (

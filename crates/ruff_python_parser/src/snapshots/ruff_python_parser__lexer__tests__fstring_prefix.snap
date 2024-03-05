@@ -4,83 +4,123 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         0..2,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         2..3,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         4..6,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         6..7,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         8..11,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         11..12,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         13..16,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         16..17,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         18..21,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         21..22,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         23..26,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         26..27,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         28..31,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         31..32,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         33..36,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         36..37,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         38..41,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         41..42,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         43..46,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         46..47,
     ),
     (

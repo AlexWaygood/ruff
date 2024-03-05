@@ -7,7 +7,7 @@ expression: lex_source(source)
         String {
             value: "\\N{EN SPACE}",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         0..14,
     ),

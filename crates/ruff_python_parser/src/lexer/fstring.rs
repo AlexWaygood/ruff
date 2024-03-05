@@ -1,3 +1,5 @@
+use crate::token::QuoteKind;
+
 use bitflags::bitflags;
 
 bitflags! {
@@ -15,6 +17,24 @@ bitflags! {
         /// The current f-string is a raw f-string i.e., prefixed with `r`/`R`.
         /// If this flag is not set, the current f-string is a normal f-string.
         const RAW = 1 << 2;
+    }
+}
+
+impl From<&FStringContextFlags> for QuoteKind {
+    fn from(value: &FStringContextFlags) -> Self {
+        if value.contains(FStringContextFlags::DOUBLE) {
+            if value.contains(FStringContextFlags::TRIPLE) {
+                QuoteKind::TripleQuotedDouble
+            } else {
+                QuoteKind::Double
+            }
+        } else {
+            if value.contains(FStringContextFlags::TRIPLE) {
+                QuoteKind::TripleQuotedSingle
+            } else {
+                QuoteKind::Single
+            }
+        }
     }
 }
 
@@ -45,6 +65,10 @@ impl FStringContext {
 
     pub(crate) const fn nesting(&self) -> u32 {
         self.nesting
+    }
+
+    pub(crate) fn quote_kind(&self) -> QuoteKind {
+        QuoteKind::from(&self.flags)
     }
 
     /// Returns the quote character for the current f-string.

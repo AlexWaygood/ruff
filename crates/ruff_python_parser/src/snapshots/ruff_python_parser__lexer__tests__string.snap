@@ -7,7 +7,7 @@ expression: lex_source(source)
         String {
             value: "double",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         0..8,
     ),
@@ -15,7 +15,7 @@ expression: lex_source(source)
         String {
             value: "single",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         9..17,
     ),
@@ -23,7 +23,7 @@ expression: lex_source(source)
         String {
             value: "can\\'t",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         18..26,
     ),
@@ -31,7 +31,7 @@ expression: lex_source(source)
         String {
             value: "\\\\\\\"",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         27..33,
     ),
@@ -39,7 +39,7 @@ expression: lex_source(source)
         String {
             value: "\\t\\r\\n",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         34..42,
     ),
@@ -47,7 +47,7 @@ expression: lex_source(source)
         String {
             value: "\\g",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         43..47,
     ),
@@ -55,7 +55,7 @@ expression: lex_source(source)
         String {
             value: "raw\\'",
             kind: RawString,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         48..56,
     ),
@@ -63,7 +63,7 @@ expression: lex_source(source)
         String {
             value: "\\420",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         57..63,
     ),
@@ -71,7 +71,7 @@ expression: lex_source(source)
         String {
             value: "\\200\\0a",
             kind: String,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         64..73,
     ),

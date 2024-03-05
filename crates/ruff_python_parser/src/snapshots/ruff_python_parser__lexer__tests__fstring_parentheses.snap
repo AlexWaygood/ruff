@@ -4,7 +4,9 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         0..2,
     ),
     (
@@ -16,34 +18,42 @@ expression: lex_source(source)
         3..4,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         4..5,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         6..8,
     ),
     (
         FStringMiddle {
             value: "{}",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         8..12,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         12..13,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         14..16,
     ),
     (
         FStringMiddle {
             value: " ",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         16..17,
     ),
@@ -56,18 +66,22 @@ expression: lex_source(source)
         18..19,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         19..20,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         21..23,
     ),
     (
         FStringMiddle {
             value: "{",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         23..25,
     ),
@@ -83,39 +97,47 @@ expression: lex_source(source)
         FStringMiddle {
             value: "}",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         27..29,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         29..30,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         31..33,
     ),
     (
         FStringMiddle {
             value: "{{}}",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         33..41,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         41..42,
     ),
     (
-        FStringStart,
+        FStringStart(
+            Double,
+        ),
         43..45,
     ),
     (
         FStringMiddle {
             value: " ",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         45..46,
     ),
@@ -131,7 +153,7 @@ expression: lex_source(source)
         FStringMiddle {
             value: " {} {",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         48..56,
     ),
@@ -147,12 +169,14 @@ expression: lex_source(source)
         FStringMiddle {
             value: "} {{}}  ",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Double,
         },
         58..71,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Double,
+        ),
         71..72,
     ),
     (

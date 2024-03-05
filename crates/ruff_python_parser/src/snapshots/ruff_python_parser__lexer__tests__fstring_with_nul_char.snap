@@ -4,19 +4,23 @@ expression: lex_source(source)
 ---
 [
     (
-        FStringStart,
+        FStringStart(
+            Single,
+        ),
         0..2,
     ),
     (
         FStringMiddle {
             value: "\\0",
             is_raw: false,
-            triple_quoted: false,
+            quote_kind: Single,
         },
         2..4,
     ),
     (
-        FStringEnd,
+        FStringEnd(
+            Single,
+        ),
         4..5,
     ),
     (

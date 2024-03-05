@@ -41,12 +41,12 @@ pub enum Tok {
         value: Box<str>,
         /// The kind of string.
         kind: StringKind,
-        /// Whether the string is triple quoted.
-        triple_quoted: bool,
+        /// Double/single quote, and whether it's triple-quoted or not.
+        quote_kind: QuoteKind,
     },
     /// Token value for the start of an f-string. This includes the `f`/`F`/`fr` prefix
     /// and the opening quote(s).
-    FStringStart,
+    FStringStart(QuoteKind),
     /// Token value that includes the portion of text inside the f-string that's not
     /// part of the expression part and isn't an opening or closing brace.
     FStringMiddle {
@@ -54,11 +54,11 @@ pub enum Tok {
         value: Box<str>,
         /// Whether the string is raw or not.
         is_raw: bool,
-        /// Whether the string is triple quoted.
-        triple_quoted: bool,
+        /// Double/single quote, and whether it's triple-quoted or not.
+        quote_kind: QuoteKind,
     },
     /// Token value for the end of an f-string. This includes the closing quote.
-    FStringEnd,
+    FStringEnd(QuoteKind),
     /// Token value for IPython escape commands. These are recognized by the lexer
     /// only when the mode is [`Mode::Ipython`].
     IpyEscapeCommand {
@@ -246,14 +246,11 @@ impl fmt::Display for Tok {
             String {
                 value,
                 kind,
-                triple_quoted,
-            } => {
-                let quotes = "\"".repeat(if *triple_quoted { 3 } else { 1 });
-                write!(f, "{kind}{quotes}{value}{quotes}")
-            }
-            FStringStart => f.write_str("FStringStart"),
+                quote_kind,
+            } => write!(f, "{kind}{quote_kind}{value}{quote_kind}"),
+            FStringStart(_) => f.write_str("FStringStart"),
             FStringMiddle { value, .. } => f.write_str(value),
-            FStringEnd => f.write_str("FStringEnd"),
+            FStringEnd(_) => f.write_str("FStringEnd"),
             IpyEscapeCommand { kind, value } => write!(f, "{kind}{value}"),
             Newline => f.write_str("Newline"),
             NonLogicalNewline => f.write_str("NonLogicalNewline"),
@@ -447,6 +444,39 @@ impl StringKind {
             RawBytes => "rb",
             Unicode => "u",
         }
+    }
+}
+
+/// Enumeration of the different kinds of quotes that can start and end
+/// a string in Python
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum QuoteKind {
+    /// E.g. "
+    #[default]
+    Double,
+    /// E.g. '
+    Single,
+    /// E.g. """
+    TripleQuotedDouble,
+    /// E.g. '''
+    TripleQuotedSingle,
+}
+
+impl QuoteKind {
+    pub fn is_triple_quoted(self) -> bool {
+        matches!(self, Self::TripleQuotedDouble | Self::TripleQuotedSingle)
+    }
+}
+
+impl fmt::Display for QuoteKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let string = match self {
+            Self::Double => "\"",
+            Self::Single => "'",
+            Self::TripleQuotedDouble => r#"""""#,
+            Self::TripleQuotedSingle => "'''",
+        };
+        write!(f, "{string}")
     }
 }
 
@@ -804,9 +834,9 @@ impl TokenKind {
             Tok::Float { .. } => TokenKind::Float,
             Tok::Complex { .. } => TokenKind::Complex,
             Tok::String { .. } => TokenKind::String,
-            Tok::FStringStart => TokenKind::FStringStart,
+            Tok::FStringStart(_) => TokenKind::FStringStart,
             Tok::FStringMiddle { .. } => TokenKind::FStringMiddle,
-            Tok::FStringEnd => TokenKind::FStringEnd,
+            Tok::FStringEnd(_) => TokenKind::FStringEnd,
             Tok::IpyEscapeCommand { .. } => TokenKind::EscapeCommand,
             Tok::Comment(_) => TokenKind::Comment,
             Tok::Newline => TokenKind::Newline,
