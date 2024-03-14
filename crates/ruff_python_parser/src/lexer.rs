@@ -33,7 +33,7 @@ use std::{char, cmp::Ordering, str::FromStr};
 
 use unicode_ident::{is_xid_continue, is_xid_start};
 
-use ruff_python_ast::{Int, IpyEscapeKind};
+use ruff_python_ast::{Int, IpyEscapeKind, NameKind};
 use ruff_text_size::{TextLen, TextRange, TextSize};
 
 use crate::lexer::cursor::{Cursor, EOF_CHAR};
@@ -169,7 +169,7 @@ impl<'source> Lexer<'source> {
     }
 
     /// Lex an identifier. Also used for keywords and string/bytes literals with a prefix.
-    fn lex_identifier(&mut self, first: char) -> Result<Tok, LexicalError> {
+    fn lex_identifier(&mut self, first: char, ascii_first_char: bool) -> Result<Tok, LexicalError> {
         // Detect potential string like rb'' b'' f'' u'' r''
         match (first, self.cursor.first()) {
             ('f' | 'F', quote @ ('\'' | '"')) => {
@@ -197,7 +197,33 @@ impl<'source> Lexer<'source> {
             _ => {}
         }
 
-        self.cursor.eat_while(is_identifier_continuation);
+        let mut name_kind = {
+            if ascii_first_char {
+                NameKind::Ascii
+            } else {
+                NameKind::Unicode
+            }
+        };
+
+        loop {
+            let c = self.cursor.first();
+            // Arrange things such that ASCII codepoints never
+            // result in the slower `is_xid_continue` getting called.
+            if c.is_ascii() {
+                if !matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
+                    break;
+                }
+            } else {
+                name_kind = NameKind::Unicode;
+                if !is_xid_continue(c) {
+                    break;
+                }
+            }
+            if self.cursor.is_eof() {
+                break;
+            }
+            self.cursor.bump();
+        }
 
         let text = self.token_text();
 
@@ -243,6 +269,7 @@ impl<'source> Lexer<'source> {
             _ => {
                 return Ok(Tok::Name {
                     name: text.to_string().into_boxed_str(),
+                    kind: name_kind,
                 })
             }
         };
@@ -906,7 +933,7 @@ impl<'source> Lexer<'source> {
             if c.is_ascii() {
                 self.consume_ascii_character(c)
             } else if is_unicode_identifier_start(c) {
-                let identifier = self.lex_identifier(c)?;
+                let identifier = self.lex_identifier(c, false)?;
                 self.state = State::Other;
 
                 Ok((identifier, self.token_range()))
@@ -1066,7 +1093,7 @@ impl<'source> Lexer<'source> {
     // Dispatch based on the given character.
     fn consume_ascii_character(&mut self, c: char) -> Result<Spanned, LexicalError> {
         let token = match c {
-            c if is_ascii_identifier_start(c) => self.lex_identifier(c)?,
+            c if is_ascii_identifier_start(c) => self.lex_identifier(c, true)?,
             '0'..='9' => self.lex_number(c)?,
             '#' => return Ok((self.lex_comment(), self.token_range())),
             '\'' | '"' => self.lex_string(None, c)?,
@@ -1581,18 +1608,6 @@ const fn is_ascii_identifier_start(c: char) -> bool {
 // in https://docs.python.org/3/reference/lexical_analysis.html#identifiers
 fn is_unicode_identifier_start(c: char) -> bool {
     is_xid_start(c)
-}
-
-// Checks if the character c is a valid continuation character as described
-// in https://docs.python.org/3/reference/lexical_analysis.html#identifiers
-fn is_identifier_continuation(c: char) -> bool {
-    // Arrange things such that ASCII codepoints never
-    // result in the slower `is_xid_continue` getting called.
-    if c.is_ascii() {
-        matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
-    } else {
-        is_xid_continue(c)
-    }
 }
 
 /// Returns `true` for [whitespace](https://docs.python.org/3/reference/lexical_analysis.html#whitespace-between-tokens)

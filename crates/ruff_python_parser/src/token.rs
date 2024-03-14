@@ -7,7 +7,7 @@
 use crate::string_token_flags::StringKind;
 use crate::Mode;
 
-use ruff_python_ast::{Int, IpyEscapeKind};
+use ruff_python_ast::{Int, NameKind, IpyEscapeKind};
 use std::fmt;
 
 /// The set of tokens the Python source code can be tokenized in.
@@ -17,6 +17,7 @@ pub enum Tok {
     Name {
         /// The name value.
         name: Box<str>,
+        kind: NameKind,
     },
     /// Token value for an integer.
     Int {
@@ -237,7 +238,7 @@ impl fmt::Display for Tok {
         #[allow(clippy::enum_glob_use)]
         use Tok::*;
         match self {
-            Name { name } => write!(f, "'{name}'"),
+            Name { name, kind: _ } => write!(f, "'{name}'"),
             Int { value } => write!(f, "'{value}'"),
             Float { value } => write!(f, "'{value}'"),
             Complex { real, imag } => write!(f, "{real}j{imag}"),

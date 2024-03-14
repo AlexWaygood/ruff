@@ -49,7 +49,7 @@ where
             }
             Expr::Name(ast::ExprName { id, .. }) => {
                 // Ex) `__all__ = __all__ + multiprocessing.__all__`
-                if id == "__all__" {
+                if &**id == "__all__" {
                     return (None, DunderAllFlags::empty());
                 }
             }

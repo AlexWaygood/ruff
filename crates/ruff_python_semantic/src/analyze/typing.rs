@@ -570,7 +570,7 @@ trait BuiltinTypeChecker {
         let Expr::Name(ast::ExprName { id, .. }) = type_expr else {
             return false;
         };
-        id == Self::BUILTIN_TYPE_NAME && semantic.is_builtin(Self::BUILTIN_TYPE_NAME)
+        &**id == Self::BUILTIN_TYPE_NAME && semantic.is_builtin(Self::BUILTIN_TYPE_NAME)
     }
 }
 

@@ -1,7 +1,7 @@
 #![allow(clippy::derive_partial_eq_without_eq)]
 
 use std::cell::OnceCell;
-use std::fmt;
+use std::fmt::{self, Display};
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::slice::{Iter, IterMut};
@@ -2053,11 +2053,59 @@ impl From<ExprStarred> for Expr {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IdentifierName {
+    id: String,
+    kind: NameKind
+}
+
+impl IdentifierName {
+    pub fn as_str(&self) -> &str {
+        self.id.as_str()
+    }
+}
+
+impl Deref for IdentifierName {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.id
+    }
+}
+
+impl AsRef<String> for IdentifierName {
+    fn as_ref(&self) -> &String {
+        &self.id
+    }
+}
+
+impl Display for IdentifierName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.id)
+    }
+}
+
+impl From<String> for IdentifierName {
+    fn from(value: String) -> Self {
+        let kind = {
+            if value.is_ascii() {
+                NameKind::Ascii
+            } else {
+                NameKind::Unicode
+            }
+        };
+        Self {
+            id: value,
+            kind,
+        }
+    }
+}
+
 /// See also [Name](https://docs.python.org/3/library/ast.html#ast.Name)
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExprName {
     pub range: TextRange,
-    pub id: String,
+    pub id: IdentifierName,
     pub ctx: ExprContext,
 }
 
@@ -3544,17 +3592,23 @@ impl IpyEscapeKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, is_macro::Is)]
+pub enum NameKind {
+    Ascii,
+    Unicode,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Identifier {
-    id: String,
+    id: IdentifierName,
     range: TextRange,
 }
 
 impl Identifier {
     #[inline]
-    pub fn new(id: impl Into<String>, range: TextRange) -> Self {
+    pub fn new(id: impl Into<String>, kind: NameKind, range: TextRange) -> Self {
         Self {
-            id: id.into(),
+            id: IdentifierName { id: id.into(), kind },
             range,
         }
     }
@@ -3563,21 +3617,21 @@ impl Identifier {
 impl Identifier {
     #[inline]
     pub fn as_str(&self) -> &str {
-        self.id.as_str()
+        &self.id
     }
 }
 
 impl PartialEq<str> for Identifier {
     #[inline]
     fn eq(&self, other: &str) -> bool {
-        self.id == other
+        &*self.id == other
     }
 }
 
 impl PartialEq<String> for Identifier {
     #[inline]
     fn eq(&self, other: &String) -> bool {
-        &self.id == other
+        &*self.id == other
     }
 }
 
@@ -3585,21 +3639,21 @@ impl std::ops::Deref for Identifier {
     type Target = str;
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.id.as_str()
+        &self.id
     }
 }
 
 impl AsRef<str> for Identifier {
     #[inline]
     fn as_ref(&self) -> &str {
-        self.id.as_str()
+        &self.id
     }
 }
 
 impl AsRef<String> for Identifier {
     #[inline]
     fn as_ref(&self) -> &String {
-        &self.id
+        self.id.as_ref()
     }
 }
 
@@ -3609,9 +3663,9 @@ impl std::fmt::Display for Identifier {
     }
 }
 
-impl From<Identifier> for String {
+impl From<Identifier> for IdentifierName {
     #[inline]
-    fn from(identifier: Identifier) -> String {
+    fn from(identifier: Identifier) -> IdentifierName {
         identifier.id
     }
 }

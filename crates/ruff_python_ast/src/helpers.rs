@@ -1429,7 +1429,7 @@ pub fn pep_604_union(elts: &[Expr]) -> Expr {
 pub fn typing_optional(elt: Expr, binding: String) -> Expr {
     Expr::Subscript(ast::ExprSubscript {
         value: Box::new(Expr::Name(ast::ExprName {
-            id: binding,
+            id: binding.into(),
             range: TextRange::default(),
             ctx: ExprContext::Load,
         })),
@@ -1462,7 +1462,7 @@ pub fn typing_union(elts: &[Expr], binding: String) -> Expr {
 
     Expr::Subscript(ast::ExprSubscript {
         value: Box::new(Expr::Name(ast::ExprName {
-            id: binding.clone(),
+            id: binding.clone().into(),
             range: TextRange::default(),
             ctx: ExprContext::Load,
         })),
@@ -1556,7 +1556,7 @@ mod tests {
 
     use crate::helpers::{any_over_stmt, any_over_type_param, resolve_imported_module_path};
     use crate::{
-        Expr, ExprContext, ExprName, ExprNumberLiteral, Identifier, Int, Number, Stmt,
+        Expr, ExprContext, ExprName, ExprNumberLiteral, Identifier, Int, NameKind, Number, Stmt,
         StmtTypeAlias, TypeParam, TypeParamParamSpec, TypeParamTypeVar, TypeParamTypeVarTuple,
         TypeParams,
     };
@@ -1621,12 +1621,12 @@ mod tests {
         let type_var_one = TypeParam::TypeVar(TypeParamTypeVar {
             range: TextRange::default(),
             bound: Some(Box::new(constant_one.clone())),
-            name: Identifier::new("x", TextRange::default()),
+            name: Identifier::new("x", NameKind::Ascii, TextRange::default()),
         });
         let type_var_two = TypeParam::TypeVar(TypeParamTypeVar {
             range: TextRange::default(),
             bound: Some(Box::new(constant_two.clone())),
-            name: Identifier::new("x", TextRange::default()),
+            name: Identifier::new("x", NameKind::Ascii, TextRange::default()),
         });
         let type_alias = Stmt::TypeAlias(StmtTypeAlias {
             name: Box::new(name.clone()),
@@ -1652,7 +1652,7 @@ mod tests {
         let type_var_no_bound = TypeParam::TypeVar(TypeParamTypeVar {
             range: TextRange::default(),
             bound: None,
-            name: Identifier::new("x", TextRange::default()),
+            name: Identifier::new("x", NameKind::Ascii, TextRange::default()),
         });
         assert!(!any_over_type_param(&type_var_no_bound, &|_expr| true));
 
@@ -1664,7 +1664,7 @@ mod tests {
         let type_var_with_bound = TypeParam::TypeVar(TypeParamTypeVar {
             range: TextRange::default(),
             bound: Some(Box::new(bound.clone())),
-            name: Identifier::new("x", TextRange::default()),
+            name: Identifier::new("x", NameKind::Ascii, TextRange::default()),
         });
         assert!(
             any_over_type_param(&type_var_with_bound, &|expr| {
@@ -1682,7 +1682,7 @@ mod tests {
     fn any_over_type_param_type_var_tuple() {
         let type_var_tuple = TypeParam::TypeVarTuple(TypeParamTypeVarTuple {
             range: TextRange::default(),
-            name: Identifier::new("x", TextRange::default()),
+            name: Identifier::new("x", NameKind::Ascii, TextRange::default()),
         });
         assert!(
             !any_over_type_param(&type_var_tuple, &|_expr| true),
@@ -1694,7 +1694,7 @@ mod tests {
     fn any_over_type_param_param_spec() {
         let type_param_spec = TypeParam::ParamSpec(TypeParamParamSpec {
             range: TextRange::default(),
-            name: Identifier::new("x", TextRange::default()),
+            name: Identifier::new("x", NameKind::Ascii, TextRange::default()),
         });
         assert!(
             !any_over_type_param(&type_param_spec, &|_expr| true),

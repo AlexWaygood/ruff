@@ -1,5 +1,7 @@
 use itertools::{Itertools, MultiPeek};
 
+use ruff_python_ast::NameKind;
+
 use crate::{lexer::LexResult, token::Tok, Mode};
 
 /// An [`Iterator`] that transforms a token stream to accommodate soft keywords (namely, `match`
@@ -204,6 +206,7 @@ fn soft_to_name(tok: &Tok) -> Tok {
     };
     Tok::Name {
         name: name.to_string().into_boxed_str(),
+        kind: NameKind::Unicode,
     }
 }
 

@@ -1,7 +1,7 @@
 // auto-generated: "lalrpop 0.20.0"
-// sha3: c98876ae871e13c1a0cabf962138ded61584185a0c3144b626dac60f707ea396
+// sha3: c30cb61c91313d80a70c2b582abe4b441263fb4aee07507e249918fcffeb34ca
 use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
-use ruff_python_ast::{self as ast, Int, IpyEscapeKind};
+use ruff_python_ast::{self as ast, Int, IpyEscapeKind, NameKind};
 use crate::{
     FStringErrorType,
     Mode,
@@ -26,7 +26,7 @@ extern crate alloc;
 mod __parse__Top {
 
     use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
-    use ruff_python_ast::{self as ast, Int, IpyEscapeKind};
+    use ruff_python_ast::{self as ast, Int, IpyEscapeKind, NameKind};
     use crate::{
     FStringErrorType,
     Mode,
@@ -56,7 +56,7 @@ mod __parse__Top {
         Variant4(StringKind),
         Variant5(Int),
         Variant6((IpyEscapeKind, Box<str>)),
-        Variant7(Box<str>),
+        Variant7((Box<str>, NameKind)),
         Variant8(core::option::Option<token::Tok>),
         Variant9(ast::Parameter),
         Variant10(core::option::Option<ast::Parameter>),
@@ -6088,7 +6088,7 @@ mod __parse__Top {
             token::Tok::FStringStart(_) if true => Some(96),
             token::Tok::Int { value: _ } if true => Some(97),
             token::Tok::IpyEscapeCommand { kind: _, value: _ } if true => Some(98),
-            token::Tok::Name { name: _ } if true => Some(99),
+            token::Tok::Name { name: _, kind: _ } if true => Some(99),
             token::Tok::String { value: _, kind: _ } if true => Some(100),
             _ => None,
         }
@@ -6127,7 +6127,7 @@ mod __parse__Top {
                 _ => unreachable!(),
             },
             99 => match __token {
-                token::Tok::Name { name: __tok0 } if true => __Symbol::Variant7(__tok0),
+                token::Tok::Name { name: __tok0, kind: __tok1 } if true => __Symbol::Variant7((__tok0, __tok1)),
                 _ => unreachable!(),
             },
             _ => unreachable!(),
@@ -18319,6 +18319,16 @@ mod __parse__Top {
     fn __symbol_type_mismatch() -> ! {
         panic!("symbol type mismatch")
     }
+    fn __pop_Variant7<
+    >(
+        __symbols: &mut alloc::vec::Vec<(TextSize,__Symbol<>,TextSize)>
+    ) -> (TextSize, (Box<str>, NameKind), TextSize)
+     {
+        match __symbols.pop() {
+            Some((__l, __Symbol::Variant7(__v), __r)) => (__l, __v, __r),
+            _ => __symbol_type_mismatch()
+        }
+    }
     fn __pop_Variant3<
     >(
         __symbols: &mut alloc::vec::Vec<(TextSize,__Symbol<>,TextSize)>
@@ -18476,16 +18486,6 @@ mod __parse__Top {
      {
         match __symbols.pop() {
             Some((__l, __Symbol::Variant20(__v), __r)) => (__l, __v, __r),
-            _ => __symbol_type_mismatch()
-        }
-    }
-    fn __pop_Variant7<
-    >(
-        __symbols: &mut alloc::vec::Vec<(TextSize,__Symbol<>,TextSize)>
-    ) -> (TextSize, Box<str>, TextSize)
-     {
-        match __symbols.pop() {
-            Some((__l, __Symbol::Variant7(__v), __r)) => (__l, __v, __r),
             _ => __symbol_type_mismatch()
         }
     }
@@ -33324,7 +33324,7 @@ fn __action68<
 {
     {
         // Star import all
-        vec![ast::Alias { name: ast::Identifier::new("*", (location..end_location).into()), asname: None, range: (location..end_location).into() }]
+        vec![ast::Alias { name: ast::Identifier::new("*", NameKind::Ascii, (location..end_location).into()), asname: None, range: (location..end_location).into() }]
     }
 }
 
@@ -33335,11 +33335,14 @@ fn __action69<
     source_code: &str,
     mode: Mode,
     (_, location, _): (TextSize, TextSize, TextSize),
-    (_, n, _): (TextSize, Box<str>, TextSize),
+    (_, n, _): (TextSize, (Box<str>, NameKind), TextSize),
     (_, end_location, _): (TextSize, TextSize, TextSize),
 ) -> ast::Identifier
 {
-    ast::Identifier::new(n, (location..end_location).into())
+    {
+      let (name, kind) = n;
+      ast::Identifier::new(name, kind, (location..end_location).into())
+    }
 }
 
 #[allow(unused_variables)]
@@ -33349,18 +33352,19 @@ fn __action70<
     source_code: &str,
     mode: Mode,
     (_, location, _): (TextSize, TextSize, TextSize),
-    (_, n, _): (TextSize, Box<str>, TextSize),
+    (_, n, _): (TextSize, (Box<str>, NameKind), TextSize),
     (_, n2, _): (TextSize, alloc::vec::Vec<(token::Tok, ast::Identifier)>, TextSize),
     (_, end_location, _): (TextSize, TextSize, TextSize),
 ) -> ast::Identifier
 {
     {
+        let (n, kind) = n;
         let mut r = String::from(n);
         for x in n2 {
             r.push('.');
             r.push_str(x.1.as_str());
         }
-        ast::Identifier::new(r, (location..end_location).into())
+        ast::Identifier::new(r, kind, (location..end_location).into())
     }
 }
 
@@ -36331,10 +36335,11 @@ fn __action225<
     (_, location, _): (TextSize, TextSize, TextSize),
     (_, _, _): (TextSize, token::Tok, TextSize),
     (_, name_location, _): (TextSize, TextSize, TextSize),
-    (_, s, _): (TextSize, Box<str>, TextSize),
+    (_, s, _): (TextSize, (Box<str>, NameKind), TextSize),
 ) -> Result<(TextSize, ast::ConversionFlag),__lalrpop_util::ParseError<TextSize,token::Tok,LexicalError>>
 {
     {
+        let (s, _) = s;
         let conversion = match s.as_ref() {
             "s" => ast::ConversionFlag::Str,
             "r" => ast::ConversionFlag::Repr,
@@ -36717,11 +36722,14 @@ fn __action250<
     source_code: &str,
     mode: Mode,
     (_, location, _): (TextSize, TextSize, TextSize),
-    (_, s, _): (TextSize, Box<str>, TextSize),
+    (_, s, _): (TextSize, (Box<str>, NameKind), TextSize),
     (_, end_location, _): (TextSize, TextSize, TextSize),
 ) -> ast::Identifier
 {
-    ast::Identifier::new(s, (location..end_location).into())
+    {
+      let (name, kind) = s;
+      ast::Identifier::new(name, kind, (location..end_location).into())
+    }
 }
 
 #[allow(unused_variables)]
@@ -47507,7 +47515,7 @@ fn __action777<
 >(
     source_code: &str,
     mode: Mode,
-    __0: (TextSize, Box<str>, TextSize),
+    __0: (TextSize, (Box<str>, NameKind), TextSize),
     __1: (TextSize, TextSize, TextSize),
 ) -> ast::Identifier
 {
@@ -47535,7 +47543,7 @@ fn __action778<
 >(
     source_code: &str,
     mode: Mode,
-    __0: (TextSize, Box<str>, TextSize),
+    __0: (TextSize, (Box<str>, NameKind), TextSize),
     __1: (TextSize, alloc::vec::Vec<(token::Tok, ast::Identifier)>, TextSize),
     __2: (TextSize, TextSize, TextSize),
 ) -> ast::Identifier
@@ -47920,7 +47928,7 @@ fn __action790<
     source_code: &str,
     mode: Mode,
     __0: (TextSize, token::Tok, TextSize),
-    __1: (TextSize, Box<str>, TextSize),
+    __1: (TextSize, (Box<str>, NameKind), TextSize),
 ) -> Result<(TextSize, ast::ConversionFlag),__lalrpop_util::ParseError<TextSize,token::Tok,LexicalError>>
 {
     let __start0 = __0.0;
@@ -48721,7 +48729,7 @@ fn __action815<
 >(
     source_code: &str,
     mode: Mode,
-    __0: (TextSize, Box<str>, TextSize),
+    __0: (TextSize, (Box<str>, NameKind), TextSize),
     __1: (TextSize, TextSize, TextSize),
 ) -> ast::Identifier
 {
@@ -63619,7 +63627,7 @@ fn __action1294<
 >(
     source_code: &str,
     mode: Mode,
-    __0: (TextSize, Box<str>, TextSize),
+    __0: (TextSize, (Box<str>, NameKind), TextSize),
 ) -> ast::Identifier
 {
     let __start0 = __0.2;
@@ -63645,7 +63653,7 @@ fn __action1295<
 >(
     source_code: &str,
     mode: Mode,
-    __0: (TextSize, Box<str>, TextSize),
+    __0: (TextSize, (Box<str>, NameKind), TextSize),
     __1: (TextSize, alloc::vec::Vec<(token::Tok, ast::Identifier)>, TextSize),
 ) -> ast::Identifier
 {
@@ -64475,7 +64483,7 @@ fn __action1324<
 >(
     source_code: &str,
     mode: Mode,
-    __0: (TextSize, Box<str>, TextSize),
+    __0: (TextSize, (Box<str>, NameKind), TextSize),
 ) -> ast::Identifier
 {
     let __start0 = __0.2;
