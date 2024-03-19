@@ -9,7 +9,7 @@ use std::slice::{Iter, IterMut};
 use bitflags::bitflags;
 use itertools::Itertools;
 
-use ruff_text_size::{Ranged, TextRange, TextSize};
+use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
 
 use crate::{int, str::Quote, LiteralExpressionRef};
 
@@ -1177,6 +1177,90 @@ impl Ranged for FStringPart {
     }
 }
 
+pub trait StringPart: Ranged + Debug {
+    fn flags(&self) -> impl StringPartFlags;
+
+    fn content_range(&self) -> TextRange {
+        let flags = self.flags();
+        TextRange::new(
+            self.start() + flags.opener_len(),
+            self.end() - flags.closer_len(),
+        )
+    }
+}
+
+pub trait StringPartFlags: Copy + Debug {
+    /// Return the quoting style (single or double quotes)
+    /// used by the string's opener and closer:
+    /// - `"a"` -> `QuoteStyle::Double`
+    /// - `'a'` -> `QuoteStyle::Single`
+    fn quote_style(self) -> Quote;
+
+    /// Return `true` if the string is triple-quoted, i.e.,
+    /// it begins and ends with three consecutive quote characters.
+    /// For example: `"""bar"""`
+    fn is_triple_quoted(self) -> bool;
+
+    /// Which prefixes does the string have (if any)?
+    fn prefix_str(self) -> &'static str;
+
+    /// A `str` representation of the quotes used to start and close.
+    /// This does not include any prefixes the string has in its opener.
+    fn quote_str(self) -> &'static str {
+        if self.is_triple_quoted() {
+            match self.quote_style() {
+                Quote::Single => "'''",
+                Quote::Double => r#"""""#,
+            }
+        } else {
+            match self.quote_style() {
+                Quote::Single => "'",
+                Quote::Double => "\"",
+            }
+        }
+    }
+
+    /// The length of the prefixes used (if any) in the string's opener.
+    fn prefix_len(self) -> TextSize {
+        self.prefix_str().text_len()
+    }
+
+    /// The length of the quotes used to start and close the string.
+    /// This does not include the length of any prefixes the string has
+    /// in its opener.
+    fn quote_len(self) -> TextSize {
+        if self.is_triple_quoted() {
+            TextSize::new(3)
+        } else {
+            TextSize::new(1)
+        }
+    }
+
+    /// The total length of the string's opener,
+    /// i.e., the length of the prefixes plus the length
+    /// of the quotes used to open the string.
+    fn opener_len(self) -> TextSize {
+        self.prefix_len() + self.quote_len()
+    }
+
+    /// The total length of the string's closer.
+    /// This is always equal to `self.quote_len()`,
+    /// but is provided here for symmetry with the `opener_len()` method.
+    fn closer_len(self) -> TextSize {
+        self.quote_len()
+    }
+
+    fn format_string_contents(self, contents: &str) -> String {
+        format!(
+            "{}{}{}{}",
+            self.prefix_str(),
+            self.quote_str(),
+            contents,
+            self.quote_str()
+        )
+    }
+}
+
 bitflags! {
     #[derive(Default, Copy, Clone, PartialEq, Eq, Hash)]
     struct FStringFlagsInner: u8 {
@@ -1281,24 +1365,23 @@ impl FStringFlags {
             FStringPrefix::Regular
         }
     }
+}
 
-    /// Return `true` if the f-string is triple-quoted, i.e.,
-    /// it begins and ends with three consecutive quote characters.
-    /// For example: `f"""{bar}"""`
-    pub const fn is_triple_quoted(self) -> bool {
+impl StringPartFlags for FStringFlags {
+    fn is_triple_quoted(self) -> bool {
         self.0.contains(FStringFlagsInner::TRIPLE_QUOTED)
     }
 
-    /// Return the quoting style (single or double quotes)
-    /// used by the f-string's opener and closer:
-    /// - `f"{"a"}"` -> `QuoteStyle::Double`
-    /// - `f'{"a"}'` -> `QuoteStyle::Single`
-    pub const fn quote_style(self) -> Quote {
+    fn quote_style(self) -> Quote {
         if self.0.contains(FStringFlagsInner::DOUBLE) {
             Quote::Double
         } else {
             Quote::Single
         }
+    }
+
+    fn prefix_str(self) -> &'static str {
+        self.prefix().as_str()
     }
 }
 
@@ -1339,6 +1422,12 @@ impl FString {
 impl Ranged for FString {
     fn range(&self) -> TextRange {
         self.range
+    }
+}
+
+impl StringPart for FString {
+    fn flags(&self) -> impl StringPartFlags {
+        self.flags
     }
 }
 
@@ -1637,12 +1726,10 @@ impl StringLiteralFlags {
             StringLiteralPrefix::Empty
         }
     }
+}
 
-    /// Return the quoting style (single or double quotes)
-    /// used by the string's opener and closer:
-    /// - `"a"` -> `QuoteStyle::Double`
-    /// - `'a'` -> `QuoteStyle::Single`
-    pub const fn quote_style(self) -> Quote {
+impl StringPartFlags for StringLiteralFlags {
+    fn quote_style(self) -> Quote {
         if self.0.contains(StringLiteralFlagsInner::DOUBLE) {
             Quote::Double
         } else {
@@ -1650,11 +1737,12 @@ impl StringLiteralFlags {
         }
     }
 
-    /// Return `true` if the string is triple-quoted, i.e.,
-    /// it begins and ends with three consecutive quote characters.
-    /// For example: `"""bar"""`
-    pub const fn is_triple_quoted(self) -> bool {
+    fn is_triple_quoted(self) -> bool {
         self.0.contains(StringLiteralFlagsInner::TRIPLE_QUOTED)
+    }
+
+    fn prefix_str(self) -> &'static str {
+        self.prefix().as_str()
     }
 }
 
@@ -1721,6 +1809,12 @@ pub struct StringLiteral {
 impl Ranged for StringLiteral {
     fn range(&self) -> TextRange {
         self.range
+    }
+}
+
+impl StringPart for StringLiteral {
+    fn flags(&self) -> impl StringPartFlags {
+        self.flags
     }
 }
 
@@ -2037,24 +2131,23 @@ impl BytesLiteralFlags {
             ByteStringPrefix::Regular
         }
     }
+}
 
-    /// Return `true` if the bytestring is triple-quoted, i.e.,
-    /// it begins and ends with three consecutive quote characters.
-    /// For example: `b"""{bar}"""`
-    pub const fn is_triple_quoted(self) -> bool {
+impl StringPartFlags for BytesLiteralFlags {
+    fn is_triple_quoted(self) -> bool {
         self.0.contains(BytesLiteralFlagsInner::TRIPLE_QUOTED)
     }
 
-    /// Return the quoting style (single or double quotes)
-    /// used by the bytestring's opener and closer:
-    /// - `b"a"` -> `QuoteStyle::Double`
-    /// - `b'a'` -> `QuoteStyle::Single`
-    pub const fn quote_style(self) -> Quote {
+    fn quote_style(self) -> Quote {
         if self.0.contains(BytesLiteralFlagsInner::DOUBLE) {
             Quote::Double
         } else {
             Quote::Single
         }
+    }
+
+    fn prefix_str(self) -> &'static str {
+        self.prefix().as_str()
     }
 }
 
@@ -2080,6 +2173,12 @@ pub struct BytesLiteral {
 impl Ranged for BytesLiteral {
     fn range(&self) -> TextRange {
         self.range
+    }
+}
+
+impl StringPart for BytesLiteral {
+    fn flags(&self) -> impl StringPartFlags {
+        self.flags
     }
 }
 
