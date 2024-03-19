@@ -1,4 +1,4 @@
-use ast::{StringLiteralFlags, StringLiteralPrefix};
+use ast::{StringLiteralFlags, str::StringLiteralPrefix};
 use ruff_python_ast::{self as ast, Arguments, Expr};
 use ruff_text_size::Ranged;
 

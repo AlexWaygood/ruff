@@ -9,9 +9,12 @@ use std::slice::{Iter, IterMut};
 use bitflags::bitflags;
 use itertools::Itertools;
 
-use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
+use ruff_text_size::{Ranged, TextRange, TextSize};
 
-use crate::{int, str::Quote, LiteralExpressionRef};
+use crate::str::{
+    ByteStringPrefix, FStringPrefix, Quote, StringLiteralPrefix, StringPart, StringPartFlags, StringPrefix,
+};
+use crate::{int, LiteralExpressionRef};
 
 /// See also [mod](https://docs.python.org/3/library/ast.html#ast.mod)
 #[derive(Clone, Debug, PartialEq, is_macro::Is)]
@@ -1177,90 +1180,6 @@ impl Ranged for FStringPart {
     }
 }
 
-pub trait StringPart: Ranged + Debug {
-    fn flags(&self) -> impl StringPartFlags;
-
-    fn content_range(&self) -> TextRange {
-        let flags = self.flags();
-        TextRange::new(
-            self.start() + flags.opener_len(),
-            self.end() - flags.closer_len(),
-        )
-    }
-}
-
-pub trait StringPartFlags: Copy + Debug {
-    /// Return the quoting style (single or double quotes)
-    /// used by the string's opener and closer:
-    /// - `"a"` -> `QuoteStyle::Double`
-    /// - `'a'` -> `QuoteStyle::Single`
-    fn quote_style(self) -> Quote;
-
-    /// Return `true` if the string is triple-quoted, i.e.,
-    /// it begins and ends with three consecutive quote characters.
-    /// For example: `"""bar"""`
-    fn is_triple_quoted(self) -> bool;
-
-    /// Which prefixes does the string have (if any)?
-    fn prefix_str(self) -> &'static str;
-
-    /// A `str` representation of the quotes used to start and close.
-    /// This does not include any prefixes the string has in its opener.
-    fn quote_str(self) -> &'static str {
-        if self.is_triple_quoted() {
-            match self.quote_style() {
-                Quote::Single => "'''",
-                Quote::Double => r#"""""#,
-            }
-        } else {
-            match self.quote_style() {
-                Quote::Single => "'",
-                Quote::Double => "\"",
-            }
-        }
-    }
-
-    /// The length of the prefixes used (if any) in the string's opener.
-    fn prefix_len(self) -> TextSize {
-        self.prefix_str().text_len()
-    }
-
-    /// The length of the quotes used to start and close the string.
-    /// This does not include the length of any prefixes the string has
-    /// in its opener.
-    fn quote_len(self) -> TextSize {
-        if self.is_triple_quoted() {
-            TextSize::new(3)
-        } else {
-            TextSize::new(1)
-        }
-    }
-
-    /// The total length of the string's opener,
-    /// i.e., the length of the prefixes plus the length
-    /// of the quotes used to open the string.
-    fn opener_len(self) -> TextSize {
-        self.prefix_len() + self.quote_len()
-    }
-
-    /// The total length of the string's closer.
-    /// This is always equal to `self.quote_len()`,
-    /// but is provided here for symmetry with the `opener_len()` method.
-    fn closer_len(self) -> TextSize {
-        self.quote_len()
-    }
-
-    fn format_string_contents(self, contents: &str) -> String {
-        format!(
-            "{}{}{}{}",
-            self.prefix_str(),
-            self.quote_str(),
-            contents,
-            self.quote_str()
-        )
-    }
-}
-
 bitflags! {
     #[derive(Default, Copy, Clone, PartialEq, Eq, Hash)]
     struct FStringFlagsInner: u8 {
@@ -1284,40 +1203,6 @@ bitflags! {
         /// for why we track the casing of the `r` prefix,
         /// but not for any other prefix
         const R_PREFIX_UPPER = 1 << 3;
-    }
-}
-
-/// Enumeration of the valid prefixes an f-string literal can have.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum FStringPrefix {
-    /// Just a regular f-string with no other prefixes, e.g. f"{bar}"
-    Regular,
-
-    /// A "raw" format-string, that has an `r` or `R` prefix,
-    /// e.g. `rf"{bar}"` or `Rf"{bar}"`
-    Raw { uppercase_r: bool },
-}
-
-impl FStringPrefix {
-    /// Return a `str` representation of the prefix
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Regular => "f",
-            Self::Raw { uppercase_r: true } => "Rf",
-            Self::Raw { uppercase_r: false } => "rf",
-        }
-    }
-
-    /// Return true if this prefix indicates a "raw f-string",
-    /// e.g. `rf"{bar}"` or `Rf"{bar}"`
-    pub const fn is_raw(self) -> bool {
-        matches!(self, Self::Raw { .. })
-    }
-}
-
-impl fmt::Display for FStringPrefix {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
     }
 }
 
@@ -1380,8 +1265,8 @@ impl StringPartFlags for FStringFlags {
         }
     }
 
-    fn prefix_str(self) -> &'static str {
-        self.prefix().as_str()
+    fn prefix(self) -> StringPrefix {
+        StringPrefix::Format(self.prefix())
     }
 }
 
@@ -1741,8 +1626,8 @@ impl StringPartFlags for StringLiteralFlags {
         self.0.contains(StringLiteralFlagsInner::TRIPLE_QUOTED)
     }
 
-    fn prefix_str(self) -> &'static str {
-        self.prefix().as_str()
+    fn prefix(self) -> StringPrefix {
+        StringPrefix::Regular(self.prefix())
     }
 }
 
@@ -1753,47 +1638,6 @@ impl fmt::Debug for StringLiteralFlags {
             .field("prefix", &self.prefix())
             .field("triple_quoted", &self.is_triple_quoted())
             .finish()
-    }
-}
-
-/// Enumerations of the valid prefixes a string literal can have.
-///
-/// Bytestrings and f-strings are excluded from this enumeration,
-/// as they are represented by different AST nodes.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, is_macro::Is)]
-pub enum StringLiteralPrefix {
-    /// Just a regular string with no prefixes
-    Empty,
-
-    /// A string with a `u` or `U` prefix, e.g. `u"foo"`.
-    /// Note that, despite this variant's name,
-    /// it is in fact a no-op at runtime to use the `u` or `U` prefix
-    /// in Python. All Python-3 strings are unicode strings;
-    /// this prefix is only allowed in Python 3 for backwards compatibility
-    /// with Python 2. However, using this prefix in a Python string
-    /// is mutually exclusive with an `r` or `R` prefix.
-    Unicode,
-
-    /// A "raw" string, that has an `r` or `R` prefix,
-    /// e.g. `r"foo\."` or `R'bar\d'`.
-    Raw { uppercase: bool },
-}
-
-impl StringLiteralPrefix {
-    /// Return a `str` representation of the prefix
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Empty => "",
-            Self::Unicode => "u",
-            Self::Raw { uppercase: true } => "R",
-            Self::Raw { uppercase: false } => "r",
-        }
-    }
-}
-
-impl fmt::Display for StringLiteralPrefix {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
     }
 }
 
@@ -2049,40 +1893,6 @@ bitflags! {
     }
 }
 
-/// Enumeration of the valid prefixes a bytestring literal can have.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum ByteStringPrefix {
-    /// Just a regular bytestring with no other prefixes, e.g. `b"foo"`
-    Regular,
-
-    /// A "raw" bytestring, that has an `r` or `R` prefix,
-    /// e.g. `Rb"foo"` or `rb"foo"`
-    Raw { uppercase_r: bool },
-}
-
-impl ByteStringPrefix {
-    /// Return a `str` representation of the prefix
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Regular => "b",
-            Self::Raw { uppercase_r: true } => "Rb",
-            Self::Raw { uppercase_r: false } => "rb",
-        }
-    }
-
-    /// Return true if this prefix indicates a "raw bytestring",
-    /// e.g. `rb"foo"` or `Rb"foo"`
-    pub const fn is_raw(self) -> bool {
-        matches!(self, Self::Raw { .. })
-    }
-}
-
-impl fmt::Display for ByteStringPrefix {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
 /// Flags that can be queried to obtain information
 /// regarding the prefixes and quotes used for a bytes literal.
 #[derive(Default, Copy, Clone, Eq, PartialEq, Hash)]
@@ -2146,8 +1956,8 @@ impl StringPartFlags for BytesLiteralFlags {
         }
     }
 
-    fn prefix_str(self) -> &'static str {
-        self.prefix().as_str()
+    fn prefix(self) -> StringPrefix {
+        StringPrefix::Bytes(self.prefix())
     }
 }
 

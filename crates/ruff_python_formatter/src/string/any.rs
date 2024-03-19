@@ -1,5 +1,6 @@
 use std::iter::FusedIterator;
 
+use ast::str::StringPartFlags;
 use memchr::memchr2;
 
 use ruff_python_ast::{
@@ -7,13 +8,13 @@ use ruff_python_ast::{
     StringLiteral,
 };
 use ruff_source_file::Locator;
-use ruff_text_size::{Ranged, TextLen, TextRange};
+use ruff_text_size::{Ranged, TextRange};
 
 use crate::expression::expr_f_string::f_string_quoting;
 use crate::other::f_string::FormatFString;
 use crate::other::string_literal::{FormatStringLiteral, StringLiteralKind};
 use crate::prelude::*;
-use crate::string::{Quoting, StringPrefix, StringQuotes};
+use crate::string::Quoting;
 
 /// Represents any kind of string expression. This could be either a string,
 /// bytes or f-string.
@@ -69,15 +70,19 @@ impl<'a> AnyString<'a> {
 
     pub(crate) fn is_multiline(self, source: &str) -> bool {
         match self {
-            AnyString::String(_) | AnyString::Bytes(_) => {
-                let contents = &source[self.range()];
-                let prefix = StringPrefix::parse(contents);
-                let quotes = StringQuotes::parse(
-                    &contents[TextRange::new(prefix.text_len(), contents.text_len())],
-                );
-
-                quotes.is_some_and(StringQuotes::is_triple)
-                    && memchr2(b'\n', b'\r', contents.as_bytes()).is_some()
+            Self::String(ExprStringLiteral { value, .. }) => {
+                value
+                    .iter()
+                    .last()
+                    .is_some_and(|part| part.flags.is_triple_quoted())
+                    && memchr2(b'\n', b'\r', &source[self.range()].as_bytes()).is_some()
+            }
+            AnyString::Bytes(ExprBytesLiteral { value, .. }) => {
+                value
+                    .iter()
+                    .last()
+                    .is_some_and(|part| part.flags.is_triple_quoted())
+                    && memchr2(b'\n', b'\r', &source[self.range()].as_bytes()).is_some()
             }
             AnyString::FString(fstring) => {
                 memchr2(b'\n', b'\r', source[fstring.range].as_bytes()).is_some()

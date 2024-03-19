@@ -34,18 +34,18 @@ use std::{char, cmp::Ordering, str::FromStr};
 use unicode_ident::{is_xid_continue, is_xid_start};
 use unicode_normalization::UnicodeNormalization;
 
-use ruff_python_ast::{FStringPrefix, Int, IpyEscapeKind};
+use ruff_python_ast::{
+    str::{FStringPrefix, StringPrefix},
+    Int, IpyEscapeKind,
+};
 use ruff_text_size::{TextLen, TextRange, TextSize};
 
 use crate::lexer::cursor::{Cursor, EOF_CHAR};
 use crate::lexer::fstring::{FStringContext, FStrings};
 use crate::lexer::indentation::{Indentation, Indentations};
 use crate::{
-    soft_keywords::SoftKeywordTransformer,
-    string::FStringErrorType,
-    string_token_flags::{StringKind, StringPrefix},
-    token::Tok,
-    Mode,
+    soft_keywords::SoftKeywordTransformer, string::FStringErrorType,
+    string_token_flags::StringKind, token::Tok, Mode,
 };
 
 mod cursor;
