@@ -935,6 +935,13 @@ impl<'a> Visitor<'a> for Checker<'a> {
 
     fn visit_expr(&mut self, expr: &'a Expr) {
         // Step 0: Pre-processing
+        if self.source_type.is_stub() && !self.semantic.in_deferred_stub_expression() {
+            self.visit
+                .stub_expressions
+                .push((expr, self.semantic.snapshot()));
+            return;
+        }
+
         if !self.semantic.in_typing_literal()
             && !self.semantic.in_deferred_type_definition()
             && self.semantic.in_type_definition()
@@ -973,6 +980,10 @@ impl<'a> Visitor<'a> for Checker<'a> {
         ) {
             self.semantic.flags -= SemanticModelFlags::BOOLEAN_TEST;
         }
+
+        // Similarly, if we're visiting a subnode of a deferred stub expression,
+        // we're no longer in a deferred stub expression
+        self.semantic.flags -= SemanticModelFlags::DEFERRED_STUB_EXPRESSION;
 
         // Step 1: Binding
         match expr {
@@ -1965,6 +1976,20 @@ impl<'a> Checker<'a> {
         scope.add(id, binding_id);
     }
 
+    fn visit_deferred_stub_expressions(&mut self) {
+        let snapshot = self.semantic.snapshot();
+        while !self.visit.stub_expressions.is_empty() {
+            let deferred_expressions = std::mem::take(&mut self.visit.stub_expressions);
+            for (expr, snapshot) in deferred_expressions {
+                self.semantic.restore(snapshot);
+                // Set this flag to avoid infinite recursion, or we'll just defer it again:
+                self.semantic.flags |= SemanticModelFlags::DEFERRED_STUB_EXPRESSION;
+                self.visit_expr(expr);
+            }
+            self.semantic.restore(snapshot);
+        }
+    }
+
     fn visit_deferred_future_type_definitions(&mut self) {
         let snapshot = self.semantic.snapshot();
         while !self.visit.future_type_definitions.is_empty() {
@@ -2097,6 +2122,7 @@ impl<'a> Checker<'a> {
     /// annotations.
     fn visit_deferred(&mut self, allocator: &'a typed_arena::Arena<Expr>) {
         while !self.visit.is_empty() {
+            self.visit_deferred_stub_expressions();
             self.visit_deferred_functions();
             self.visit_deferred_type_param_definitions();
             self.visit_deferred_lambdas();

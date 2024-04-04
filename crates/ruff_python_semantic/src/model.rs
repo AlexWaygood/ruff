@@ -1489,7 +1489,8 @@ impl<'a> SemanticModel<'a> {
             .intersects(SemanticModelFlags::FUTURE_TYPE_DEFINITION)
     }
 
-    /// Return `true` if the model is in any kind of deferred type definition.
+    /// Return `true` if the model is visiting any kind of type definition
+    /// that was previously deferred when initially traversing the AST
     pub const fn in_deferred_type_definition(&self) -> bool {
         self.flags
             .intersects(SemanticModelFlags::DEFERRED_TYPE_DEFINITION)
@@ -1601,6 +1602,13 @@ impl<'a> SemanticModel<'a> {
     pub const fn in_dunder_all_definition(&self) -> bool {
         self.flags
             .intersects(SemanticModelFlags::DUNDER_ALL_DEFINITION)
+    }
+
+    /// Return `true` if the model is visiting an expression in a stub file
+    /// that was initially deferred while traversing the AST
+    pub const fn in_deferred_stub_expression(&self) -> bool {
+        self.flags
+            .intersects(SemanticModelFlags::DEFERRED_STUB_EXPRESSION)
     }
 
     /// Return an iterator over all bindings shadowed by the given [`BindingId`], within the
@@ -1977,6 +1985,10 @@ bitflags! {
         /// f"first {x} second {y}"
         /// ```
         const F_STRING_REPLACEMENT_FIELD = 1 << 23;
+
+        /// The model is visiting an expression in a stub file
+        /// that was initially deferred while traversing the AST
+        const DEFERRED_STUB_EXPRESSION = 1 << 24;
 
         /// The context is in any type annotation.
         const ANNOTATION = Self::TYPING_ONLY_ANNOTATION.bits() | Self::RUNTIME_EVALUATED_ANNOTATION.bits() | Self::RUNTIME_REQUIRED_ANNOTATION.bits();
