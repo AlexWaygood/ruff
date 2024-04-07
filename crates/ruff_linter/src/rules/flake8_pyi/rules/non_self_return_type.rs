@@ -7,6 +7,7 @@ use ruff_python_ast::identifier::Identifier;
 use ruff_python_semantic::analyze;
 use ruff_python_semantic::analyze::visibility::{is_abstract, is_final, is_overload};
 use ruff_python_semantic::{ScopeKind, SemanticModel};
+use ruff_text_size::Ranged;
 
 use crate::checkers::ast::Checker;
 
@@ -144,18 +145,25 @@ pub(crate) fn non_self_return_type(
         return;
     }
 
+    let add_diagnostic = |checker: &mut Checker| {
+        checker.diagnostics.push(
+            Diagnostic::new(
+                NonSelfReturnType {
+                    class_name: class_def.name.to_string(),
+                    method_name: name.to_string(),
+                },
+                returns.range(),
+            )
+            .with_parent(stmt.identifier().start()),
+        );
+    };
+
     if is_async {
         if name == "__aenter__"
             && is_name(returns, &class_def.name)
             && !is_final(&class_def.decorator_list, semantic)
         {
-            checker.diagnostics.push(Diagnostic::new(
-                NonSelfReturnType {
-                    class_name: class_def.name.to_string(),
-                    method_name: name.to_string(),
-                },
-                stmt.identifier(),
-            ));
+            add_diagnostic(checker);
         }
         return;
     }
@@ -163,13 +171,7 @@ pub(crate) fn non_self_return_type(
     // In-place methods that are expected to return `Self`.
     if is_inplace_bin_op(name) {
         if !is_self(returns, semantic) {
-            checker.diagnostics.push(Diagnostic::new(
-                NonSelfReturnType {
-                    class_name: class_def.name.to_string(),
-                    method_name: name.to_string(),
-                },
-                stmt.identifier(),
-            ));
+            add_diagnostic(checker);
         }
         return;
     }
@@ -177,13 +179,7 @@ pub(crate) fn non_self_return_type(
     if is_name(returns, &class_def.name) {
         if matches!(name, "__enter__" | "__new__") && !is_final(&class_def.decorator_list, semantic)
         {
-            checker.diagnostics.push(Diagnostic::new(
-                NonSelfReturnType {
-                    class_name: class_def.name.to_string(),
-                    method_name: name.to_string(),
-                },
-                stmt.identifier(),
-            ));
+            add_diagnostic(checker);
         }
         return;
     }
@@ -193,26 +189,14 @@ pub(crate) fn non_self_return_type(
             if is_iterable_or_iterator(returns, semantic)
                 && subclasses_iterator(class_def, semantic)
             {
-                checker.diagnostics.push(Diagnostic::new(
-                    NonSelfReturnType {
-                        class_name: class_def.name.to_string(),
-                        method_name: name.to_string(),
-                    },
-                    stmt.identifier(),
-                ));
+                add_diagnostic(checker);
             }
         }
         "__aiter__" => {
             if is_async_iterable_or_iterator(returns, semantic)
                 && subclasses_async_iterator(class_def, semantic)
             {
-                checker.diagnostics.push(Diagnostic::new(
-                    NonSelfReturnType {
-                        class_name: class_def.name.to_string(),
-                        method_name: name.to_string(),
-                    },
-                    stmt.identifier(),
-                ));
+                add_diagnostic(checker);
             }
         }
         _ => {}
