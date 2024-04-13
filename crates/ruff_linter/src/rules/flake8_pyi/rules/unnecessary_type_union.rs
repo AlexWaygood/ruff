@@ -71,25 +71,18 @@ pub(crate) fn unnecessary_type_union<'a>(checker: &mut Checker, union: &'a Expr)
     let mut type_exprs = Vec::new();
     let mut other_exprs = Vec::new();
 
-    let mut collect_type_exprs = |expr: &'a Expr, _parent: &'a Expr| {
-        let subscript = expr.as_subscript_expr();
-
-        if subscript.is_none() {
-            other_exprs.push(expr);
-        } else {
-            let unwrapped = subscript.unwrap();
+    let mut collect_type_exprs = |expr: &'a Expr, _parent: &'a Expr| match expr {
+        Expr::Subscript(subscript) => {
             if checker
                 .semantic()
-                .resolve_qualified_name(unwrapped.value.as_ref())
-                .is_some_and(|qualified_name| {
-                    matches!(qualified_name.segments(), ["" | "builtins", "type"])
-                })
+                .references_builtin_symbol(&subscript.value, "type")
             {
-                type_exprs.push(unwrapped.slice.as_ref());
+                type_exprs.push(&*subscript.slice);
             } else {
                 other_exprs.push(expr);
             }
         }
+        _ => other_exprs.push(expr),
     };
 
     traverse_union(&mut collect_type_exprs, checker.semantic(), union);
@@ -109,11 +102,17 @@ pub(crate) fn unnecessary_type_union<'a>(checker: &mut Checker, union: &'a Expr)
             union.range(),
         );
 
-        if checker.semantic().is_builtin("type") {
+        diagnostic.try_set_fix(|| {
+            let (import_edit, binding) = checker.importer().get_or_import_builtin_symbol(
+                "type",
+                union.start(),
+                checker.semantic(),
+            )?;
+
             let content = if let Some(subscript) = subscript {
                 let types = &Expr::Subscript(ast::ExprSubscript {
                     value: Box::new(Expr::Name(ast::ExprName {
-                        id: "type".into(),
+                        id: binding,
                         ctx: ExprContext::Load,
                         range: TextRange::default(),
                     })),
@@ -166,7 +165,7 @@ pub(crate) fn unnecessary_type_union<'a>(checker: &mut Checker, union: &'a Expr)
                 let elts: Vec<Expr> = type_exprs.into_iter().cloned().collect();
                 let types = Expr::Subscript(ast::ExprSubscript {
                     value: Box::new(Expr::Name(ast::ExprName {
-                        id: "type".into(),
+                        id: binding,
                         ctx: ExprContext::Load,
                         range: TextRange::default(),
                     })),
@@ -185,11 +184,9 @@ pub(crate) fn unnecessary_type_union<'a>(checker: &mut Checker, union: &'a Expr)
                 }
             };
 
-            diagnostic.set_fix(Fix::safe_edit(Edit::range_replacement(
-                content,
-                union.range(),
-            )));
-        }
+            let binding_edit = Edit::range_replacement(content, union.range());
+            Ok(Fix::safe_edits(binding_edit, import_edit))
+        });
 
         checker.diagnostics.push(diagnostic);
     }

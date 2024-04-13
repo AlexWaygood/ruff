@@ -132,12 +132,9 @@ pub(crate) fn unnecessary_from_float(checker: &mut Checker, call: &ExprCall) {
         };
 
         // Must be a call to the `float` builtin.
-        let Some(func_name) = func.as_name_expr() else {
+        if !checker.semantic().references_builtin_symbol(func, "float") {
             break 'short_circuit;
-        };
-        if func_name.id != "float" {
-            break 'short_circuit;
-        };
+        }
 
         // Must have exactly one argument, which is a string literal.
         if arguments.keywords.len() != 0 {
@@ -155,10 +152,6 @@ pub(crate) fn unnecessary_from_float(checker: &mut Checker, call: &ExprCall) {
         ) {
             break 'short_circuit;
         }
-
-        if !checker.semantic().is_builtin("float") {
-            break 'short_circuit;
-        };
 
         let replacement = checker.locator().slice(float).to_string();
         diagnostic.set_fix(Fix::safe_edits(

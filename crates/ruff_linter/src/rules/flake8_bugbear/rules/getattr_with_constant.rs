@@ -54,12 +54,12 @@ pub(crate) fn getattr_with_constant(
     func: &Expr,
     args: &[Expr],
 ) {
-    let Expr::Name(ast::ExprName { id, .. }) = func else {
+    if !checker
+        .semantic()
+        .references_builtin_symbol(func, "getattr")
+    {
         return;
     };
-    if id != "getattr" {
-        return;
-    }
     let [obj, arg] = args else {
         return;
     };
@@ -73,9 +73,6 @@ pub(crate) fn getattr_with_constant(
         return;
     }
     if is_mangled_private(value.to_str()) {
-        return;
-    }
-    if !checker.semantic().is_builtin("getattr") {
         return;
     }
 

@@ -116,12 +116,9 @@ pub(crate) fn verbose_decimal_constructor(checker: &mut Checker, call: &ast::Exp
             func, arguments, ..
         }) => {
             // Must be a call to the `float` builtin.
-            let Some(func_name) = func.as_name_expr() else {
+            if !checker.semantic().references_builtin_symbol(func, "float") {
                 return;
-            };
-            if func_name.id != "float" {
-                return;
-            };
+            }
 
             // Must have exactly one argument, which is a string literal.
             if arguments.keywords.len() != 0 {
@@ -139,10 +136,6 @@ pub(crate) fn verbose_decimal_constructor(checker: &mut Checker, call: &ast::Exp
             ) {
                 return;
             }
-
-            if !checker.semantic().is_builtin("float") {
-                return;
-            };
 
             let replacement = checker.locator().slice(float).to_string();
             let mut diagnostic = Diagnostic::new(

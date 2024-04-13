@@ -229,6 +229,20 @@ impl<'a> Importer<'a> {
             .map_or_else(|| self.import_symbol(symbol, at, None, semantic), Ok)
     }
 
+    pub(crate) fn get_or_import_builtin_symbol(
+        &self,
+        symbol: &str,
+        at: TextSize,
+        semantic: &SemanticModel,
+    ) -> Result<(Option<Edit>, String), ResolutionError> {
+        if semantic.is_builtin(symbol) {
+            return Ok((None, symbol.to_string()));
+        }
+        let (import_edit, binding) =
+            self.get_or_import_symbol(&ImportRequest::import("builtins", symbol), at, semantic)?;
+        Ok((Some(import_edit), binding))
+    }
+
     /// Return the [`ImportedName`] to for existing symbol, if it's present in the given [`SemanticModel`].
     fn find_symbol(
         symbol: &ImportRequest,

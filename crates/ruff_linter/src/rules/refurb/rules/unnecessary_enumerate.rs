@@ -103,15 +103,12 @@ pub(crate) fn unnecessary_enumerate(checker: &mut Checker, stmt_for: &ast::StmtF
     };
 
     // Check that the function is the `enumerate` builtin.
-    let Expr::Name(ast::ExprName { id, .. }) = func.as_ref() else {
+    if !checker
+        .semantic()
+        .references_builtin_symbol(func, "enumerate")
+    {
         return;
-    };
-    if id != "enumerate" {
-        return;
-    };
-    if !checker.semantic().is_builtin("enumerate") {
-        return;
-    };
+    }
 
     // Get the first argument, which is the sequence to iterate over.
     let Some(Expr::Name(sequence)) = arguments.args.first() else {

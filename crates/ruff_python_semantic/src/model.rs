@@ -257,6 +257,24 @@ impl<'a> SemanticModel<'a> {
             .is_some_and(|binding| binding.kind.is_builtin())
     }
 
+    /// Return `true` if `member` refers to a builtin symbol with name `symbol`,
+    /// i.e. either `object` (where `object` is not overridden in the global scope),
+    /// or `builtins.object` (where `builtins` is imported as a module at the top level)
+    pub fn references_builtin_symbol(&self, expr: &Expr, symbol: &str) -> bool {
+        debug_assert!(!symbol.contains('.'));
+        let Some(qualified_name) = self.resolve_qualified_name(expr) else {
+            return false;
+        };
+        let ["builtins" | "", member] = qualified_name.segments() else {
+            return false;
+        };
+        #[cfg(debug_assertions)]
+        if qualified_name.is_builtin() {
+            assert!(self.is_builtin(symbol));
+        }
+        member == &symbol
+    }
+
     /// Return `true` if `member` is an "available" symbol, i.e., a symbol that has not been bound
     /// in the current scope, or in any containing scope.
     pub fn is_available(&self, member: &str) -> bool {

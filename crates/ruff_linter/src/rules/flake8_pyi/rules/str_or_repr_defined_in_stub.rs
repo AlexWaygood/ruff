@@ -78,13 +78,7 @@ pub(crate) fn str_or_repr_defined_in_stub(checker: &mut Checker, stmt: &Stmt) {
         return;
     }
 
-    if checker
-        .semantic()
-        .resolve_qualified_name(returns)
-        .map_or(true, |qualified_name| {
-            !matches!(qualified_name.segments(), ["" | "builtins", "str"])
-        })
-    {
+    if !checker.semantic().references_builtin_symbol(returns, "str") {
         return;
     }
 

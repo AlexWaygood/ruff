@@ -76,11 +76,7 @@ fn deprecated_type_comparison(checker: &mut Checker, compare: &ast::ExprCompare)
             continue;
         };
 
-        let Expr::Name(ast::ExprName { id, .. }) = func.as_ref() else {
-            continue;
-        };
-
-        if !(id == "type" && checker.semantic().is_builtin("type")) {
+        if !checker.semantic().references_builtin_symbol(func, "type") {
             continue;
         }
 
@@ -90,11 +86,7 @@ fn deprecated_type_comparison(checker: &mut Checker, compare: &ast::ExprCompare)
                 func, arguments, ..
             }) => {
                 // Ex) `type(obj) is type(1)`
-                let Expr::Name(ast::ExprName { id, .. }) = func.as_ref() else {
-                    continue;
-                };
-
-                if id == "type" && checker.semantic().is_builtin("type") {
+                if checker.semantic().references_builtin_symbol(func, "type") {
                     // Allow comparison for types which are not obvious.
                     if arguments
                         .args
@@ -189,13 +181,9 @@ fn is_type(expr: &Expr, semantic: &SemanticModel) -> bool {
             func, arguments, ..
         }) => {
             // Ex) `type(obj) == type(1)`
-            let Expr::Name(ast::ExprName { id, .. }) = func.as_ref() else {
+            if !semantic.references_builtin_symbol(func, "type") {
                 return false;
-            };
-
-            if !(id == "type" && semantic.is_builtin("type")) {
-                return false;
-            };
+            }
 
             // Allow comparison for types which are not obvious.
             arguments

@@ -133,6 +133,10 @@ fn extract_name_from_reversed<'a>(
         func, arguments, ..
     } = expr.as_call_expr()?;
 
+    if !semantic.references_builtin_symbol(func, "reversed") {
+        return None;
+    }
+
     if !arguments.keywords.is_empty() {
         return None;
     }
@@ -141,17 +145,7 @@ fn extract_name_from_reversed<'a>(
         return None;
     };
 
-    let arg = func
-        .as_name_expr()
-        .is_some_and(|name| name.id == "reversed")
-        .then(|| arg.as_name_expr())
-        .flatten()?;
-
-    if !semantic.is_builtin("reversed") {
-        return None;
-    }
-
-    Some(arg)
+    arg.as_name_expr()
 }
 
 /// Given a slice expression, returns the inner argument if it's a reversed slice.

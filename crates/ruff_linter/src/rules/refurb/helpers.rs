@@ -137,7 +137,7 @@ fn find_file_open<'a>(
         ..
     } = item.context_expr.as_call_expr()?;
 
-    if func.as_name_expr()?.id != "open" {
+    if !semantic.references_builtin_symbol(func, "open") {
         return None;
     }
 
