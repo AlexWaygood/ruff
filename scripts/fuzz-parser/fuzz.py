@@ -119,7 +119,7 @@ def run_fuzzer_concurrently(args: ResolvedCliArgs) -> list[FuzzResult]:
         f"{num_seeds} randomly generated source-code files..."
     )
     bugs: list[FuzzResult] = []
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=args.jobs) as executor:
         fuzz_result_futures = [
             executor.submit(
                 fuzz_code,
@@ -210,6 +210,7 @@ def parse_seed_argument(arg: str) -> int | range:
 class ResolvedCliArgs:
     seeds: list[Seed]
     _: KW_ONLY
+    jobs: int | None
     test_executable: str
     baseline_executable: str
     only_new_bugs: bool
@@ -255,6 +256,9 @@ def parse_args() -> ResolvedCliArgs:
             "Defaults to whatever `ruff` version is installed "
             "in the Python environment."
         ),
+    )
+    parser.add_argument(
+        "-j", "--jobs", type=int, help="Fuzz with this many workers at once"
     )
 
     args = parser.parse_args()
@@ -327,6 +331,7 @@ def parse_args() -> ResolvedCliArgs:
         quiet=args.quiet,
         test_executable=args.test_executable,
         baseline_executable=args.baseline_executable,
+        jobs=args.jobs,
     )
 
 
