@@ -33,7 +33,7 @@ pub(crate) fn from_future_import(checker: &mut Checker, target: &StmtImportFrom)
         range,
         module: Some(name),
         names,
-        ..
+        level: 0,
     } = target
     {
         if name == "__future__" && names.iter().any(|alias| &*alias.name == "annotations") {

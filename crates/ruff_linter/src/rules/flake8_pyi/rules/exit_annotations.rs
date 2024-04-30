@@ -59,24 +59,27 @@ impl Violation for BadExitAnnotation {
 
     #[derive_message_formats]
     fn message(&self) -> String {
-        let method_name = self.func_kind.to_string();
-        match self.error_kind {
-            ErrorKind::StarArgsNotAnnotated => format!("Star-args in `{method_name}` should be annotated with `object`"),
-            ErrorKind::MissingArgs => format!("If there are no star-args, `{method_name}` should have at least 3 non-keyword-only args (excluding `self`)"),
-            ErrorKind::ArgsAfterFirstFourMustHaveDefault => format!("All arguments after the first four in `{method_name}` must have a default value"),
-            ErrorKind::AllKwargsMustHaveDefault => format!("All keyword-only arguments in `{method_name}` must have a default value"),
-            ErrorKind::FirstArgBadAnnotation => format!("The first argument in `{method_name}` should be annotated with `object` or `type[BaseException] | None`"),
-            ErrorKind::SecondArgBadAnnotation => format!("The second argument in `{method_name}` should be annotated with `object` or `BaseException | None`"),
-            ErrorKind::ThirdArgBadAnnotation => format!("The third argument in `{method_name}` should be annotated with `object` or `types.TracebackType | None`"),
+        let BadExitAnnotation {
+            func_kind,
+            error_kind,
+        } = self;
+        match error_kind {
+            ErrorKind::StarArgsNotAnnotated => format!("Star-args in `{func_kind}` should be annotated with `object`"),
+            ErrorKind::MissingArgs => format!("If there are no star-args, `{func_kind}` should have at least 3 non-keyword-only args (excluding `self`)"),
+            ErrorKind::ArgsAfterFirstFourMustHaveDefault => format!("All arguments after the first four in `{func_kind}` must have a default value"),
+            ErrorKind::AllKwargsMustHaveDefault => format!("All keyword-only arguments in `{func_kind}` must have a default value"),
+            ErrorKind::FirstArgBadAnnotation => format!("The first argument in `{func_kind}` should be annotated with `object` or `type[BaseException] | None`"),
+            ErrorKind::SecondArgBadAnnotation => format!("The second argument in `{func_kind}` should be annotated with `object` or `BaseException | None`"),
+            ErrorKind::ThirdArgBadAnnotation => format!("The third argument in `{func_kind}` should be annotated with `object` or `types.TracebackType | None`"),
             ErrorKind::UnrecognizedExitOverload => format!(
-                "Annotations for a three-argument `{method_name}` overload (excluding `self`) \
+                "Annotations for a three-argument `{func_kind}` overload (excluding `self`) \
                 should either be `None, None, None` or `type[BaseException], BaseException, types.TracebackType`"
             )
         }
     }
 
     fn fix_title(&self) -> Option<String> {
-        if matches!(self.error_kind, ErrorKind::StarArgsNotAnnotated) {
+        if self.error_kind.is_star_args_not_annotated() {
             Some("Annotate star-args with `object`".to_string())
         } else {
             None
@@ -105,7 +108,7 @@ impl Display for FuncKind {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, is_macro::Is)]
 enum ErrorKind {
     StarArgsNotAnnotated,
     MissingArgs,
@@ -507,7 +510,13 @@ fn is_base_exception_type(expr: &Expr, semantic: &SemanticModel) -> bool {
         return false;
     };
 
-    if semantic.match_typing_expr(value, "Type") || semantic.match_builtin_expr(value, "type") {
+    let Some(qualified_name) = semantic.resolve_qualified_name(value) else {
+        return false;
+    };
+
+    if semantic.match_typing_qualified_name(&qualified_name, "Type")
+        || matches!(qualified_name.segments(), ["" | "builtins", "type"])
+    {
         semantic.match_builtin_expr(slice, "BaseException")
     } else {
         false

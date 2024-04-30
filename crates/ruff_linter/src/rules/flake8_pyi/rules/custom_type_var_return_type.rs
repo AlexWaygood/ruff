@@ -6,6 +6,7 @@ use ruff_python_ast::{Decorator, Expr, Parameters, TypeParam, TypeParams};
 use ruff_python_semantic::analyze::visibility::{
     is_abstract, is_classmethod, is_new, is_overload, is_staticmethod,
 };
+use ruff_python_semantic::SemanticModel;
 use ruff_text_size::Ranged;
 
 use crate::checkers::ast::Checker;
@@ -95,25 +96,31 @@ pub(crate) fn custom_type_var_return_type(
         return;
     };
 
-    if !checker.semantic().current_scope().kind.is_class() {
+    let semantic = checker.semantic();
+
+    if !semantic.current_scope().kind.is_class() {
         return;
     };
 
     // Skip any abstract, static, and overloaded methods.
-    if is_abstract(decorator_list, checker.semantic())
-        || is_overload(decorator_list, checker.semantic())
-        || is_staticmethod(decorator_list, checker.semantic())
+    if is_abstract(decorator_list, semantic)
+        || is_overload(decorator_list, semantic)
+        || is_staticmethod(decorator_list, semantic)
     {
         return;
     }
 
-    let uses_custom_var: bool =
-        if is_classmethod(decorator_list, checker.semantic()) || is_new(name) {
-            class_method(self_or_cls_annotation, return_annotation, type_params)
-        } else {
-            // If not static, or a class method or __new__ we know it is an instance method
-            instance_method(self_or_cls_annotation, return_annotation, type_params)
-        };
+    let uses_custom_var: bool = if is_classmethod(decorator_list, semantic) || is_new(name) {
+        class_method(
+            self_or_cls_annotation,
+            return_annotation,
+            type_params,
+            semantic,
+        )
+    } else {
+        // If not static, or a class method or __new__ we know it is an instance method
+        instance_method(self_or_cls_annotation, return_annotation, type_params)
+    };
 
     if uses_custom_var {
         checker.diagnostics.push(Diagnostic::new(
@@ -131,22 +138,13 @@ fn class_method(
     cls_annotation: &Expr,
     return_annotation: &Expr,
     type_params: Option<&TypeParams>,
+    semantic: &SemanticModel,
 ) -> bool {
     let Expr::Subscript(ast::ExprSubscript { slice, value, .. }) = cls_annotation else {
         return false;
     };
 
-    let Expr::Name(value) = value.as_ref() else {
-        return false;
-    };
-
-    // Don't error if the first argument is annotated with typing.Type[T].
-    // These are edge cases, and it's hard to give good error messages for them.
-    if value.id != "type" {
-        return false;
-    };
-
-    let Expr::Name(slice) = slice.as_ref() else {
+    let Expr::Name(slice) = &**slice else {
         return false;
     };
 
@@ -157,6 +155,12 @@ fn class_method(
     if slice.id != return_annotation.id {
         return false;
     }
+
+    // Don't error if the first argument is annotated with typing.Type[T].
+    // These are edge cases, and it's hard to give good error messages for them.
+    if !semantic.match_builtin_expr(value, "type") {
+        return false;
+    };
 
     is_likely_private_typevar(&slice.id, type_params)
 }

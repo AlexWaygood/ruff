@@ -67,7 +67,7 @@ pub(crate) fn redundant_literal_union<'a>(checker: &mut Checker, union: &'a Expr
     let mut func = |expr: &'a Expr, _parent: &'a Expr| {
         if let Expr::Subscript(ast::ExprSubscript { value, slice, .. }) = expr {
             if checker.semantic().match_typing_expr(value, "Literal") {
-                if let Expr::Tuple(ast::ExprTuple { elts, .. }) = slice.as_ref() {
+                if let Expr::Tuple(ast::ExprTuple { elts, .. }) = &**slice {
                     typing_literal_exprs.extend(elts.iter());
                 } else {
                     typing_literal_exprs.push(slice);
@@ -115,14 +115,14 @@ enum ExprType {
 
 impl fmt::Display for ExprType {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Int => fmt.write_str("int"),
-            Self::Str => fmt.write_str("str"),
-            Self::Bool => fmt.write_str("bool"),
-            Self::Float => fmt.write_str("float"),
-            Self::Bytes => fmt.write_str("bytes"),
-            Self::Complex => fmt.write_str("complex"),
-        }
+        fmt.write_str(match self {
+            Self::Int => "int",
+            Self::Str => "str",
+            Self::Bool => "bool",
+            Self::Float => "float",
+            Self::Bytes => "bytes",
+            Self::Complex => "complex",
+        })
     }
 }
 

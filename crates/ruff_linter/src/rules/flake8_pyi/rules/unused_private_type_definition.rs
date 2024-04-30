@@ -26,7 +26,7 @@ use crate::checkers::ast::Checker;
 #[violation]
 pub struct UnusedPrivateTypeVar {
     type_var_like_name: String,
-    type_var_like_kind: String,
+    type_var_like_kind: TypeVarLike,
 }
 
 impl Violation for UnusedPrivateTypeVar {
@@ -162,15 +162,30 @@ impl Violation for UnusedPrivateTypedDict {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum TypeVarLike {
+    TypeVar,
+    ParamSpec,
+    TypeVarTuple,
+}
+
+impl std::fmt::Display for TypeVarLike {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(&self, f)
+    }
+}
+
 /// PYI018
 pub(crate) fn unused_private_type_var(
     checker: &Checker,
     scope: &Scope,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    let semantic = checker.semantic();
+
     for binding in scope
         .binding_ids()
-        .map(|binding_id| checker.semantic().binding(binding_id))
+        .map(|binding_id| semantic.binding(binding_id))
     {
         if !(binding.kind.is_assignment() && binding.is_private_declaration()) {
             continue;
@@ -182,42 +197,35 @@ pub(crate) fn unused_private_type_var(
         let Some(source) = binding.source else {
             continue;
         };
-        let Stmt::Assign(ast::StmtAssign { targets, value, .. }) =
-            checker.semantic().statement(source)
+        let Stmt::Assign(ast::StmtAssign { targets, value, .. }) = semantic.statement(source)
         else {
             continue;
         };
         let [Expr::Name(ast::ExprName { id, .. })] = &targets[..] else {
             continue;
         };
-        let Expr::Call(ast::ExprCall { func, .. }) = value.as_ref() else {
+        let Expr::Call(ast::ExprCall { func, .. }) = &**value else {
             continue;
         };
 
-        let semantic = checker.semantic();
-        let Some(type_var_like_kind) =
-            semantic
-                .resolve_qualified_name(func)
-                .and_then(|qualified_name| {
-                    if semantic.match_typing_qualified_name(&qualified_name, "TypeVar") {
-                        Some("TypeVar")
-                    } else if semantic.match_typing_qualified_name(&qualified_name, "ParamSpec") {
-                        Some("ParamSpec")
-                    } else if semantic.match_typing_qualified_name(&qualified_name, "TypeVarTuple")
-                    {
-                        Some("TypeVarTuple")
-                    } else {
-                        None
-                    }
-                })
-        else {
+        let Some(qualified_name) = semantic.resolve_qualified_name(func) else {
             continue;
         };
-
+        let type_var_like_kind = {
+            if semantic.match_typing_qualified_name(&qualified_name, "TypeVar") {
+                TypeVarLike::TypeVar
+            } else if semantic.match_typing_qualified_name(&qualified_name, "ParamSpec") {
+                TypeVarLike::ParamSpec
+            } else if semantic.match_typing_qualified_name(&qualified_name, "TypeVarTuple") {
+                TypeVarLike::TypeVarTuple
+            } else {
+                continue;
+            }
+        };
         diagnostics.push(Diagnostic::new(
             UnusedPrivateTypeVar {
                 type_var_like_name: id.to_string(),
-                type_var_like_kind: type_var_like_kind.to_string(),
+                type_var_like_kind,
             },
             binding.range(),
         ));
@@ -230,9 +238,10 @@ pub(crate) fn unused_private_protocol(
     scope: &Scope,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    let semantic = checker.semantic();
     for binding in scope
         .binding_ids()
-        .map(|binding_id| checker.semantic().binding(binding_id))
+        .map(|binding_id| semantic.binding(binding_id))
     {
         if !(binding.kind.is_class_definition() && binding.is_private_declaration()) {
             continue;
@@ -245,15 +254,15 @@ pub(crate) fn unused_private_protocol(
             continue;
         };
 
-        let Stmt::ClassDef(class_def) = checker.semantic().statement(source) else {
+        let Stmt::ClassDef(class_def) = semantic.statement(source) else {
             continue;
         };
 
-        if !class_def.bases().iter().any(|base| {
-            checker
-                .semantic()
-                .match_typing_expr(map_subscript(base), "Protocol")
-        }) {
+        if !class_def
+            .bases()
+            .iter()
+            .any(|base| semantic.match_typing_expr(map_subscript(base), "Protocol"))
+        {
             continue;
         }
 

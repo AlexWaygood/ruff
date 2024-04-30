@@ -152,12 +152,10 @@ pub(crate) fn unrecognized_version_info(checker: &mut Checker, test: &Expr) {
 
     if let Some(expected) = ExpectedComparator::try_from(left) {
         version_check(checker, expected, test, *op, comparator);
-    } else {
-        if checker.enabled(Rule::UnrecognizedVersionInfoCheck) {
-            checker
-                .diagnostics
-                .push(Diagnostic::new(UnrecognizedVersionInfoCheck, test.range()));
-        }
+    } else if checker.enabled(Rule::UnrecognizedVersionInfoCheck) {
+        checker
+            .diagnostics
+            .push(Diagnostic::new(UnrecognizedVersionInfoCheck, test.range()));
     }
 }
 
@@ -198,30 +196,28 @@ fn version_check(
                 .diagnostics
                 .push(Diagnostic::new(UnrecognizedVersionInfoCheck, test.range()));
         }
-    } else if elts.len() > 2 {
+    } else if elts.len() > 2 && checker.enabled(Rule::PatchVersionComparison) {
         // Must compare against major and minor version only, e.g., `sys.version_info == (3, 4)`
         // instead of `sys.version_info == (3, 4, 0)`.
-        if checker.enabled(Rule::PatchVersionComparison) {
-            checker
-                .diagnostics
-                .push(Diagnostic::new(PatchVersionComparison, test.range()));
-        }
+        checker
+            .diagnostics
+            .push(Diagnostic::new(PatchVersionComparison, test.range()));
     }
 
-    if checker.enabled(Rule::WrongTupleLengthVersionComparison) {
-        if op == CmpOp::Eq || op == CmpOp::NotEq {
-            let expected_length = match expected {
-                ExpectedComparator::MajorTuple => 1,
-                ExpectedComparator::MajorMinorTuple => 2,
-                _ => return,
-            };
+    if checker.enabled(Rule::WrongTupleLengthVersionComparison)
+        && matches!(op, CmpOp::Eq | CmpOp::NotEq)
+    {
+        let expected_length = match expected {
+            ExpectedComparator::MajorTuple => 1,
+            ExpectedComparator::MajorMinorTuple => 2,
+            _ => return,
+        };
 
-            if elts.len() != expected_length {
-                checker.diagnostics.push(Diagnostic::new(
-                    WrongTupleLengthVersionComparison { expected_length },
-                    test.range(),
-                ));
-            }
+        if elts.len() != expected_length {
+            checker.diagnostics.push(Diagnostic::new(
+                WrongTupleLengthVersionComparison { expected_length },
+                test.range(),
+            ));
         }
     }
 }
@@ -243,36 +239,29 @@ impl ExpectedComparator {
 
         // Only allow: (1) simple slices of the form `[:n]`, or (2) explicit indexing into the first
         // element (major version) of the tuple.
-        match slice.as_ref() {
+        match &**slice {
             Expr::Slice(ast::ExprSlice {
                 lower: None,
                 upper: Some(upper),
                 step: None,
                 ..
-            }) => {
-                if let Expr::NumberLiteral(ast::ExprNumberLiteral {
+            }) => match &**upper {
+                Expr::NumberLiteral(ast::ExprNumberLiteral {
                     value: ast::Number::Int(upper),
                     ..
-                }) = upper.as_ref()
-                {
-                    if *upper == 1 {
-                        return Some(ExpectedComparator::MajorTuple);
-                    }
-                    if *upper == 2 {
-                        return Some(ExpectedComparator::MajorMinorTuple);
-                    }
-                }
-            }
+                }) => match upper.as_i8() {
+                    Some(1) => Some(ExpectedComparator::MajorTuple),
+                    Some(2) => Some(ExpectedComparator::MajorMinorTuple),
+                    _ => None,
+                },
+                _ => None,
+            },
             Expr::NumberLiteral(ast::ExprNumberLiteral {
                 value: ast::Number::Int(Int::ZERO),
                 ..
-            }) => {
-                return Some(ExpectedComparator::MajorDigit);
-            }
-            _ => (),
+            }) => Some(ExpectedComparator::MajorDigit),
+            _ => None,
         }
-
-        None
     }
 }
 

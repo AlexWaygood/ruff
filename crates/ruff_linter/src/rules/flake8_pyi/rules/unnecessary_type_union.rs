@@ -83,15 +83,17 @@ pub(crate) fn unnecessary_type_union<'a>(checker: &mut Checker, union: &'a Expr)
     traverse_union(&mut collect_type_exprs, semantic, union);
 
     if type_exprs.len() > 1 {
-        let type_members: Vec<String> = type_exprs
-            .clone()
-            .into_iter()
-            .map(|type_expr| checker.locator().slice(type_expr).to_string())
+        let type_members: Vec<&str> = type_exprs
+            .iter()
+            .map(|type_expr| checker.locator().slice(type_expr))
             .collect();
 
         let mut diagnostic = Diagnostic::new(
             UnnecessaryTypeUnion {
-                members: type_members.clone(),
+                members: type_members
+                    .iter()
+                    .map(|item| (*item).to_string())
+                    .collect(),
                 is_pep604_union: subscript.is_none(),
             },
             union.range(),
@@ -112,7 +114,7 @@ pub(crate) fn unnecessary_type_union<'a>(checker: &mut Checker, union: &'a Expr)
                                 .into_iter()
                                 .map(|type_member| {
                                     Expr::Name(ast::ExprName {
-                                        id: type_member,
+                                        id: type_member.to_string(),
                                         ctx: ExprContext::Load,
                                         range: TextRange::default(),
                                     })

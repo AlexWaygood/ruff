@@ -46,7 +46,7 @@ pub(crate) fn str_or_repr_defined_in_stub(checker: &mut Checker, stmt: &Stmt) {
     let Stmt::FunctionDef(ast::StmtFunctionDef {
         name,
         decorator_list,
-        returns,
+        returns: Some(returns),
         parameters,
         ..
     }) = stmt
@@ -54,15 +54,13 @@ pub(crate) fn str_or_repr_defined_in_stub(checker: &mut Checker, stmt: &Stmt) {
         return;
     };
 
-    let Some(returns) = returns else {
-        return;
-    };
-
     if !matches!(name.as_str(), "__str__" | "__repr__") {
         return;
     }
 
-    if !checker.semantic().current_scope().kind.is_class() {
+    let semantic = checker.semantic();
+
+    if !semantic.current_scope().kind.is_class() {
         return;
     }
 
@@ -74,25 +72,28 @@ pub(crate) fn str_or_repr_defined_in_stub(checker: &mut Checker, stmt: &Stmt) {
         return;
     }
 
-    if is_abstract(decorator_list, checker.semantic()) {
+    if is_abstract(decorator_list, semantic) {
         return;
     }
 
-    if !checker.semantic().match_builtin_expr(returns, "str") {
+    if !semantic.match_builtin_expr(returns, "str") {
         return;
     }
 
-    let mut diagnostic = Diagnostic::new(
+    let diagnostic = Diagnostic::new(
         StrOrReprDefinedInStub {
             name: name.to_string(),
         },
         stmt.identifier(),
     );
-    let stmt = checker.semantic().current_statement();
-    let parent = checker.semantic().current_statement_parent();
-    let edit = delete_stmt(stmt, parent, checker.locator(), checker.indexer());
-    diagnostic.set_fix(Fix::safe_edit(edit).isolate(Checker::isolation(
-        checker.semantic().current_statement_parent_id(),
-    )));
-    checker.diagnostics.push(diagnostic);
+    let edit = delete_stmt(
+        semantic.current_statement(),
+        semantic.current_statement_parent(),
+        checker.locator(),
+        checker.indexer(),
+    );
+    let isolation_level = Checker::isolation(semantic.current_statement_parent_id());
+    checker
+        .diagnostics
+        .push(diagnostic.with_fix(Fix::safe_edit(edit).isolate(isolation_level)));
 }

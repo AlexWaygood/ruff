@@ -16,11 +16,11 @@ pub(crate) enum VarKind {
 
 impl fmt::Display for VarKind {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            VarKind::TypeVar => fmt.write_str("TypeVar"),
-            VarKind::ParamSpec => fmt.write_str("ParamSpec"),
-            VarKind::TypeVarTuple => fmt.write_str("TypeVarTuple"),
-        }
+        fmt.write_str(match self {
+            VarKind::TypeVar => "TypeVar",
+            VarKind::ParamSpec => "ParamSpec",
+            VarKind::TypeVarTuple => "TypeVarTuple",
+        })
     }
 }
 
@@ -65,45 +65,34 @@ pub(crate) fn prefix_type_params(checker: &mut Checker, value: &Expr, targets: &
         return;
     }
 
-    let [target] = targets else {
+    let [Expr::Name(ast::ExprName { id, .. })] = targets else {
         return;
     };
 
-    if let Expr::Name(ast::ExprName { id, .. }) = target {
-        if id.starts_with('_') {
-            return;
-        }
-    };
+    if id.starts_with('_') {
+        return;
+    }
 
     let Expr::Call(ast::ExprCall { func, .. }) = value else {
         return;
     };
 
-    let Some(kind) = checker
-        .semantic()
-        .resolve_qualified_name(func)
-        .and_then(|qualified_name| {
-            if checker
-                .semantic()
-                .match_typing_qualified_name(&qualified_name, "ParamSpec")
-            {
-                Some(VarKind::ParamSpec)
-            } else if checker
-                .semantic()
-                .match_typing_qualified_name(&qualified_name, "TypeVar")
-            {
-                Some(VarKind::TypeVar)
-            } else if checker
-                .semantic()
-                .match_typing_qualified_name(&qualified_name, "TypeVarTuple")
-            {
-                Some(VarKind::TypeVarTuple)
-            } else {
-                None
-            }
-        })
-    else {
+    let semantic = checker.semantic();
+
+    let Some(qualified_name) = semantic.resolve_qualified_name(func) else {
         return;
+    };
+
+    let kind = {
+        if semantic.match_typing_qualified_name(&qualified_name, "ParamSpec") {
+            VarKind::ParamSpec
+        } else if semantic.match_typing_qualified_name(&qualified_name, "TypeVar") {
+            VarKind::TypeVar
+        } else if semantic.match_typing_qualified_name(&qualified_name, "TypeVarTuple") {
+            VarKind::TypeVarTuple
+        } else {
+            return;
+        }
     };
 
     checker

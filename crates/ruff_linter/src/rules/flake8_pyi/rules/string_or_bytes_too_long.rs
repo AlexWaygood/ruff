@@ -55,7 +55,10 @@ pub(crate) fn string_or_bytes_too_long(checker: &mut Checker, string: StringLike
         return;
     }
 
-    if is_warnings_dot_deprecated(semantic.current_expression_parent(), semantic) {
+    if semantic
+        .current_expression_parent()
+        .is_some_and(|expr| is_warnings_dot_deprecated(expr, semantic))
+    {
         return;
     }
 
@@ -68,12 +71,11 @@ pub(crate) fn string_or_bytes_too_long(checker: &mut Checker, string: StringLike
         return;
     }
 
-    let mut diagnostic = Diagnostic::new(StringOrBytesTooLong, string.range());
-    diagnostic.set_fix(Fix::safe_edit(Edit::range_replacement(
-        "...".to_string(),
-        string.range(),
-    )));
-    checker.diagnostics.push(diagnostic);
+    checker.diagnostics.push(
+        Diagnostic::new(StringOrBytesTooLong, string.range()).with_fix(Fix::safe_edit(
+            Edit::range_replacement("...".to_string(), string.range()),
+        )),
+    );
 }
 
 /// Count the number of visible characters in an f-string. This accounts for
@@ -96,16 +98,13 @@ fn count_f_string_chars(f_string: &ast::ExprFString) -> usize {
         .sum()
 }
 
-fn is_warnings_dot_deprecated(expr: Option<&ast::Expr>, semantic: &SemanticModel) -> bool {
+fn is_warnings_dot_deprecated(expr: &ast::Expr, semantic: &SemanticModel) -> bool {
     // Does `expr` represent a call to `warnings.deprecated` or `typing_extensions.deprecated`?
-    let Some(expr) = expr else {
-        return false;
-    };
-    let Some(call) = expr.as_call_expr() else {
+    let ast::Expr::Call(ast::ExprCall { func, .. }) = expr else {
         return false;
     };
     semantic
-        .resolve_qualified_name(&call.func)
+        .resolve_qualified_name(func)
         .is_some_and(|qualified_name| {
             matches!(
                 qualified_name.segments(),

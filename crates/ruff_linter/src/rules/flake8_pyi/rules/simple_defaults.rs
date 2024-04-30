@@ -316,7 +316,7 @@ fn is_valid_default_value_with_annotation(
             operand,
             range: _,
         }) => {
-            match operand.as_ref() {
+            match &**operand {
                 // Ex) `-1`, `-3.14`, `2j`
                 Expr::NumberLiteral(_) => return true,
                 // Ex) `-math.inf`, `-math.pi`, etc.
@@ -342,28 +342,28 @@ fn is_valid_default_value_with_annotation(
             if let Expr::NumberLiteral(ast::ExprNumberLiteral {
                 value: ast::Number::Complex { .. },
                 ..
-            }) = right.as_ref()
+            }) = &**right
             {
                 // Ex) `1 + 2j`, `1 - 2j`
                 if let Expr::NumberLiteral(ast::ExprNumberLiteral {
                     value: ast::Number::Int(..) | ast::Number::Float(..),
                     ..
-                }) = left.as_ref()
+                }) = &**left
                 {
-                    return locator.slice(left.as_ref()).len() <= 10;
+                    return locator.slice(&**left).len() <= 10;
                 } else if let Expr::UnaryOp(ast::ExprUnaryOp {
                     op: UnaryOp::USub,
                     operand,
                     range: _,
-                }) = left.as_ref()
+                }) = &**left
                 {
                     // Ex) `-1 + 2j`, `-1 - 2j`
                     if let Expr::NumberLiteral(ast::ExprNumberLiteral {
                         value: ast::Number::Int(..) | ast::Number::Float(..),
                         ..
-                    }) = operand.as_ref()
+                    }) = &**operand
                     {
-                        return locator.slice(operand.as_ref()).len() <= 10;
+                        return locator.slice(&**operand).len() <= 10;
                     }
                 }
             }
@@ -448,26 +448,21 @@ fn is_type_var_like_call(expr: &Expr, semantic: &SemanticModel) -> bool {
 
 /// Returns `true` if this is a "special" assignment which must have a value (e.g., an assignment to
 /// `__all__`).
-fn is_special_assignment(target: &Expr, semantic: &SemanticModel) -> bool {
-    if let Expr::Name(ast::ExprName { id, .. }) = target {
-        match id.as_str() {
-            "__all__" => semantic.current_scope().kind.is_module(),
-            "__match_args__" | "__slots__" => semantic.current_scope().kind.is_class(),
-            _ => false,
-        }
-    } else {
-        false
+fn is_special_assignment(
+    ast::ExprName { id, .. }: &ast::ExprName,
+    semantic: &SemanticModel,
+) -> bool {
+    match id.as_str() {
+        "__all__" => semantic.current_scope().kind.is_module(),
+        "__match_args__" | "__slots__" => semantic.current_scope().kind.is_class(),
+        _ => false,
     }
 }
 
 /// Returns `true` if this is an assignment to a simple `Final`-annotated variable.
 fn is_final_assignment(annotation: &Expr, value: &Expr, semantic: &SemanticModel) -> bool {
-    if matches!(value, Expr::Name(_) | Expr::Attribute(_)) {
-        if semantic.match_typing_expr(annotation, "Final") {
-            return true;
-        }
-    }
-    false
+    matches!(value, Expr::Name(_) | Expr::Attribute(_))
+        && semantic.match_typing_expr(annotation, "Final")
 }
 
 /// Returns `true` if an [`Expr`] is a value that should be annotated with `typing.TypeAlias`.
@@ -553,31 +548,28 @@ pub(crate) fn argument_simple_defaults(checker: &mut Checker, parameters: &Param
 
 /// PYI015
 pub(crate) fn assignment_default_in_stub(checker: &mut Checker, targets: &[Expr], value: &Expr) {
-    let [target] = targets else {
+    let [Expr::Name(target)] = targets else {
         return;
     };
-    if !target.is_name_expr() {
+    let semantic = checker.semantic();
+    if is_special_assignment(target, semantic) {
         return;
     }
-    if is_special_assignment(target, checker.semantic()) {
-        return;
-    }
-    if is_type_var_like_call(value, checker.semantic()) {
+    if is_type_var_like_call(value, semantic) {
         return;
     }
     if is_valid_default_value_without_annotation(value) {
         return;
     }
-    if is_valid_default_value_with_annotation(value, true, checker.locator(), checker.semantic()) {
+    if is_valid_default_value_with_annotation(value, true, checker.locator(), semantic) {
         return;
     }
 
-    let mut diagnostic = Diagnostic::new(AssignmentDefaultInStub, value.range());
-    diagnostic.set_fix(Fix::safe_edit(Edit::range_replacement(
-        "...".to_string(),
-        value.range(),
-    )));
-    checker.diagnostics.push(diagnostic);
+    checker.diagnostics.push(
+        Diagnostic::new(AssignmentDefaultInStub, value.range()).with_fix(Fix::safe_edit(
+            Edit::range_replacement("...".to_string(), value.range()),
+        )),
+    );
 }
 
 /// PYI015
@@ -587,31 +579,30 @@ pub(crate) fn annotated_assignment_default_in_stub(
     value: &Expr,
     annotation: &Expr,
 ) {
-    if checker
-        .semantic()
-        .match_typing_expr(annotation, "TypeAlias")
-    {
+    let semantic = checker.semantic();
+    if semantic.match_typing_expr(annotation, "TypeAlias") {
         return;
     }
-    if is_special_assignment(target, checker.semantic()) {
+    if let Expr::Name(target) = target {
+        if is_special_assignment(target, semantic) {
+            return;
+        }
+    }
+    if is_type_var_like_call(value, semantic) {
         return;
     }
-    if is_type_var_like_call(value, checker.semantic()) {
-        return;
-    }
-    if is_final_assignment(annotation, value, checker.semantic()) {
+    if is_final_assignment(annotation, value, semantic) {
         return;
     }
     if is_valid_default_value_with_annotation(value, true, checker.locator(), checker.semantic()) {
         return;
     }
 
-    let mut diagnostic = Diagnostic::new(AssignmentDefaultInStub, value.range());
-    diagnostic.set_fix(Fix::safe_edit(Edit::range_replacement(
-        "...".to_string(),
-        value.range(),
-    )));
-    checker.diagnostics.push(diagnostic);
+    checker.diagnostics.push(
+        Diagnostic::new(AssignmentDefaultInStub, value.range()).with_fix(Fix::safe_edit(
+            Edit::range_replacement("...".to_string(), value.range()),
+        )),
+    );
 }
 
 /// PYI052
@@ -620,10 +611,7 @@ pub(crate) fn unannotated_assignment_in_stub(
     targets: &[Expr],
     value: &Expr,
 ) {
-    let [target] = targets else {
-        return;
-    };
-    let Expr::Name(ast::ExprName { id, .. }) = target else {
+    let [Expr::Name(target)] = targets else {
         return;
     };
     let semantic = checker.semantic();
@@ -647,7 +635,7 @@ pub(crate) fn unannotated_assignment_in_stub(
     }
     checker.diagnostics.push(Diagnostic::new(
         UnannotatedAssignmentInStub {
-            name: id.to_string(),
+            name: target.id.to_string(),
         },
         value.range(),
     ));
@@ -659,7 +647,7 @@ pub(crate) fn unassigned_special_variable_in_stub(
     target: &Expr,
     stmt: &Stmt,
 ) {
-    let Expr::Name(ast::ExprName { id, .. }) = target else {
+    let Expr::Name(target) = target else {
         return;
     };
 
@@ -669,7 +657,7 @@ pub(crate) fn unassigned_special_variable_in_stub(
 
     checker.diagnostics.push(Diagnostic::new(
         UnassignedSpecialVariableInStub {
-            name: id.to_string(),
+            name: target.id.to_string(),
         },
         stmt.range(),
     ));
@@ -677,11 +665,7 @@ pub(crate) fn unassigned_special_variable_in_stub(
 
 /// PYI026
 pub(crate) fn type_alias_without_annotation(checker: &mut Checker, value: &Expr, targets: &[Expr]) {
-    let [target] = targets else {
-        return;
-    };
-
-    let Expr::Name(ast::ExprName { id, .. }) = target else {
+    let [Expr::Name(target)] = targets else {
         return;
     };
 
@@ -695,10 +679,11 @@ pub(crate) fn type_alias_without_annotation(checker: &mut Checker, value: &Expr,
         TypingModule::TypingExtensions
     };
 
+    let target_id = target.id.as_str();
     let mut diagnostic = Diagnostic::new(
         TypeAliasWithoutAnnotation {
             module,
-            name: id.to_string(),
+            name: target_id.to_string(),
             value: checker.generator().expr(value),
         },
         target.range(),
@@ -710,7 +695,7 @@ pub(crate) fn type_alias_without_annotation(checker: &mut Checker, value: &Expr,
             checker.semantic(),
         )?;
         Ok(Fix::safe_edits(
-            Edit::range_replacement(format!("{id}: {binding}"), target.range()),
+            Edit::range_replacement(format!("{target_id}: {binding}"), target.range()),
             [import_edit],
         ))
     });

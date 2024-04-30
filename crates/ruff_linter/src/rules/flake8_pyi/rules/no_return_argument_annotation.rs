@@ -84,9 +84,9 @@ enum TypingModule {
 
 impl fmt::Display for TypingModule {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            TypingModule::Typing => fmt.write_str("typing"),
-            TypingModule::TypingExtensions => fmt.write_str("typing_extensions"),
-        }
+        fmt.write_str(match self {
+            TypingModule::Typing => "typing",
+            TypingModule::TypingExtensions => "typing_extensions",
+        })
     }
 }

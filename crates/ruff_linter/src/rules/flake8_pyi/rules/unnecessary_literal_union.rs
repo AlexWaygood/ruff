@@ -60,10 +60,12 @@ pub(crate) fn unnecessary_literal_union<'a>(checker: &mut Checker, expr: &'a Exp
     let mut literal_subscript = None;
     let mut total_literals = 0;
 
+    let semantic = checker.semantic();
+
     // Split members into `literal_exprs` if they are a `Literal` annotation  and `other_exprs` otherwise
     let mut collect_literal_expr = |expr: &'a Expr, _parent: &'a Expr| {
         if let Expr::Subscript(ast::ExprSubscript { value, slice, .. }) = expr {
-            if checker.semantic().match_typing_expr(value, "Literal") {
+            if semantic.match_typing_expr(value, "Literal") {
                 total_literals += 1;
 
                 if literal_subscript.is_none() {
@@ -91,14 +93,12 @@ pub(crate) fn unnecessary_literal_union<'a>(checker: &mut Checker, expr: &'a Exp
     };
 
     // Traverse the union, collect all members, split out the literals from the rest.
-    traverse_union(&mut collect_literal_expr, checker.semantic(), expr);
+    traverse_union(&mut collect_literal_expr, semantic, expr);
 
     let union_subscript = expr.as_subscript_expr();
-    if union_subscript.is_some_and(|subscript| {
-        !checker
-            .semantic()
-            .match_typing_expr(&subscript.value, "Union")
-    }) {
+    if union_subscript
+        .is_some_and(|subscript| !semantic.match_typing_expr(&subscript.value, "Union"))
+    {
         return;
     }
 
@@ -110,7 +110,7 @@ pub(crate) fn unnecessary_literal_union<'a>(checker: &mut Checker, expr: &'a Exp
         return;
     }
 
-    let mut diagnostic = Diagnostic::new(
+    let diagnostic = Diagnostic::new(
         UnnecessaryLiteralUnion {
             members: literal_exprs
                 .iter()
@@ -120,7 +120,7 @@ pub(crate) fn unnecessary_literal_union<'a>(checker: &mut Checker, expr: &'a Exp
         expr.range(),
     );
 
-    diagnostic.set_fix({
+    let edit = {
         let literal = Expr::Subscript(ast::ExprSubscript {
             value: Box::new(literal_subscript.clone()),
             slice: Box::new(Expr::Tuple(ast::ExprTuple {
@@ -135,10 +135,7 @@ pub(crate) fn unnecessary_literal_union<'a>(checker: &mut Checker, expr: &'a Exp
 
         if other_exprs.is_empty() {
             // if the union is only literals, we just replace the whole thing with a single literal
-            Fix::safe_edit(Edit::range_replacement(
-                checker.generator().expr(&literal),
-                expr.range(),
-            ))
+            Edit::range_replacement(checker.generator().expr(&literal), expr.range())
         } else {
             let elts: Vec<Expr> = std::iter::once(literal)
                 .chain(other_exprs.into_iter().cloned())
@@ -162,9 +159,11 @@ pub(crate) fn unnecessary_literal_union<'a>(checker: &mut Checker, expr: &'a Exp
                 checker.generator().expr(&pep_604_union(&elts))
             };
 
-            Fix::safe_edit(Edit::range_replacement(content, expr.range()))
+            Edit::range_replacement(content, expr.range())
         }
-    });
+    };
 
-    checker.diagnostics.push(diagnostic);
+    checker
+        .diagnostics
+        .push(diagnostic.with_fix(Fix::safe_edit(edit)));
 }

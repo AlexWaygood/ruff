@@ -47,16 +47,12 @@ pub(crate) fn pass_in_class_body(checker: &mut Checker, class_def: &ast::StmtCla
         return;
     }
 
-    for stmt in &class_def.body {
-        if !stmt.is_pass_stmt() {
-            continue;
-        }
-
-        let mut diagnostic = Diagnostic::new(PassInClassBody, stmt.range());
+    for stmt in class_def.body.iter().filter(|stmt| stmt.is_pass_stmt()) {
+        let diagnostic = Diagnostic::new(PassInClassBody, stmt.range());
         let edit = fix::edits::delete_stmt(stmt, Some(stmt), checker.locator(), checker.indexer());
-        diagnostic.set_fix(Fix::safe_edit(edit).isolate(Checker::isolation(
-            checker.semantic().current_statement_id(),
-        )));
-        checker.diagnostics.push(diagnostic);
+        let isolation_level = Checker::isolation(checker.semantic().current_statement_id());
+        checker
+            .diagnostics
+            .push(diagnostic.with_fix(Fix::safe_edit(edit).isolate(isolation_level)));
     }
 }

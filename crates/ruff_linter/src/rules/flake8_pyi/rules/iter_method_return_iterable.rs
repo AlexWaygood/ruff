@@ -115,12 +115,12 @@ pub(crate) fn iter_method_return_iterable(checker: &mut Checker, definition: &De
             if is_async {
                 matches!(
                     qualified_name.segments(),
-                    ["typing", "AsyncIterable"] | ["collections", "abc", "AsyncIterable"]
+                    ["typing" | "typing_extensions", "AsyncIterable"] | ["collections", "abc", "AsyncIterable"]
                 )
             } else {
                 matches!(
                     qualified_name.segments(),
-                    ["typing", "Iterable"] | ["collections", "abc", "Iterable"]
+                    ["typing" | "typing_extensions", "Iterable"] | ["collections", "abc", "Iterable"]
                 )
             }
         })

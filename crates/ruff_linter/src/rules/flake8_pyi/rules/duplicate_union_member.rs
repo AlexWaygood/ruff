@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use rustc_hash::FxHashSet;
 
 use ruff_diagnostics::{Diagnostic, Edit, Fix, FixAvailability, Violation};
@@ -52,7 +50,7 @@ impl Violation for DuplicateUnionMember {
 
 /// PYI016
 pub(crate) fn duplicate_union_member<'a>(checker: &mut Checker, expr: &'a Expr) {
-    let mut seen_nodes: HashSet<ComparableExpr<'_>, _> = FxHashSet::default();
+    let mut seen_nodes: FxHashSet<ComparableExpr<'_>> = FxHashSet::default();
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
     // Adds a member to `literal_exprs` if it is a `Literal` annotation

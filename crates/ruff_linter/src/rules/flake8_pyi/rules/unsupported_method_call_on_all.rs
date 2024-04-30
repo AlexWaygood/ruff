@@ -58,13 +58,13 @@ pub(crate) fn unsupported_method_call_on_all(checker: &mut Checker, func: &Expr)
     let Expr::Attribute(ast::ExprAttribute { value, attr, .. }) = func else {
         return;
     };
-    let Expr::Name(ast::ExprName { id, .. }) = value.as_ref() else {
+    let Expr::Name(ast::ExprName { id, .. }) = &**value else {
         return;
     };
     if id.as_str() != "__all__" {
         return;
     }
-    if !is_unsupported_method(attr.as_str()) {
+    if !matches!(&**attr, "append" | "extend" | "remove") {
         return;
     }
     checker.diagnostics.push(Diagnostic::new(
@@ -73,8 +73,4 @@ pub(crate) fn unsupported_method_call_on_all(checker: &mut Checker, func: &Expr)
         },
         func.range(),
     ));
-}
-
-fn is_unsupported_method(name: &str) -> bool {
-    matches!(name, "append" | "extend" | "remove")
 }

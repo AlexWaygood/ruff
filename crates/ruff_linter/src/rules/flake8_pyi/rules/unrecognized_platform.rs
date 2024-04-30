@@ -137,11 +137,9 @@ pub(crate) fn unrecognized_platform(checker: &mut Checker, test: &Expr) {
                 ));
             }
         }
-    } else {
-        if checker.enabled(Rule::UnrecognizedPlatformCheck) {
-            checker
-                .diagnostics
-                .push(Diagnostic::new(UnrecognizedPlatformCheck, test.range()));
-        }
+    } else if checker.enabled(Rule::UnrecognizedPlatformCheck) {
+        checker
+            .diagnostics
+            .push(Diagnostic::new(UnrecognizedPlatformCheck, test.range()));
     }
 }
