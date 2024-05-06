@@ -49,19 +49,19 @@ impl Violation for UnnecessarySpread {
 pub(crate) fn unnecessary_spread(checker: &mut Checker, dict: &ast::ExprDict) {
     // The first "end" is the start of the dictionary, immediately following the open bracket.
     let mut prev_end = dict.start() + TextSize::from(1);
-    for ast::DictItem { key, value } in &dict.items {
-        if key.is_none() {
+    for item in &dict.items {
+        if let ast::DictItem::DoubleStar { starred_expr } = item {
             // We only care about when the key is None which indicates a spread `**`
             // inside a dict.
-            if let Expr::Dict(inner) = value {
-                let mut diagnostic = Diagnostic::new(UnnecessarySpread, value.range());
+            if let Expr::Dict(inner) = starred_expr {
+                let mut diagnostic = Diagnostic::new(UnnecessarySpread, starred_expr.range());
                 if let Some(fix) = unnecessary_spread_fix(inner, prev_end, checker.locator()) {
                     diagnostic.set_fix(fix);
                 }
                 checker.diagnostics.push(diagnostic);
             }
         }
-        prev_end = value.end();
+        prev_end = item.end();
     }
 }
 

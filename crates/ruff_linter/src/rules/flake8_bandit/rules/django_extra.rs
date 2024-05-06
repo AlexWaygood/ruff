@@ -55,10 +55,9 @@ fn is_call_insecure(call: &ast::ExprCall) -> bool {
             match argument_name {
                 "select" => match argument {
                     Expr::Dict(ExprDict { items, .. }) => {
-                        if items.iter().any(|ast::DictItem { key, value }| {
-                            key.as_ref()
-                                .is_some_and(|key| !key.is_string_literal_expr())
-                                || !value.is_string_literal_expr()
+                        if items.iter().any(|item| {
+                            item.key().is_some_and(|key| !key.is_string_literal_expr())
+                                || !item.value().is_string_literal_expr()
                         }) {
                             return true;
                         }

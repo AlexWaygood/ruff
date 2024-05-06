@@ -135,8 +135,8 @@ pub(crate) fn repeated_keys(checker: &mut Checker, dict: &ast::ExprDict) {
         FxHashMap::with_capacity_and_hasher(dict.items.len(), BuildHasherDefault::default());
 
     // Detect duplicate keys.
-    for (i, ast::DictItem { key, value }) in dict.items.iter().enumerate() {
-        let Some(key) = key else {
+    for (i, item) in dict.items.iter().enumerate() {
+        let ast::DictItem::KeyValuePair { key, value } = item else {
             continue;
         };
 

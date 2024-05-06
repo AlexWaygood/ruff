@@ -922,15 +922,18 @@ impl<'a> Generator<'a> {
             Expr::Dict(ast::ExprDict { items, range: _ }) => {
                 self.p("{");
                 let mut first = true;
-                for ast::DictItem { key, value } in items {
+                for item in items {
                     self.p_delim(&mut first, ", ");
-                    if let Some(key) = key {
-                        self.unparse_expr(key, precedence::COMMA);
-                        self.p(": ");
-                        self.unparse_expr(value, precedence::COMMA);
-                    } else {
-                        self.p("**");
-                        self.unparse_expr(value, precedence::MAX);
+                    match item {
+                        ast::DictItem::KeyValuePair { key, value } => {
+                            self.unparse_expr(key, precedence::COMMA);
+                            self.p(": ");
+                            self.unparse_expr(value, precedence::COMMA);
+                        }
+                        ast::DictItem::DoubleStar { starred_expr } => {
+                            self.p("**");
+                            self.unparse_expr(starred_expr, precedence::MAX);
+                        }
                     }
                 }
                 self.p("}");

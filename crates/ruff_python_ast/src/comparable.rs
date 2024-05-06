@@ -688,16 +688,26 @@ pub struct ExprIf<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct ComparableDictItem<'a> {
-    key: Option<ComparableExpr<'a>>,
-    value: ComparableExpr<'a>,
+pub enum ComparableDictItem<'a> {
+    KeyValuePair {
+        key: ComparableExpr<'a>,
+        value: ComparableExpr<'a>,
+    },
+    DoubleStar {
+        starred_expr: ComparableExpr<'a>,
+    },
 }
 
 impl<'a> From<&'a ast::DictItem> for ComparableDictItem<'a> {
-    fn from(ast::DictItem { key, value }: &'a ast::DictItem) -> Self {
-        Self {
-            key: key.as_ref().map(ComparableExpr::from),
-            value: value.into(),
+    fn from(item: &'a ast::DictItem) -> Self {
+        match item {
+            ast::DictItem::KeyValuePair { key, value } => ComparableDictItem::KeyValuePair {
+                key: key.into(),
+                value: value.into(),
+            },
+            ast::DictItem::DoubleStar { starred_expr } => ComparableDictItem::DoubleStar {
+                starred_expr: starred_expr.into(),
+            },
         }
     }
 }

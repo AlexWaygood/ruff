@@ -193,15 +193,13 @@ Module(
                                 ExprDict {
                                     range: 114..120,
                                     items: [
-                                        DictItem {
-                                            key: Some(
-                                                Name(
-                                                    ExprName {
-                                                        range: 115..116,
-                                                        id: "x",
-                                                        ctx: Load,
-                                                    },
-                                                ),
+                                        KeyValuePair {
+                                            key: Name(
+                                                ExprName {
+                                                    range: 115..116,
+                                                    id: "x",
+                                                    ctx: Load,
+                                                },
                                             ),
                                             value: NumberLiteral(
                                                 ExprNumberLiteral {

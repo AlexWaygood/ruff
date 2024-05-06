@@ -16,15 +16,13 @@ Module(
                         ExprDict {
                             range: 0..24,
                             items: [
-                                DictItem {
-                                    key: Some(
-                                        Name(
-                                            ExprName {
-                                                range: 1..2,
-                                                id: "x",
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Name(
+                                        ExprName {
+                                            range: 1..2,
+                                            id: "x",
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -34,25 +32,23 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        Call(
-                                            ExprCall {
-                                                range: 9..14,
-                                                func: Name(
-                                                    ExprName {
-                                                        range: 9..12,
-                                                        id: "foo",
-                                                        ctx: Load,
-                                                    },
-                                                ),
-                                                arguments: Arguments {
-                                                    range: 12..14,
-                                                    args: [],
-                                                    keywords: [],
+                                KeyValuePair {
+                                    key: Call(
+                                        ExprCall {
+                                            range: 9..14,
+                                            func: Name(
+                                                ExprName {
+                                                    range: 9..12,
+                                                    id: "foo",
+                                                    ctx: Load,
                                                 },
+                                            ),
+                                            arguments: Arguments {
+                                                range: 12..14,
+                                                args: [],
+                                                keywords: [],
                                             },
-                                        ),
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {

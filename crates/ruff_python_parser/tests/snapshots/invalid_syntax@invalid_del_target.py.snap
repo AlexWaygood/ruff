@@ -45,26 +45,24 @@ Module(
                             ExprDict {
                                 range: 14..22,
                                 items: [
-                                    DictItem {
-                                        key: Some(
-                                            StringLiteral(
-                                                ExprStringLiteral {
-                                                    range: 15..18,
-                                                    value: StringLiteralValue {
-                                                        inner: Single(
-                                                            StringLiteral {
-                                                                range: 15..18,
-                                                                value: "x",
-                                                                flags: StringLiteralFlags {
-                                                                    quote_style: Single,
-                                                                    prefix: Empty,
-                                                                    triple_quoted: false,
-                                                                },
+                                    KeyValuePair {
+                                        key: StringLiteral(
+                                            ExprStringLiteral {
+                                                range: 15..18,
+                                                value: StringLiteralValue {
+                                                    inner: Single(
+                                                        StringLiteral {
+                                                            range: 15..18,
+                                                            value: "x",
+                                                            flags: StringLiteralFlags {
+                                                                quote_style: Single,
+                                                                prefix: Empty,
+                                                                triple_quoted: false,
                                                             },
-                                                        ),
-                                                    },
+                                                        },
+                                                    ),
                                                 },
-                                            ),
+                                            },
                                         ),
                                         value: NumberLiteral(
                                             ExprNumberLiteral {

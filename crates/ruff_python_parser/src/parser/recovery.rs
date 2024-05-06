@@ -54,8 +54,8 @@ pub(super) fn pattern_to_expr(pattern: Pattern) -> Expr {
             let mut items: Vec<ast::DictItem> = keys
                 .into_iter()
                 .zip(patterns)
-                .map(|(key, pattern)| ast::DictItem {
-                    key: Some(key),
+                .map(|(key, pattern)| ast::DictItem::KeyValuePair {
+                    key,
                     value: pattern_to_expr(pattern),
                 })
                 .collect();
@@ -65,7 +65,9 @@ pub(super) fn pattern_to_expr(pattern: Pattern) -> Expr {
                     id: rest.id,
                     ctx: ExprContext::Store,
                 });
-                items.push(ast::DictItem { key: None, value });
+                items.push(ast::DictItem::DoubleStar {
+                    starred_expr: value,
+                });
             }
             Expr::Dict(ast::ExprDict { range, items })
         }

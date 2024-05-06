@@ -768,27 +768,33 @@ impl From<ExprIf> for Expr {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct DictItem {
-    pub key: Option<Expr>,
-    pub value: Expr,
+pub enum DictItem {
+    KeyValuePair { key: Expr, value: Expr },
+    DoubleStar { starred_expr: Expr },
 }
 
 impl DictItem {
-    fn key(&self) -> Option<&Expr> {
-        self.key.as_ref()
+    pub fn key(&self) -> Option<&Expr> {
+        match self {
+            Self::KeyValuePair { key, .. } => Some(key),
+            Self::DoubleStar { .. } => None,
+        }
     }
 
-    fn value(&self) -> &Expr {
-        &self.value
+    pub fn value(&self) -> &Expr {
+        match self {
+            Self::KeyValuePair { value, .. } => value,
+            Self::DoubleStar { starred_expr } => starred_expr,
+        }
     }
 }
 
 impl Ranged for DictItem {
     fn range(&self) -> TextRange {
-        TextRange::new(
-            self.key.as_ref().map_or(self.value.start(), Ranged::start),
-            self.value.end(),
-        )
+        match self {
+            Self::KeyValuePair { key, value } => TextRange::new(key.start(), value.end()),
+            Self::DoubleStar { starred_expr } => starred_expr.range(),
+        }
     }
 }
 

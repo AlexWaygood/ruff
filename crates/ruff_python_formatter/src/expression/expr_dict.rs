@@ -71,7 +71,7 @@ impl NeedsParentheses for ExprDict {
 
 #[derive(Debug)]
 struct KeyValuePair<'a> {
-    key: &'a Option<Expr>,
+    key: Option<&'a Expr>,
     value: &'a Expr,
     comments: &'a [SourceComment],
 }
@@ -79,8 +79,8 @@ struct KeyValuePair<'a> {
 impl<'a> KeyValuePair<'a> {
     fn new(item: &'a DictItem) -> Self {
         Self {
-            key: &item.key,
-            value: &item.value,
+            key: item.key(),
+            value: item.value(),
             comments: &[],
         }
     }

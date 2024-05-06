@@ -578,15 +578,13 @@ Module(
                                     ExprDict {
                                         range: 300..311,
                                         items: [
-                                            DictItem {
-                                                key: Some(
-                                                    Name(
-                                                        ExprName {
-                                                            range: 301..302,
-                                                            id: "a",
-                                                            ctx: Load,
-                                                        },
-                                                    ),
+                                            KeyValuePair {
+                                                key: Name(
+                                                    ExprName {
+                                                        range: 301..302,
+                                                        id: "a",
+                                                        ctx: Load,
+                                                    },
                                                 ),
                                                 value: Name(
                                                     ExprName {
@@ -596,9 +594,8 @@ Module(
                                                     },
                                                 ),
                                             },
-                                            DictItem {
-                                                key: None,
-                                                value: Name(
+                                            DoubleStar {
+                                                starred_expr: Name(
                                                     ExprName {
                                                         range: 309..310,
                                                         id: "d",

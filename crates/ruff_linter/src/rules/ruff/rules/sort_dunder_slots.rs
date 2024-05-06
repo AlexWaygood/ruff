@@ -264,7 +264,7 @@ impl<'a> DictElements<'a> {
             elements.len() >= 2,
             "A sequence with < 2 elements cannot be unsorted"
         );
-        Self(izip!(elements, key_elts, items.iter().map(|item| &item.value)).collect())
+        Self(izip!(elements, key_elts, items.iter().map(ast::DictItem::value)).collect())
     }
 
     fn last_item_index(&self) -> usize {

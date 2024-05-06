@@ -216,9 +216,9 @@ fn clean_params_dictionary(right: &Expr, locator: &Locator, stylist: &Stylist) -
         let mut arguments: Vec<String> = vec![];
         let mut seen: Vec<&str> = vec![];
         let mut indent = None;
-        for ast::DictItem { key, value } in items {
-            match key {
-                Some(key) => {
+        for item in items {
+            match item {
+                ast::DictItem::KeyValuePair { key, value } => {
                     if let Expr::StringLiteral(ast::ExprStringLiteral {
                         value: key_string, ..
                     }) = key
@@ -245,8 +245,8 @@ fn clean_params_dictionary(right: &Expr, locator: &Locator, stylist: &Stylist) -
                         return None;
                     }
                 }
-                None => {
-                    let value_string = locator.slice(value);
+                ast::DictItem::DoubleStar { starred_expr } => {
+                    let value_string = locator.slice(starred_expr);
                     arguments.push(format!("**{value_string}"));
                 }
             }

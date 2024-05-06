@@ -70,10 +70,10 @@ pub(crate) fn unnecessary_dict_kwargs(checker: &mut Checker, call: &ast::ExprCal
         };
 
         // Ex) `foo(**{**bar})`
-        if let [ast::DictItem { key: None, value }] = dict.items.as_slice() {
+        if let [ast::DictItem::DoubleStar { starred_expr }] = dict.items.as_slice() {
             let diagnostic = Diagnostic::new(UnnecessaryDictKwargs, keyword.range());
             let edit = Edit::range_replacement(
-                format!("**{}", checker.locator().slice(value)),
+                format!("**{}", checker.locator().slice(starred_expr)),
                 keyword.range(),
             );
             checker

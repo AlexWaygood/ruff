@@ -377,11 +377,14 @@ pub fn walk_expr<V: Transformer + ?Sized>(visitor: &V, expr: &mut Expr) {
             visitor.visit_expr(orelse);
         }
         Expr::Dict(ast::ExprDict { items, range: _ }) => {
-            for ast::DictItem { key, value } in items {
-                if let Some(key) = key {
-                    visitor.visit_expr(key);
+            for item in items {
+                match item {
+                    ast::DictItem::KeyValuePair { key, value } => {
+                        visitor.visit_expr(key);
+                        visitor.visit_expr(value);
+                    }
+                    ast::DictItem::DoubleStar { starred_expr } => visitor.visit_expr(starred_expr),
                 }
-                visitor.visit_expr(value);
             }
         }
         Expr::Set(ast::ExprSet { elts, range: _ }) => {

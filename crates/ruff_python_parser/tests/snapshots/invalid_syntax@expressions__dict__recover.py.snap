@@ -35,16 +35,14 @@ Module(
                         ExprDict {
                             range: 93..105,
                             items: [
-                                DictItem {
-                                    key: Some(
-                                        NumberLiteral(
-                                            ExprNumberLiteral {
-                                                range: 94..95,
-                                                value: Int(
-                                                    1,
-                                                ),
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: NumberLiteral(
+                                        ExprNumberLiteral {
+                                            range: 94..95,
+                                            value: Int(
+                                                1,
+                                            ),
+                                        },
                                     ),
                                     value: NumberLiteral(
                                         ExprNumberLiteral {
@@ -55,16 +53,14 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        NumberLiteral(
-                                            ExprNumberLiteral {
-                                                range: 100..101,
-                                                value: Int(
-                                                    3,
-                                                ),
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: NumberLiteral(
+                                        ExprNumberLiteral {
+                                            range: 100..101,
+                                            value: Int(
+                                                3,
+                                            ),
+                                        },
                                     ),
                                     value: NumberLiteral(
                                         ExprNumberLiteral {
@@ -87,16 +83,14 @@ Module(
                         ExprDict {
                             range: 107..115,
                             items: [
-                                DictItem {
-                                    key: Some(
-                                        NumberLiteral(
-                                            ExprNumberLiteral {
-                                                range: 108..109,
-                                                value: Int(
-                                                    1,
-                                                ),
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: NumberLiteral(
+                                        ExprNumberLiteral {
+                                            range: 108..109,
+                                            value: Int(
+                                                1,
+                                            ),
+                                        },
                                     ),
                                     value: NumberLiteral(
                                         ExprNumberLiteral {
@@ -119,16 +113,14 @@ Module(
                         ExprDict {
                             range: 133..144,
                             items: [
-                                DictItem {
-                                    key: Some(
-                                        NumberLiteral(
-                                            ExprNumberLiteral {
-                                                range: 134..135,
-                                                value: Int(
-                                                    1,
-                                                ),
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: NumberLiteral(
+                                        ExprNumberLiteral {
+                                            range: 134..135,
+                                            value: Int(
+                                                1,
+                                            ),
+                                        },
                                     ),
                                     value: NumberLiteral(
                                         ExprNumberLiteral {
@@ -139,16 +131,14 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        NumberLiteral(
-                                            ExprNumberLiteral {
-                                                range: 139..140,
-                                                value: Int(
-                                                    3,
-                                                ),
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: NumberLiteral(
+                                        ExprNumberLiteral {
+                                            range: 139..140,
+                                            value: Int(
+                                                3,
+                                            ),
+                                        },
                                     ),
                                     value: NumberLiteral(
                                         ExprNumberLiteral {
@@ -171,16 +161,14 @@ Module(
                         ExprDict {
                             range: 157..162,
                             items: [
-                                DictItem {
-                                    key: Some(
-                                        NumberLiteral(
-                                            ExprNumberLiteral {
-                                                range: 158..159,
-                                                value: Int(
-                                                    1,
-                                                ),
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: NumberLiteral(
+                                        ExprNumberLiteral {
+                                            range: 158..159,
+                                            value: Int(
+                                                1,
+                                            ),
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -202,9 +190,8 @@ Module(
                         ExprDict {
                             range: 201..205,
                             items: [
-                                DictItem {
-                                    key: None,
-                                    value: Name(
+                                DoubleStar {
+                                    starred_expr: Name(
                                         ExprName {
                                             range: 204..204,
                                             id: "",
@@ -224,15 +211,13 @@ Module(
                         ExprDict {
                             range: 206..222,
                             items: [
-                                DictItem {
-                                    key: Some(
-                                        Name(
-                                            ExprName {
-                                                range: 207..208,
-                                                id: "x",
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Name(
+                                        ExprName {
+                                            range: 207..208,
+                                            id: "x",
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -242,9 +227,8 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: None,
-                                    value: Name(
+                                DoubleStar {
+                                    starred_expr: Name(
                                         ExprName {
                                             range: 215..215,
                                             id: "",
@@ -252,15 +236,13 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        Name(
-                                            ExprName {
-                                                range: 217..218,
-                                                id: "a",
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Name(
+                                        ExprName {
+                                            range: 217..218,
+                                            id: "a",
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -282,21 +264,19 @@ Module(
                         ExprDict {
                             range: 310..330,
                             items: [
-                                DictItem {
-                                    key: Some(
-                                        Starred(
-                                            ExprStarred {
-                                                range: 311..313,
-                                                value: Name(
-                                                    ExprName {
-                                                        range: 312..313,
-                                                        id: "x",
-                                                        ctx: Load,
-                                                    },
-                                                ),
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Starred(
+                                        ExprStarred {
+                                            range: 311..313,
+                                            value: Name(
+                                                ExprName {
+                                                    range: 312..313,
+                                                    id: "x",
+                                                    ctx: Load,
+                                                },
+                                            ),
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -306,15 +286,13 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        Name(
-                                            ExprName {
-                                                range: 318..319,
-                                                id: "z",
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Name(
+                                        ExprName {
+                                            range: 318..319,
+                                            id: "z",
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -324,21 +302,19 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        Starred(
-                                            ExprStarred {
-                                                range: 324..326,
-                                                value: Name(
-                                                    ExprName {
-                                                        range: 325..326,
-                                                        id: "b",
-                                                        ctx: Load,
-                                                    },
-                                                ),
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Starred(
+                                        ExprStarred {
+                                            range: 324..326,
+                                            value: Name(
+                                                ExprName {
+                                                    range: 325..326,
+                                                    id: "b",
+                                                    ctx: Load,
+                                                },
+                                            ),
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -360,15 +336,13 @@ Module(
                         ExprDict {
                             range: 331..345,
                             items: [
-                                DictItem {
-                                    key: Some(
-                                        Name(
-                                            ExprName {
-                                                range: 332..333,
-                                                id: "x",
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Name(
+                                        ExprName {
+                                            range: 332..333,
+                                            id: "x",
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Starred(
                                         ExprStarred {
@@ -384,15 +358,13 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        Name(
-                                            ExprName {
-                                                range: 339..340,
-                                                id: "z",
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Name(
+                                        ExprName {
+                                            range: 339..340,
+                                            id: "z",
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Starred(
                                         ExprStarred {

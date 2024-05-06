@@ -1554,7 +1554,12 @@ impl<'src> Parser<'src> {
             // which requires limiting the expression.
             let value = self.parse_expression_with_bitwise_or_precedence();
 
-            return Expr::Dict(self.parse_dictionary_expression(None, value.expr, start));
+            return Expr::Dict(self.parse_dictionary_expression(
+                ast::DictItem::DoubleStar {
+                    starred_expr: value.expr,
+                },
+                start,
+            ));
         }
 
         // For dictionary expressions, the key uses the `expression` rule while for
@@ -1602,8 +1607,10 @@ impl<'src> Parser<'src> {
                     ))
                 } else {
                     Expr::Dict(self.parse_dictionary_expression(
-                        Some(key_or_element.expr),
-                        value.expr,
+                        ast::DictItem::KeyValuePair {
+                            key: key_or_element.expr,
+                            value: value.expr,
+                        },
                         start,
                     ))
                 }
@@ -1785,30 +1792,28 @@ impl<'src> Parser<'src> {
     /// See: <https://docs.python.org/3/reference/expressions.html#dictionary-displays>
     fn parse_dictionary_expression(
         &mut self,
-        key: Option<Expr>,
-        value: Expr,
+        first_item: ast::DictItem,
         start: TextSize,
     ) -> ast::ExprDict {
         if !self.at_sequence_end() {
             self.expect(TokenKind::Comma);
         }
 
-        let mut items = vec![ast::DictItem { key, value }];
+        let mut items = vec![first_item];
 
         self.parse_comma_separated_list(RecoveryContextKind::DictElements, |parser| {
             if parser.eat(TokenKind::DoubleStar) {
                 // Handle dictionary unpacking. Here, the grammar is `'**' bitwise_or`
                 // which requires limiting the expression.
-                items.push(ast::DictItem {
-                    key: None,
-                    value: parser.parse_expression_with_bitwise_or_precedence().expr,
+                items.push(ast::DictItem::DoubleStar {
+                    starred_expr: parser.parse_expression_with_bitwise_or_precedence().expr,
                 });
             } else {
                 let key = parser.parse_conditional_expression_or_higher().expr;
                 parser.expect(TokenKind::Colon);
 
-                items.push(ast::DictItem {
-                    key: Some(key),
+                items.push(ast::DictItem::KeyValuePair {
+                    key,
                     value: parser.parse_conditional_expression_or_higher().expr,
                 });
             }

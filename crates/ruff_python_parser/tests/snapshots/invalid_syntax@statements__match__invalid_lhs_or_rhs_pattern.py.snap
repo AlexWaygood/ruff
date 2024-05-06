@@ -264,14 +264,12 @@ Module(
                                                 ExprDict {
                                                     range: 201..210,
                                                     items: [
-                                                        DictItem {
-                                                            key: Some(
-                                                                BooleanLiteral(
-                                                                    ExprBooleanLiteral {
-                                                                        range: 202..206,
-                                                                        value: true,
-                                                                    },
-                                                                ),
+                                                        KeyValuePair {
+                                                            key: BooleanLiteral(
+                                                                ExprBooleanLiteral {
+                                                                    range: 202..206,
+                                                                    value: true,
+                                                                },
                                                             ),
                                                             value: NumberLiteral(
                                                                 ExprNumberLiteral {
@@ -712,14 +710,12 @@ Module(
                                                 ExprDict {
                                                     range: 534..543,
                                                     items: [
-                                                        DictItem {
-                                                            key: Some(
-                                                                BooleanLiteral(
-                                                                    ExprBooleanLiteral {
-                                                                        range: 535..539,
-                                                                        value: true,
-                                                                    },
-                                                                ),
+                                                        KeyValuePair {
+                                                            key: BooleanLiteral(
+                                                                ExprBooleanLiteral {
+                                                                    range: 535..539,
+                                                                    value: true,
+                                                                },
                                                             ),
                                                             value: NumberLiteral(
                                                                 ExprNumberLiteral {

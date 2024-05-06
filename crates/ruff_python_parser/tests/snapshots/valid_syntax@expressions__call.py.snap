@@ -361,16 +361,14 @@ Module(
                                 ExprDict {
                                     range: 219..231,
                                     items: [
-                                        DictItem {
-                                            key: Some(
-                                                NumberLiteral(
-                                                    ExprNumberLiteral {
-                                                        range: 220..221,
-                                                        value: Int(
-                                                            1,
-                                                        ),
-                                                    },
-                                                ),
+                                        KeyValuePair {
+                                            key: NumberLiteral(
+                                                ExprNumberLiteral {
+                                                    range: 220..221,
+                                                    value: Int(
+                                                        1,
+                                                    ),
+                                                },
                                             ),
                                             value: NumberLiteral(
                                                 ExprNumberLiteral {
@@ -381,16 +379,14 @@ Module(
                                                 },
                                             ),
                                         },
-                                        DictItem {
-                                            key: Some(
-                                                NumberLiteral(
-                                                    ExprNumberLiteral {
-                                                        range: 226..227,
-                                                        value: Int(
-                                                            3,
-                                                        ),
-                                                    },
-                                                ),
+                                        KeyValuePair {
+                                            key: NumberLiteral(
+                                                ExprNumberLiteral {
+                                                    range: 226..227,
+                                                    value: Int(
+                                                        3,
+                                                    ),
+                                                },
                                             ),
                                             value: NumberLiteral(
                                                 ExprNumberLiteral {

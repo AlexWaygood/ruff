@@ -320,26 +320,24 @@ Module(
                             ExprDict {
                                 range: 386..394,
                                 items: [
-                                    DictItem {
-                                        key: Some(
-                                            StringLiteral(
-                                                ExprStringLiteral {
-                                                    range: 387..390,
-                                                    value: StringLiteralValue {
-                                                        inner: Single(
-                                                            StringLiteral {
-                                                                range: 387..390,
-                                                                value: "a",
-                                                                flags: StringLiteralFlags {
-                                                                    quote_style: Double,
-                                                                    prefix: Empty,
-                                                                    triple_quoted: false,
-                                                                },
+                                    KeyValuePair {
+                                        key: StringLiteral(
+                                            ExprStringLiteral {
+                                                range: 387..390,
+                                                value: StringLiteralValue {
+                                                    inner: Single(
+                                                        StringLiteral {
+                                                            range: 387..390,
+                                                            value: "a",
+                                                            flags: StringLiteralFlags {
+                                                                quote_style: Double,
+                                                                prefix: Empty,
+                                                                triple_quoted: false,
                                                             },
-                                                        ),
-                                                    },
+                                                        },
+                                                    ),
                                                 },
-                                            ),
+                                            },
                                         ),
                                         value: NumberLiteral(
                                             ExprNumberLiteral {

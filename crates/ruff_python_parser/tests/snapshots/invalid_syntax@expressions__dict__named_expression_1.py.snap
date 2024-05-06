@@ -16,15 +16,13 @@ Module(
                         ExprDict {
                             range: 57..79,
                             items: [
-                                DictItem {
-                                    key: Some(
-                                        Name(
-                                            ExprName {
-                                                range: 58..59,
-                                                id: "x",
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Name(
+                                        ExprName {
+                                            range: 58..59,
+                                            id: "x",
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -34,16 +32,14 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        NumberLiteral(
-                                            ExprNumberLiteral {
-                                                range: 66..67,
-                                                value: Int(
-                                                    1,
-                                                ),
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: NumberLiteral(
+                                        ExprNumberLiteral {
+                                            range: 66..67,
+                                            value: Int(
+                                                1,
+                                            ),
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -53,15 +49,13 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        Name(
-                                            ExprName {
-                                                range: 69..70,
-                                                id: "z",
-                                                ctx: Load,
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: Name(
+                                        ExprName {
+                                            range: 69..70,
+                                            id: "z",
+                                            ctx: Load,
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {
@@ -71,16 +65,14 @@ Module(
                                         },
                                     ),
                                 },
-                                DictItem {
-                                    key: Some(
-                                        NumberLiteral(
-                                            ExprNumberLiteral {
-                                                range: 77..78,
-                                                value: Int(
-                                                    2,
-                                                ),
-                                            },
-                                        ),
+                                KeyValuePair {
+                                    key: NumberLiteral(
+                                        ExprNumberLiteral {
+                                            range: 77..78,
+                                            value: Int(
+                                                2,
+                                            ),
+                                        },
                                     ),
                                     value: Name(
                                         ExprName {

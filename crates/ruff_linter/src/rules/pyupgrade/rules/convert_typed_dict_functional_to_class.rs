@@ -172,7 +172,7 @@ fn fields_from_dict_literal(items: &[ast::DictItem]) -> Option<Vec<Stmt>> {
     } else {
         items
             .iter()
-            .map(|ast::DictItem { key, value }| match key {
+            .map(|item| match item.key() {
                 Some(Expr::StringLiteral(ast::ExprStringLiteral { value: field, .. })) => {
                     if !is_identifier(field.to_str()) {
                         return None;
@@ -180,7 +180,7 @@ fn fields_from_dict_literal(items: &[ast::DictItem]) -> Option<Vec<Stmt>> {
                     if is_dunder(field.to_str()) {
                         return None;
                     }
-                    Some(create_field_assignment_stmt(field.to_str(), value))
+                    Some(create_field_assignment_stmt(field.to_str(), item.value()))
                 }
                 _ => None,
             })

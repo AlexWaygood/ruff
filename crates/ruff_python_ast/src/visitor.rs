@@ -390,11 +390,11 @@ pub fn walk_expr<'a, V: Visitor<'a> + ?Sized>(visitor: &mut V, expr: &'a Expr) {
             visitor.visit_expr(orelse);
         }
         Expr::Dict(ast::ExprDict { items, range: _ }) => {
-            for ast::DictItem { key, value } in items {
-                if let Some(key) = key {
+            for item in items {
+                if let Some(key) = item.key() {
                     visitor.visit_expr(key);
                 }
-                visitor.visit_expr(value);
+                visitor.visit_expr(item.value());
             }
         }
         Expr::Set(ast::ExprSet { elts, range: _ }) => {

@@ -2303,11 +2303,11 @@ impl AstNode for ast::ExprDict {
     {
         let ast::ExprDict { items, range: _ } = self;
 
-        for ast::DictItem { key, value } in items {
-            if let Some(key) = key {
+        for item in items {
+            if let Some(key) = item.key() {
                 visitor.visit_expr(key);
             }
-            visitor.visit_expr(value);
+            visitor.visit_expr(item.value());
         }
     }
 }

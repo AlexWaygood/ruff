@@ -301,10 +301,15 @@ fn is_valid_default_value_with_annotation(
         Expr::Dict(ast::ExprDict { items, range: _ }) => {
             return allow_container
                 && items.len() <= 10
-                && items.iter().all(|ast::DictItem { key, value }| {
-                    key.as_ref().is_some_and(|key| {
+                && items.iter().all(|item| {
+                    item.key().is_some_and(|key| {
                         is_valid_default_value_with_annotation(key, false, locator, semantic)
-                    }) && is_valid_default_value_with_annotation(value, false, locator, semantic)
+                    }) && is_valid_default_value_with_annotation(
+                        item.value(),
+                        false,
+                        locator,
+                        semantic,
+                    )
                 });
         }
         Expr::UnaryOp(ast::ExprUnaryOp {

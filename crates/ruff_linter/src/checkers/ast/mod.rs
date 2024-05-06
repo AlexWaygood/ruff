@@ -1173,12 +1173,15 @@ impl<'a> Visitor<'a> for Checker<'a> {
                             match (arg.as_ref(), value) {
                                 // Ex) NamedTuple("a", **{"a": int})
                                 (None, Expr::Dict(ast::ExprDict { items, .. })) => {
-                                    for ast::DictItem { key, value } in items {
-                                        if let Some(key) = key.as_ref() {
-                                            self.visit_non_type_definition(key);
-                                            self.visit_type_definition(value);
-                                        } else {
-                                            self.visit_non_type_definition(value);
+                                    for item in items {
+                                        match item {
+                                            ast::DictItem::KeyValuePair { key, value } => {
+                                                self.visit_non_type_definition(key);
+                                                self.visit_type_definition(value);
+                                            }
+                                            ast::DictItem::DoubleStar { starred_expr } => {
+                                                self.visit_non_type_definition(starred_expr);
+                                            }
                                         }
                                     }
                                 }
@@ -1201,11 +1204,11 @@ impl<'a> Visitor<'a> for Checker<'a> {
                         }
                         for arg in args {
                             if let Expr::Dict(ast::ExprDict { items, range: _ }) = arg {
-                                for ast::DictItem { key, value } in items {
-                                    if let Some(key) = key {
+                                for item in items {
+                                    if let Some(key) = item.key() {
                                         self.visit_non_type_definition(key);
                                     }
-                                    self.visit_type_definition(value);
+                                    self.visit_type_definition(item.value());
                                 }
                             } else {
                                 self.visit_non_type_definition(arg);
