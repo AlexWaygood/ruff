@@ -2019,6 +2019,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "red_knot_typeshed_resolver"
+version = "0.0.0"
+dependencies = [
+ "insta",
+ "ruff_python_stdlib",
+ "rustc-hash",
+ "smol_str",
+ "walkdir",
+ "zip",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

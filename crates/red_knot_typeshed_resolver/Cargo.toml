@@ -1,0 +1,27 @@
+[package]
+name = "red_knot_typeshed_resolver"
+version = "0.0.0"
+publish = false
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+ruff_python_stdlib = { workspace = true }
+rustc-hash = { workspace = true }
+smol_str = { workspace = true }
+
+[lints]
+workspace = true
+
+[build-dependencies]
+walkdir = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+zip = { workspace = true }
