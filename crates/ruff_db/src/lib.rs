@@ -10,6 +10,7 @@ use crate::vfs::{Vfs, VfsFile};
 
 mod file_revision;
 pub mod file_system;
+pub mod module_name;
 pub mod parsed;
 pub mod source;
 pub mod vendored;

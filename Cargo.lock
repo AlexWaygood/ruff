@@ -2023,7 +2023,7 @@ name = "red_knot_typeshed_resolver"
 version = "0.0.0"
 dependencies = [
  "insta",
- "ruff_python_stdlib",
+ "ruff_db",
  "rustc-hash",
  "smol_str",
  "walkdir",
@@ -2206,10 +2206,12 @@ dependencies = [
  "once_cell",
  "ruff_python_ast",
  "ruff_python_parser",
+ "ruff_python_stdlib",
  "ruff_source_file",
  "ruff_text_size",
  "rustc-hash",
  "salsa-2022",
+ "smol_str",
  "tracing",
  "zip",
 ]
