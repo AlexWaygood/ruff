@@ -8,6 +8,45 @@ use rustc_hash::FxHashMap;
 
 use ruff_db::module_name::ModuleName;
 
+pub fn module_exists_on_version(
+    data: &TypeshedVersions,
+    module: &ModuleName,
+    version: impl Into<PyVersion>,
+) -> VersionQueryResult {
+    let version = version.into();
+    if let Some(range) = data.get(module) {
+        if range.contains(version) {
+            VersionQueryResult::Yes
+        } else {
+            VersionQueryResult::No
+        }
+    } else {
+        let mut module = module.parent();
+        while let Some(module_to_try) = module {
+            if let Some(range) = data.get(&module_to_try) {
+                if range.contains(version) {
+                    return VersionQueryResult::Maybe;
+                }
+            }
+            module = module_to_try.parent();
+        }
+        VersionQueryResult::No
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VersionQueryResult {
+    /// The module definitely exists on the specified Python version
+    Yes,
+
+    /// The module definitely does not exist on the specified Python version
+    No,
+
+    /// The module might exist on the specified Python version, or it might not
+    /// (you'll have to check the vendored zip to check!)
+    Maybe,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct TypeshedVersionsParseError {
     line_number: NonZeroU16,
@@ -37,66 +76,53 @@ impl std::error::Error for TypeshedVersionsParseError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum TypeshedVersionsParseErrorKind {
+    #[error(
+        "File has too many lines ({0}); maximum allowed is {}",
+        NonZeroU16::MAX
+    )]
     TooManyLines(NonZeroUsize),
+    #[error("Expected every non-comment line to have exactly one colon")]
     UnexpectedNumberOfColons,
+    #[error("Expected all components of '{0}' to be valid Python identifiers")]
     InvalidModuleName(String),
+    #[error("Expected every non-comment line to have exactly one '-' character")]
     UnexpectedNumberOfHyphens,
+    #[error("Expected all versions to be in the form {{MAJOR}}.{{MINOR}}; got '{0}'")]
     UnexpectedNumberOfPeriods(String),
+    #[error("Failed to convert '{version}' to a pair of integers due to {err}")]
     IntegerParsingFailure {
         version: String,
         err: std::num::ParseIntError,
     },
 }
 
-impl fmt::Display for TypeshedVersionsParseErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TooManyLines(num_lines) => write!(
-                f,
-                "File has too many lines ({num_lines}); maximum allowed is {}",
-                NonZeroU16::MAX
-            ),
-            Self::UnexpectedNumberOfColons => {
-                f.write_str("Expected every non-comment line to have exactly one colon")
-            }
-            Self::InvalidModuleName(name) => write!(
-                f,
-                "Expected all components of '{name}' to be valid Python identifiers"
-            ),
-            Self::UnexpectedNumberOfHyphens => {
-                f.write_str("Expected every non-comment line to have exactly one '-' character")
-            }
-            Self::UnexpectedNumberOfPeriods(format) => write!(
-                f,
-                "Expected all versions to be in the form {{MAJOR}}.{{MINOR}}; got '{format}'"
-            ),
-            Self::IntegerParsingFailure { version, err } => write!(
-                f,
-                "Failed to convert '{version}' to a pair of integers due to {err}",
-            ),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct TypeshedVersions(FxHashMap<ModuleName, PyVersionRange>);
 
 impl TypeshedVersions {
-    pub fn len(&self) -> usize {
+    fn get(&self, module: &ModuleName) -> Option<&PyVersionRange> {
+        self.0.get(module)
+    }
+
+    fn len(&self) -> usize {
         self.0.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    pub fn contains_module(&self, module_name: &ModuleName) -> bool {
+    pub(crate) fn contains_module(&self, module_name: &ModuleName) -> bool {
         self.0.contains_key(module_name)
     }
 
-    pub fn module_exists_on_version(&self, module: ModuleName, version: impl Into<PyVersion>) -> bool {
+    pub fn module_exists_on_version(
+        &self,
+        module: ModuleName,
+        version: impl Into<PyVersion>,
+    ) -> bool {
         let version = version.into();
         let mut module: Option<ModuleName> = Some(module);
         while let Some(module_to_try) = module {
@@ -331,7 +357,9 @@ mod tests {
         assert!(versions.module_exists_on_version(asyncio, SupportedPyVersion::Py310));
 
         assert!(versions.contains_module(&asyncio_staggered));
-        assert!(versions.module_exists_on_version(asyncio_staggered.clone(), SupportedPyVersion::Py38));
+        assert!(
+            versions.module_exists_on_version(asyncio_staggered.clone(), SupportedPyVersion::Py38)
+        );
         assert!(!versions.module_exists_on_version(asyncio_staggered, SupportedPyVersion::Py37));
 
         assert!(versions.contains_module(&audioop));

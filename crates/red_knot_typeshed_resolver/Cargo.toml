@@ -12,9 +12,10 @@ license = { workspace = true }
 
 [dependencies]
 ruff_db = { workspace = true }
-
+once_cell = { workspace = true }
 rustc-hash = { workspace = true }
 smol_str = { workspace = true }
+thiserror = { workspace = true }
 
 [lints]
 workspace = true
@@ -25,4 +26,5 @@ zip = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+walkdir = { workspace = true }
 zip = { workspace = true }

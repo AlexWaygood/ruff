@@ -2023,9 +2023,11 @@ name = "red_knot_typeshed_resolver"
 version = "0.0.0"
 dependencies = [
  "insta",
+ "once_cell",
  "ruff_db",
  "rustc-hash",
  "smol_str",
+ "thiserror",
  "walkdir",
  "zip",
 ]

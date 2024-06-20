@@ -1,28 +1,71 @@
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+
+use versions::{TypeshedVersions, TypeshedVersionsParseError};
+
+mod typeshed_vendored;
 pub mod versions;
 
-#[cfg(test)]
-mod tests {
-    use std::io::{self, Read};
-    use std::path::Path;
+pub const TYPESHED_STDLIB_DIR: &str = "stdlib";
+const STDLIB_VERSIONS_FILE: &str = "VERSIONS";
 
-    #[test]
-    fn typeshed_zip_created_at_build_time() {
-        // The file path here is hardcoded in this crate's `build.rs` script.
-        // Luckily this crate will fail to build if this file isn't available at build time.
-        const TYPESHED_ZIP_BYTES: &[u8] =
-            include_bytes!(concat!(env!("OUT_DIR"), "/zipped_typeshed.zip"));
+const CORE_TYPING_MODULES: &[&str] = &[
+    "_collections_abc.pyi",
+    "builtins.pyi",
+    "collections/abc.pyi",
+    "types.pyi",
+    "typing.pyi",
+    "typing_extensions.pyi",
+];
 
-        let mut typeshed_zip_archive = zip::ZipArchive::new(io::Cursor::new(TYPESHED_ZIP_BYTES)).unwrap();
+#[derive(Debug, Default)]
+pub enum Typeshed {
+    #[default]
+    Vendored,
 
-        let path_to_functools = Path::new("stdlib").join("functools.pyi");
-        let mut functools_module_stub = typeshed_zip_archive
-            .by_name(path_to_functools.to_str().unwrap())
-            .unwrap();
-        assert!(functools_module_stub.is_file());
+    Custom(CustomTypeshed),
+}
 
-        let mut functools_module_stub_source = String::new();
-        functools_module_stub.read_to_string(&mut functools_module_stub_source).unwrap();
-
-        assert!(functools_module_stub_source.contains("def update_wrapper("));
+impl Typeshed {
+    pub fn from_custom_typeshed_dir(dir: &Path) -> Result<Self, InvalidTypeshedError> {
+        Ok(Self::Custom(CustomTypeshed::from_custom_typeshed_dir(dir)?))
     }
+}
+
+#[derive(Debug)]
+pub struct CustomTypeshed {
+    stdlib_path: PathBuf,
+    versions: TypeshedVersions,
+}
+
+impl CustomTypeshed {
+    fn from_custom_typeshed_dir(dir: &Path) -> Result<Self, InvalidTypeshedError> {
+        let stdlib_path = dir.join(TYPESHED_STDLIB_DIR);
+        if !stdlib_path.exists() {
+            return Err(InvalidTypeshedError::NoStdlibDirectory);
+        }
+        for module in CORE_TYPING_MODULES {
+            if !stdlib_path.join(module).exists() {
+                return Err(InvalidTypeshedError::CoreModuleMissing(module));
+            }
+        }
+        let raw_versions = fs::read_to_string(stdlib_path.join(STDLIB_VERSIONS_FILE))?;
+        Ok(Self {
+            stdlib_path,
+            versions: raw_versions.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InvalidTypeshedError {
+    #[error("Provided directory does not contain a `stdlib/` subdirectory")]
+    NoStdlibDirectory,
+    #[error("`stdlib/` directory is missing core module {0}")]
+    CoreModuleMissing(&'static str),
+    #[error("Could not read `stdlib/VERSIONS` file from the provided directory")]
+    NoVersionsFile(#[from] io::Error),
+    #[error("{0}")]
+    VersionsParseError(#[from] TypeshedVersionsParseError),
 }
