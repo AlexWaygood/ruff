@@ -529,30 +529,6 @@ mod tests {
         Ok(())
     }
 
-    // TODO: Port typeshed test case. Porting isn't possible at the moment because the vendored zip
-    //   is part of the red knot crate
-    // #[test]
-    // fn typeshed_zip_created_at_build_time() -> anyhow::Result<()> {
-    //     // The file path here is hardcoded in this crate's `build.rs` script.
-    //     // Luckily this crate will fail to build if this file isn't available at build time.
-    //     const TYPESHED_ZIP_BYTES: &[u8] =
-    //         include_bytes!(concat!(env!("OUT_DIR"), "/zipped_typeshed.zip"));
-    //     assert!(!TYPESHED_ZIP_BYTES.is_empty());
-    //     let mut typeshed_zip_archive = ZipArchive::new(Cursor::new(TYPESHED_ZIP_BYTES))?;
-    //
-    //     let path_to_functools = Path::new("stdlib").join("functools.pyi");
-    //     let mut functools_module_stub = typeshed_zip_archive
-    //         .by_name(path_to_functools.to_str().unwrap())
-    //         .unwrap();
-    //     assert!(functools_module_stub.is_file());
-    //
-    //     let mut functools_module_stub_source = String::new();
-    //     functools_module_stub.read_to_string(&mut functools_module_stub_source)?;
-    //
-    //     assert!(functools_module_stub_source.contains("def update_wrapper("));
-    //     Ok(())
-    // }
-
     #[test]
     fn resolve_package() -> anyhow::Result<()> {
         let TestCase { src, db, .. } = create_resolver()?;
