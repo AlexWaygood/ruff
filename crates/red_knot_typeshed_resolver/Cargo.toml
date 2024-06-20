@@ -27,4 +27,5 @@ zip = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+walkdir = { workspace = true }
 zip = { workspace = true }

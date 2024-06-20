@@ -138,14 +138,14 @@ pub struct ModuleResolutionSettings {
     /// The root of the workspace, used for finding first-party modules.
     pub workspace_root: FileSystemPathBuf,
 
-    /// The path to the user's `site-packages` directory, where third-party packages from ``PyPI`` are installed.
-    pub site_packages: Option<FileSystemPathBuf>,
-
     /// Optional path to standard-library typeshed stubs.
     /// Currently this has to be a directory that exists on disk.
     ///
     /// (TODO: fall back to vendored stubs if no custom directory is provided.)
     pub custom_typeshed: Option<FileSystemPathBuf>,
+
+    /// The path to the user's `site-packages` directory, where third-party packages from ``PyPI`` are installed.
+    pub site_packages: Option<FileSystemPathBuf>,
 }
 
 impl ModuleResolutionSettings {

@@ -2,6 +2,7 @@ use filetime::FileTime;
 
 use crate::file_system::{FileSystem, FileSystemPath, FileType, Metadata, Result};
 
+#[derive(Debug)]
 pub struct OsFileSystem;
 
 impl OsFileSystem {
