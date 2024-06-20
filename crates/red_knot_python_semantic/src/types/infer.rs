@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
+use ruff_db::module_name::ModuleName;
 use ruff_db::vfs::VfsFile;
 use ruff_index::IndexVec;
 use ruff_python_ast as ast;
 use ruff_python_ast::{ExprContext, TypeParams};
 
 use crate::module::resolver::resolve_module;
-use crate::module::ModuleName;
 use crate::name::Name;
 use crate::semantic_index::ast_ids::{ScopeAstIdNode, ScopeExpressionId};
 use crate::semantic_index::definition::{Definition, ImportDefinition, ImportFromDefinition};

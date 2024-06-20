@@ -12,7 +12,7 @@ license = { workspace = true }
 
 [dependencies]
 ruff_db = { workspace = true }
-ruff_python_stdlib = { workspace = true }
+
 once_cell = { workspace = true }
 rustc-hash = { workspace = true }
 smol_str = { workspace = true }
