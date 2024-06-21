@@ -38,6 +38,7 @@ mod tests {
     fn typeshed_vfs_consistent_with_vendored_stubs() {
         let vendored_typeshed_dir = Path::new("vendor/typeshed").canonicalize().unwrap();
         let vendored_typeshed_stubs = VendoredFileSystem::new(TYPESHED_ZIP_BYTES).unwrap();
+        dbg!(vendored_typeshed_stubs.file_names());
 
         let mut empty_iterator = true;
         for entry in walkdir::WalkDir::new(&vendored_typeshed_dir).min_depth(1) {

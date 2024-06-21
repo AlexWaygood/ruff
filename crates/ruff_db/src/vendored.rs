@@ -77,6 +77,12 @@ impl VendoredFileSystem {
         zip_file.read_to_string(&mut buffer)?;
         Ok(buffer)
     }
+
+    pub fn file_names(&self) -> Vec<String> {
+        let inner_locked = self.inner.lock();
+        let archive = inner_locked.borrow();
+        archive.file_names().map(str::to_owned).collect()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -160,6 +166,10 @@ impl VendoredZipArchive {
 
     fn lookup_path(&mut self, path: &NormalizedVendoredPath) -> Result<ZipFile> {
         Ok(self.0.by_name(path.as_str())?)
+    }
+
+    fn file_names(&self) -> impl Iterator<Item = &str> {
+        self.0.file_names()
     }
 }
 
