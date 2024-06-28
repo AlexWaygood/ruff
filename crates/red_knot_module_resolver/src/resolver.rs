@@ -2,7 +2,7 @@ use salsa::DebugWithDb;
 use std::ops::Deref;
 
 use ruff_db::file_system::{FileSystem, FileSystemPath, FileSystemPathBuf};
-use ruff_db::vfs::{system_path_to_file, vfs_path_to_file, VfsFile, VfsPath};
+use ruff_db::vfs::{system_path_to_file, vfs_path_to_file, VfsFile, VfsPath, VfsPathRef};
 
 use crate::module::{Module, ModuleKind, ModuleName, ModuleSearchPath, ModuleSearchPathKind};
 use crate::resolver::internal::ModuleResolverSearchPaths;
@@ -87,10 +87,11 @@ pub(crate) fn file_to_module(db: &dyn Db, file: VfsFile) -> Option<Module> {
         .find_map(|root| match (root.path(), path) {
             (VfsPath::FileSystem(root_path), VfsPath::FileSystem(path)) => {
                 let relative_path = path.strip_prefix(root_path).ok()?;
-                Some(relative_path)
+                Some(VfsPathRef::FileSystem(relative_path))
             }
-            (VfsPath::Vendored(_), VfsPath::Vendored(_)) => {
-                todo!("Add support for vendored modules")
+            (VfsPath::Vendored(root_path), VfsPath::Vendored(path)) => {
+                let relative_path = path.strip_prefix(root_path).ok()?;
+                Some(VfsPathRef::Vendored(relative_path))
             }
             (VfsPath::Vendored(_), VfsPath::FileSystem(_))
             | (VfsPath::FileSystem(_), VfsPath::Vendored(_)) => None,

@@ -2,8 +2,7 @@ use std::fmt::Formatter;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use ruff_db::file_system::FileSystemPath;
-use ruff_db::vfs::{VfsFile, VfsPath};
+use ruff_db::vfs::{VfsFile, VfsPath, VfsPathRef};
 use ruff_python_stdlib::identifiers::is_identifier;
 
 use crate::Db;
@@ -133,7 +132,7 @@ impl ModuleName {
         &self.0
     }
 
-    pub(crate) fn from_relative_path(path: &FileSystemPath) -> Option<Self> {
+    pub(crate) fn from_relative_path(path: VfsPathRef) -> Option<Self> {
         let path = if path.ends_with("__init__.py") || path.ends_with("__init__.pyi") {
             path.parent()?
         } else {

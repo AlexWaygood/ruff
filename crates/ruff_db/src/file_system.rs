@@ -323,23 +323,27 @@ impl FileSystemPath {
     /// assert_eq!(path.with_extension("").with_extension("txt"), FileSystemPathBuf::from("foo.txt"));
     /// ```
     #[inline]
+    #[must_use]
     pub fn with_extension(&self, extension: &str) -> FileSystemPathBuf {
         FileSystemPathBuf::from_utf8_path_buf(self.0.with_extension(extension))
     }
 
     /// Converts the path to an owned [`FileSystemPathBuf`].
+    #[must_use]
     pub fn to_path_buf(&self) -> FileSystemPathBuf {
         FileSystemPathBuf(self.0.to_path_buf())
     }
 
     /// Returns the path as a string slice.
     #[inline]
+    #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
     /// Returns the std path for the file.
     #[inline]
+    #[must_use]
     pub fn as_std_path(&self) -> &Path {
         self.0.as_std_path()
     }
@@ -357,10 +361,12 @@ impl FileSystemPath {
 pub struct FileSystemPathBuf(Utf8PathBuf);
 
 impl FileSystemPathBuf {
+    #[must_use]
     pub fn new() -> Self {
         Self(Utf8PathBuf::new())
     }
 
+    #[must_use]
     pub fn from_utf8_path_buf(path: Utf8PathBuf) -> Self {
         Self(path)
     }
@@ -408,6 +414,7 @@ impl FileSystemPathBuf {
     }
 
     #[inline]
+    #[must_use]
     pub fn as_path(&self) -> &FileSystemPath {
         FileSystemPath::new(&self.0)
     }
