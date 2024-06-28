@@ -4,7 +4,7 @@ use countme::Count;
 use dashmap::mapref::entry::Entry;
 
 pub use crate::vendored::{VendoredPath, VendoredPathBuf};
-pub use path::VfsPath;
+pub use path::{VfsPath, VfsPathRef};
 
 use crate::file_revision::FileRevision;
 use crate::file_system::FileSystemPath;
@@ -203,6 +203,17 @@ impl Vfs {
                 .expect("Vendored file to exist"),
         }
     }
+
+    pub fn is_directory(&self, db: &dyn Db, path: &VfsPath) -> bool {
+        match path {
+            VfsPath::FileSystem(path) => db.file_system().is_directory(path),
+            VfsPath::Vendored(path) => db.vfs().inner.vendored.is_directory(path),
+        }
+    }
+
+    pub fn vendored_file_system(&self) -> &VendoredVfs {
+        &self.inner.vendored
+    }
 }
 
 impl std::fmt::Debug for Vfs {
@@ -299,7 +310,7 @@ impl VfsFile {
 }
 
 #[derive(Debug)]
-enum VendoredVfs {
+pub enum VendoredVfs {
     #[allow(unused)]
     Real(VendoredFileSystem),
     Stubbed(FxDashMap<VendoredPathBuf, String>),
@@ -336,6 +347,22 @@ impl VendoredVfs {
                     ))
                 }
             }
+        }
+    }
+
+    fn is_directory(&self, path: &VendoredPath) -> bool {
+        match self {
+            VendoredVfs::Real(file_system) => file_system
+                .metadata(path)
+                .is_some_and(|metadata| metadata.kind().is_directory()),
+            VendoredVfs::Stubbed(_) => todo!(),
+        }
+    }
+
+    pub fn is_file(&self, path: &VendoredPath) -> bool {
+        match self {
+            VendoredVfs::Real(file_system) => file_system.metadata(path).is_some_and(|metadata|metadata.kind().is_file()),
+            VendoredVfs::Stubbed(_) => todo!(),
         }
     }
 }

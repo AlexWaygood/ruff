@@ -1,5 +1,5 @@
-use std::ops::Deref;
 use std::path;
+use std::{ops::Deref, path::StripPrefixError};
 
 use camino::{Utf8Components, Utf8Path, Utf8PathBuf};
 
@@ -30,6 +30,38 @@ impl VendoredPath {
     pub fn components(&self) -> Utf8Components {
         self.0.components()
     }
+
+    #[must_use]
+    pub fn ends_with(&self, child: impl AsRef<VendoredPath>) -> bool {
+        self.0.ends_with(child.as_ref())
+    }
+
+    #[must_use]
+    pub fn parent(&self) -> Option<&VendoredPath> {
+        self.0.parent().map(VendoredPath::new)
+    }
+
+    #[must_use]
+    pub fn file_stem(&self) -> Option<&str> {
+        self.0.file_stem()
+    }
+
+    #[must_use]
+    pub fn join(&self, part: &str) -> VendoredPathBuf {
+        Self::new(&self.0.join(part)).to_path_buf()
+    }
+
+    #[must_use]
+    pub fn with_pyi_extension(&self) -> VendoredPathBuf {
+        Self::new(&self.0.with_extension("pyi")).to_path_buf()
+    }
+
+    pub fn strip_prefix(
+        &self,
+        base: impl AsRef<VendoredPath>,
+    ) -> std::result::Result<&VendoredPath, StripPrefixError> {
+        self.0.strip_prefix(base.as_ref()).map(VendoredPath::new)
+    }
 }
 
 #[repr(transparent)]
@@ -49,6 +81,10 @@ impl VendoredPathBuf {
 
     pub fn as_path(&self) -> &VendoredPath {
         VendoredPath::new(&self.0)
+    }
+
+    pub fn push(&mut self, part: &str) {
+        self.0.push(part)
     }
 }
 

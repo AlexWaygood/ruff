@@ -2,8 +2,8 @@ use std::fmt::Formatter;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use ruff_db::file_system::FileSystemPath;
-use ruff_db::vfs::{VfsFile, VfsPath};
+use ruff_db::file_system::FileSystemPathBuf;
+use ruff_db::vfs::{VendoredPathBuf, VfsFile, VfsPath, VfsPathRef};
 use ruff_python_stdlib::identifiers::is_identifier;
 
 use crate::Db;
@@ -133,7 +133,7 @@ impl ModuleName {
         &self.0
     }
 
-    pub(crate) fn from_relative_path(path: &FileSystemPath) -> Option<Self> {
+    pub(crate) fn from_relative_path(path: VfsPathRef) -> Option<Self> {
         let path = if path.ends_with("__init__.py") || path.ends_with("__init__.pyi") {
             path.parent()?
         } else {
@@ -197,7 +197,7 @@ impl Module {
     pub(crate) fn new(
         name: ModuleName,
         kind: ModuleKind,
-        search_path: ModuleSearchPath,
+        search_path: Arc<ModuleSearchPathEntry>,
         file: VfsFile,
     ) -> Self {
         Self {
@@ -221,7 +221,7 @@ impl Module {
     }
 
     /// The search path from which the module was resolved.
-    pub fn search_path(&self) -> &ModuleSearchPath {
+    pub fn search_path(&self) -> &ModuleSearchPathEntry {
         &self.inner.search_path
     }
 
@@ -257,7 +257,7 @@ impl salsa::DebugWithDb<dyn Db> for Module {
 struct ModuleInner {
     name: ModuleName,
     kind: ModuleKind,
-    search_path: ModuleSearchPath,
+    search_path: Arc<ModuleSearchPathEntry>,
     file: VfsFile,
 }
 
@@ -270,77 +270,43 @@ pub enum ModuleKind {
     Package,
 }
 
-/// A search path in which to search modules.
-/// Corresponds to a path in [`sys.path`](https://docs.python.org/3/library/sys_path_init.html) at runtime.
-///
-/// Cloning a search path is cheap because it's an `Arc`.
-#[derive(Clone, PartialEq, Eq)]
-pub struct ModuleSearchPath {
-    inner: Arc<ModuleSearchPathInner>,
-}
-
-impl ModuleSearchPath {
-    pub fn new<P>(path: P, kind: ModuleSearchPathKind) -> Self
-    where
-        P: Into<VfsPath>,
-    {
-        Self {
-            inner: Arc::new(ModuleSearchPathInner {
-                path: path.into(),
-                kind,
-            }),
-        }
-    }
-
-    /// Determine whether this is a first-party, third-party or standard-library search path
-    pub fn kind(&self) -> ModuleSearchPathKind {
-        self.inner.kind
-    }
-
-    /// Return the location of the search path on the file system
-    pub fn path(&self) -> &VfsPath {
-        &self.inner.path
-    }
-}
-
-impl std::fmt::Debug for ModuleSearchPath {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ModuleSearchPath")
-            .field("path", &self.inner.path)
-            .field("kind", &self.kind())
-            .finish()
-    }
-}
-
-#[derive(Eq, PartialEq)]
-struct ModuleSearchPathInner {
-    path: VfsPath,
-    kind: ModuleSearchPathKind,
-}
-
 /// Enumeration of the different kinds of search paths type checkers are expected to support.
 ///
 /// N.B. Although we don't implement `Ord` for this enum, they are ordered in terms of the
-/// priority that we want to give these modules when resolving them.
-/// This is roughly [the order given in the typing spec], but typeshed's stubs
-/// for the standard library are moved higher up to match Python's semantics at runtime.
+/// priority that we want to give these modules when resolving them,
+/// as per [the order given in the typing spec]
 ///
 /// [the order given in the typing spec]: https://typing.readthedocs.io/en/latest/spec/distributing.html#import-resolution-ordering
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum ModuleSearchPathKind {
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum ModuleSearchPathEntry {
     /// "Extra" paths provided by the user in a config file, env var or CLI flag.
     /// E.g. mypy's `MYPYPATH` env var, or pyright's `stubPath` configuration setting
-    Extra,
+    Extra(FileSystemPathBuf),
 
     /// Files in the project we're directly being invoked on
-    FirstParty,
+    FirstParty(FileSystemPathBuf),
 
     /// The `stdlib` directory of typeshed (either vendored or custom)
-    StandardLibrary,
+    StandardLibrary(VfsPath),
 
     /// Stubs or runtime modules installed in site-packages
-    SitePackagesThirdParty,
+    SitePackagesThirdParty(FileSystemPathBuf),
 
     /// Vendored third-party stubs from typeshed
-    VendoredThirdParty,
+    VendoredThirdParty(VendoredPathBuf),
+}
+
+impl ModuleSearchPathEntry {
+    pub fn path(&self) -> VfsPathRef {
+        match self {
+            Self::Extra(path) | Self::FirstParty(path) | Self::SitePackagesThirdParty(path) => {
+                VfsPathRef::FileSystem(path)
+            }
+            Self::VendoredThirdParty(path) => VfsPathRef::Vendored(path),
+            Self::StandardLibrary(path) => match path {
+                VfsPath::FileSystem(path) => VfsPathRef::FileSystem(path),
+                VfsPath::Vendored(path) => VfsPathRef::Vendored(path),
+            },
+        }
+    }
 }

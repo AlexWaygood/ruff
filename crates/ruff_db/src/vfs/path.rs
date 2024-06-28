@@ -1,3 +1,5 @@
+use camino::Utf8Components;
+
 use crate::file_system::{FileSystemPath, FileSystemPathBuf};
 use crate::vendored::path::{VendoredPath, VendoredPathBuf};
 
@@ -16,10 +18,16 @@ pub enum VfsPath {
 }
 
 impl VfsPath {
-    /// Create a new path to a file on the file system.
+    /// Create a new path to a file/directory on the file system.
     #[must_use]
     pub fn file_system(path: impl AsRef<FileSystemPath>) -> Self {
         VfsPath::FileSystem(path.as_ref().to_path_buf())
+    }
+
+    /// Create a new path to a file/directory in a vendored zip file
+    #[must_use]
+    pub fn vendored(path: impl AsRef<VendoredPath>) -> Self {
+        VfsPath::Vendored(path.as_ref().to_path_buf())
     }
 
     /// Returns `Some` if the path is a file system path that points to a path on disk.
@@ -65,10 +73,32 @@ impl VfsPath {
     }
 
     /// Yields the underlying [`str`] slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
             VfsPath::FileSystem(path) => path.as_str(),
             VfsPath::Vendored(path) => path.as_str(),
+        }
+    }
+
+    pub fn push(&mut self, part: &str) {
+        match self {
+            VfsPath::FileSystem(ref mut path) => path.push(part),
+            VfsPath::Vendored(ref mut path) => path.push(part),
+        }
+    }
+
+    pub fn join(&self, part: &str) -> Self {
+        match self {
+            VfsPath::FileSystem(path) => VfsPath::FileSystem(path.join(part)),
+            VfsPath::Vendored(path) => VfsPath::Vendored(path.join(part)),
+        }
+    }
+
+    pub fn with_pyi_extension(&self) -> Self {
+        match self {
+            VfsPath::FileSystem(path) => VfsPath::FileSystem(path.with_extension("pyi")),
+            VfsPath::Vendored(path) => VfsPath::Vendored(path.with_pyi_extension()),
         }
     }
 }
@@ -157,5 +187,60 @@ impl PartialEq<VfsPath> for VendoredPathBuf {
     #[inline]
     fn eq(&self, other: &VfsPath) -> bool {
         other == self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VfsPathRef<'a> {
+    FileSystem(&'a FileSystemPath),
+    Vendored(&'a VendoredPath),
+}
+
+impl<'a> VfsPathRef<'a> {
+    #[must_use]
+    pub fn ends_with(self, child: &str) -> bool {
+        match self {
+            Self::FileSystem(path) => path.ends_with(child),
+            Self::Vendored(path) => path.ends_with(child),
+        }
+    }
+
+    #[must_use]
+    pub fn parent(self) -> Option<Self> {
+        match self {
+            Self::FileSystem(path) => path.parent().map(VfsPathRef::FileSystem),
+            Self::Vendored(path) => path.parent().map(VfsPathRef::Vendored),
+        }
+    }
+
+    #[must_use]
+    pub fn as_str(self) -> &'a str {
+        match self {
+            Self::FileSystem(path) => path.as_str(),
+            Self::Vendored(path) => path.as_str(),
+        }
+    }
+
+    pub fn components(self) -> Utf8Components<'a> {
+        match self {
+            Self::FileSystem(path) => path.components(),
+            Self::Vendored(path) => path.components(),
+        }
+    }
+
+    #[must_use]
+    pub fn file_stem(self) -> Option<&'a str> {
+        match self {
+            Self::FileSystem(path) => path.file_stem(),
+            Self::Vendored(path) => path.file_stem(),
+        }
+    }
+
+    #[must_use]
+    pub fn to_path_buf(self) -> VfsPath {
+        match self {
+            Self::FileSystem(path) => VfsPath::FileSystem(path.to_path_buf()),
+            Self::Vendored(path) => VfsPath::Vendored(path.to_path_buf()),
+        }
     }
 }
