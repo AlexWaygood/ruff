@@ -1,7 +1,6 @@
 use ruff_db::Upcast;
 
 use crate::resolver::{
-    file_to_module,
     internal::{ModuleNameIngredient, ModuleResolverSearchPaths},
     resolve_module_query,
 };
@@ -11,7 +10,6 @@ pub struct Jar(
     ModuleNameIngredient<'_>,
     ModuleResolverSearchPaths,
     resolve_module_query,
-    file_to_module,
 );
 
 pub trait Db: salsa::DbWithJar<Jar> + ruff_db::Db + Upcast<dyn ruff_db::Db> {}

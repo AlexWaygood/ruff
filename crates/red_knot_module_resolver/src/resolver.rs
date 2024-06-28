@@ -2,7 +2,7 @@ use salsa::DebugWithDb;
 use std::ops::Deref;
 
 use ruff_db::file_system::{FileSystem, FileSystemPath, FileSystemPathBuf};
-use ruff_db::vfs::{system_path_to_file, vfs_path_to_file, VfsFile, VfsPath};
+use ruff_db::vfs::{system_path_to_file, VfsFile, VfsPath};
 
 use crate::module::{Module, ModuleKind, ModuleName, ModuleSearchPath, ModuleSearchPathKind};
 use crate::resolver::internal::ModuleResolverSearchPaths;
@@ -51,71 +51,6 @@ pub(crate) fn resolve_module_query<'db>(
     let module = Module::new(name.clone(), kind, search_path, module_file);
 
     Some(module)
-}
-
-/// Resolves the module for the given path.
-///
-/// Returns `None` if the path is not a module locatable via `sys.path`.
-#[tracing::instrument(level = "debug", skip(db))]
-pub fn path_to_module(db: &dyn Db, path: &VfsPath) -> Option<Module> {
-    // It's not entirely clear on first sight why this method calls `file_to_module` instead of
-    // it being the other way round, considering that the first thing that `file_to_module` does
-    // is to retrieve the file's path.
-    //
-    // The reason is that `file_to_module` is a tracked Salsa query and salsa queries require that
-    // all arguments are Salsa ingredients (something stored in Salsa). `Path`s aren't salsa ingredients but
-    // `VfsFile` is. So what we do here is to retrieve the `path`'s `VfsFile` so that we can make
-    // use of Salsa's caching and invalidation.
-    let file = vfs_path_to_file(db.upcast(), path)?;
-    file_to_module(db, file)
-}
-
-/// Resolves the module for the file with the given id.
-///
-/// Returns `None` if the file is not a module locatable via `sys.path`.
-#[salsa::tracked]
-#[allow(unused)]
-pub(crate) fn file_to_module(db: &dyn Db, file: VfsFile) -> Option<Module> {
-    let _ = tracing::trace_span!("file_to_module", file = ?file.debug(db.upcast())).enter();
-
-    let path = file.path(db.upcast());
-
-    let search_paths = module_search_paths(db);
-
-    let relative_path = search_paths
-        .iter()
-        .find_map(|root| match (root.path(), path) {
-            (VfsPath::FileSystem(root_path), VfsPath::FileSystem(path)) => {
-                let relative_path = path.strip_prefix(root_path).ok()?;
-                Some(relative_path)
-            }
-            (VfsPath::Vendored(_), VfsPath::Vendored(_)) => {
-                todo!("Add support for vendored modules")
-            }
-            (VfsPath::Vendored(_), VfsPath::FileSystem(_))
-            | (VfsPath::FileSystem(_), VfsPath::Vendored(_)) => None,
-        })?;
-
-    let module_name = ModuleName::from_relative_path(relative_path)?;
-
-    // Resolve the module name to see if Python would resolve the name to the same path.
-    // If it doesn't, then that means that multiple modules have the same name in different
-    // root paths, but that the module corresponding to `path` is in a lower priority search path,
-    // in which case we ignore it.
-    let module = resolve_module(db, module_name)?;
-
-    if file == module.file() {
-        Some(module)
-    } else {
-        // This path is for a module with the same name but with a different precedence. For example:
-        // ```
-        // src/foo.py
-        // src/foo/__init__.py
-        // ```
-        // The module name of `src/foo.py` is `foo`, but the module loaded by Python is `src/foo/__init__.py`.
-        // That means we need to ignore `src/foo.py` even though it resolves to the same module name.
-        None
-    }
 }
 
 /// Configures the search paths that are used to resolve modules.
@@ -376,7 +311,7 @@ mod tests {
     use crate::module::{ModuleKind, ModuleName};
 
     use super::{
-        path_to_module, resolve_module, set_module_resolution_settings, ModuleResolutionSettings,
+        resolve_module, set_module_resolution_settings, ModuleResolutionSettings,
         TYPESHED_STDLIB_DIRECTORY,
     };
 
@@ -438,12 +373,6 @@ mod tests {
         assert_eq!(&src, foo_module.search_path().path());
         assert_eq!(ModuleKind::Module, foo_module.kind());
         assert_eq!(&foo_path, foo_module.file().path(&db));
-
-        assert_eq!(
-            Some(foo_module),
-            path_to_module(&db, &VfsPath::FileSystem(foo_path))
-        );
-
         Ok(())
     }
 
@@ -471,11 +400,6 @@ mod tests {
         assert_eq!(&stdlib_dir, functools_module.search_path().path());
         assert_eq!(ModuleKind::Module, functools_module.kind());
         assert_eq!(&functools_path.clone(), functools_module.file().path(&db));
-
-        assert_eq!(
-            Some(functools_module),
-            path_to_module(&db, &VfsPath::FileSystem(functools_path))
-        );
 
         Ok(())
     }
@@ -510,11 +434,6 @@ mod tests {
         assert_eq!(
             &first_party_functools_path.clone(),
             functools_module.file().path(&db)
-        );
-
-        assert_eq!(
-            Some(functools_module),
-            path_to_module(&db, &VfsPath::FileSystem(first_party_functools_path))
         );
 
         Ok(())
@@ -560,14 +479,6 @@ mod tests {
         assert_eq!(&src, foo_module.search_path().path());
         assert_eq!(&foo_path, foo_module.file().path(&db));
 
-        assert_eq!(
-            Some(&foo_module),
-            path_to_module(&db, &VfsPath::FileSystem(foo_path)).as_ref()
-        );
-
-        // Resolving by directory doesn't resolve to the init file.
-        assert_eq!(None, path_to_module(&db, &VfsPath::FileSystem(foo_dir)));
-
         Ok(())
     }
 
@@ -583,19 +494,13 @@ mod tests {
 
         let foo_py = src.join("foo.py");
         db.memory_file_system()
-            .write_file(&foo_py, "print('Hello, world!')")?;
+            .write_file(foo_py, "print('Hello, world!')")?;
 
         let foo_module = resolve_module(&db, ModuleName::new_static("foo").unwrap()).unwrap();
 
         assert_eq!(&src, foo_module.search_path().path());
         assert_eq!(&foo_init, foo_module.file().path(&db));
         assert_eq!(ModuleKind::Package, foo_module.kind());
-
-        assert_eq!(
-            Some(foo_module),
-            path_to_module(&db, &VfsPath::FileSystem(foo_init))
-        );
-        assert_eq!(None, path_to_module(&db, &VfsPath::FileSystem(foo_py)));
 
         Ok(())
     }
@@ -613,12 +518,6 @@ mod tests {
 
         assert_eq!(&src, foo.search_path().path());
         assert_eq!(&foo_stub, foo.file().path(&db));
-
-        assert_eq!(
-            Some(foo),
-            path_to_module(&db, &VfsPath::FileSystem(foo_stub))
-        );
-        assert_eq!(None, path_to_module(&db, &VfsPath::FileSystem(foo_py)));
 
         Ok(())
     }
@@ -642,11 +541,6 @@ mod tests {
 
         assert_eq!(&src, baz_module.search_path().path());
         assert_eq!(&baz, baz_module.file().path(&db));
-
-        assert_eq!(
-            Some(baz_module),
-            path_to_module(&db, &VfsPath::FileSystem(baz))
-        );
 
         Ok(())
     }
@@ -686,20 +580,8 @@ mod tests {
             (&two, "print('Hello, world!')"),
         ])?;
 
-        let one_module =
-            resolve_module(&db, ModuleName::new_static("parent.child.one").unwrap()).unwrap();
-
-        assert_eq!(
-            Some(one_module),
-            path_to_module(&db, &VfsPath::FileSystem(one))
-        );
-
-        let two_module =
-            resolve_module(&db, ModuleName::new_static("parent.child.two").unwrap()).unwrap();
-        assert_eq!(
-            Some(two_module),
-            path_to_module(&db, &VfsPath::FileSystem(two))
-        );
+        resolve_module(&db, ModuleName::new_static("parent.child.one").unwrap()).unwrap();
+        resolve_module(&db, ModuleName::new_static("parent.child.two").unwrap()).unwrap();
 
         Ok(())
     }
@@ -740,13 +622,7 @@ mod tests {
             (&two, "print('Hello, world!')"),
         ])?;
 
-        let one_module =
-            resolve_module(&db, ModuleName::new_static("parent.child.one").unwrap()).unwrap();
-
-        assert_eq!(
-            Some(one_module),
-            path_to_module(&db, &VfsPath::FileSystem(one))
-        );
+        resolve_module(&db, ModuleName::new_static("parent.child.one").unwrap()).unwrap();
 
         assert_eq!(
             None,
@@ -774,15 +650,6 @@ mod tests {
 
         assert_eq!(&src, foo_module.search_path().path());
         assert_eq!(&foo_src, foo_module.file().path(&db));
-
-        assert_eq!(
-            Some(foo_module),
-            path_to_module(&db, &VfsPath::FileSystem(foo_src))
-        );
-        assert_eq!(
-            None,
-            path_to_module(&db, &VfsPath::FileSystem(foo_site_packages))
-        );
 
         Ok(())
     }
@@ -840,15 +707,6 @@ mod tests {
         assert_eq!(&foo, foo_module.file().path(&db));
 
         assert_ne!(&foo_module, &bar_module);
-
-        assert_eq!(
-            Some(foo_module),
-            path_to_module(&db, &VfsPath::FileSystem(foo))
-        );
-        assert_eq!(
-            Some(bar_module),
-            path_to_module(&db, &VfsPath::FileSystem(bar))
-        );
 
         Ok(())
     }

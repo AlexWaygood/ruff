@@ -2,7 +2,6 @@ use std::fmt::Formatter;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use ruff_db::file_system::FileSystemPath;
 use ruff_db::vfs::{VfsFile, VfsPath};
 use ruff_python_stdlib::identifiers::is_identifier;
 
@@ -131,32 +130,6 @@ impl ModuleName {
     #[inline]
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-
-    pub(crate) fn from_relative_path(path: &FileSystemPath) -> Option<Self> {
-        let path = if path.ends_with("__init__.py") || path.ends_with("__init__.pyi") {
-            path.parent()?
-        } else {
-            path
-        };
-
-        let name = if let Some(parent) = path.parent() {
-            let mut name = String::with_capacity(path.as_str().len());
-
-            for component in parent.components() {
-                name.push_str(component.as_os_str().to_str()?);
-                name.push('.');
-            }
-
-            // SAFETY: Unwrap is safe here or `parent` would have returned `None`.
-            name.push_str(path.file_stem().unwrap());
-
-            smol_str::SmolStr::from(name)
-        } else {
-            smol_str::SmolStr::new(path.file_stem()?)
-        };
-
-        Some(Self(name))
     }
 }
 
