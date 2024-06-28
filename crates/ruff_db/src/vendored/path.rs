@@ -8,6 +8,7 @@ use camino::{Utf8Components, Utf8Path, Utf8PathBuf};
 pub struct VendoredPath(Utf8Path);
 
 impl VendoredPath {
+    #[must_use]
     pub fn new(path: &(impl AsRef<Utf8Path> + ?Sized)) -> &Self {
         let path = path.as_ref();
         // SAFETY: VendoredPath is marked as #[repr(transparent)] so the conversion from a
@@ -15,20 +16,85 @@ impl VendoredPath {
         unsafe { &*(path as *const Utf8Path as *const VendoredPath) }
     }
 
+    /// Converts the path to an owned [`VendoredPathBuf`]
+    #[must_use]
     pub fn to_path_buf(&self) -> VendoredPathBuf {
         VendoredPathBuf(self.0.to_path_buf())
     }
 
+    /// Yields the underlying [`str`] slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
+    #[must_use]
     pub fn as_std_path(&self) -> &path::Path {
         self.0.as_std_path()
     }
 
     pub fn components(&self) -> Utf8Components {
         self.0.components()
+    }
+
+    /// Determines whether `child` is a suffix of `self`.
+    ///
+    /// Only considers whole path components to match.
+    #[inline]
+    #[must_use]
+    pub fn ends_with(&self, child: impl AsRef<VendoredPath>) -> bool {
+        self.0.ends_with(child.as_ref())
+    }
+
+    /// Returns the `VendoredPath` without its final component, if there is one.
+    ///
+    /// Returns [`None`] if the path terminates in a root or prefix.
+    #[must_use]
+    pub fn parent(&self) -> Option<&VendoredPath> {
+        self.0.parent().map(VendoredPath::new)
+    }
+
+    /// Returns the final component of the `VendoredPath`, if there is one.
+    ///
+    /// If the path is a normal file, this is the file name. If it's the path of a directory, this
+    /// is the directory name.
+    ///
+    /// Returns [`None`] if the path terminates in `..`.
+    #[inline]
+    #[must_use]
+    pub fn file_name(&self) -> Option<&str> {
+        self.0.file_name()
+    }
+
+    /// Extracts the stem (non-extension) portion of [`self.file_name`].
+    ///
+    /// [`self.file_name`]: VendoredPath::file_name
+    ///
+    /// The stem is:
+    ///
+    /// * [`None`], if there is no file name;
+    /// * The entire file name if there is no embedded `.`;
+    /// * The entire file name if the file name begins with `.` and has no other `.`s within;
+    /// * Otherwise, the portion of the file name before the final `.`
+    #[must_use]
+    pub fn file_stem(&self) -> Option<&str> {
+        self.0.file_stem()
+    }
+
+    /// Returns a path that, when joined onto `base`, yields `self`.
+    ///
+    /// # Errors
+    ///
+    /// If `base` is not a prefix of `self` (i.e., [`starts_with`]
+    /// returns `false`), returns [`Err`].
+    ///
+    /// [`starts_with`]: FileSystemPath::starts_with
+    #[inline]
+    pub fn strip_prefix(
+        &self,
+        base: impl AsRef<VendoredPath>,
+    ) -> std::result::Result<&VendoredPath, path::StripPrefixError> {
+        self.0.strip_prefix(base.as_ref()).map(VendoredPath::new)
     }
 }
 
@@ -43,10 +109,13 @@ impl Default for VendoredPathBuf {
 }
 
 impl VendoredPathBuf {
+    #[must_use]
     pub fn new() -> Self {
         Self(Utf8PathBuf::new())
     }
 
+    #[must_use]
+    #[inline]
     pub fn as_path(&self) -> &VendoredPath {
         VendoredPath::new(&self.0)
     }
