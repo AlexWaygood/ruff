@@ -1,22 +1,29 @@
 mod versions;
 
+use once_cell::sync::Lazy;
+
 pub(crate) use versions::{
     parse_typeshed_versions, LazyTypeshedVersions, TypeshedVersionsQueryResult,
 };
 pub use versions::{TypeshedVersionsParseError, TypeshedVersionsParseErrorKind};
+
+use ruff_db::vendored::VendoredFileSystem;
+
+// The file path here is hardcoded in this crate's `build.rs` script.
+// Luckily this crate will fail to build if this file isn't available at build time.
+const TYPESHED_ZIP_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/zipped_typeshed.zip"));
+
+pub(crate) static VENDORED_TYPESHED: Lazy<VendoredFileSystem> =
+    Lazy::new(|| VendoredFileSystem::new(TYPESHED_ZIP_BYTES).unwrap());
 
 #[cfg(test)]
 mod tests {
     use std::io::{self, Read};
     use std::path::Path;
 
-    use ruff_db::vendored::VendoredFileSystem;
-    use ruff_db::vfs::VendoredPath;
+    use ruff_db::vendored::path::VendoredPath;
 
-    // The file path here is hardcoded in this crate's `build.rs` script.
-    // Luckily this crate will fail to build if this file isn't available at build time.
-    const TYPESHED_ZIP_BYTES: &[u8] =
-        include_bytes!(concat!(env!("OUT_DIR"), "/zipped_typeshed.zip"));
+    use super::*;
 
     #[test]
     fn typeshed_zip_created_at_build_time() {
@@ -39,7 +46,6 @@ mod tests {
     #[test]
     fn typeshed_vfs_consistent_with_vendored_stubs() {
         let vendored_typeshed_dir = Path::new("vendor/typeshed").canonicalize().unwrap();
-        let vendored_typeshed_stubs = VendoredFileSystem::new(TYPESHED_ZIP_BYTES).unwrap();
 
         let mut empty_iterator = true;
         for entry in walkdir::WalkDir::new(&vendored_typeshed_dir).min_depth(1) {
@@ -58,16 +64,16 @@ mod tests {
                 .unwrap_or_else(|_| panic!("Expected {relative_path:?} to be valid UTF-8"));
 
             assert!(
-                vendored_typeshed_stubs.exists(vendored_path),
+                VENDORED_TYPESHED.exists(vendored_path),
                 "Expected {vendored_path:?} to exist in the `VendoredFileSystem`!
 
                 Vendored file system:
 
-                {vendored_typeshed_stubs:#?}
+                {VENDORED_TYPESHED:#?}
                 "
             );
 
-            let vendored_path_kind = vendored_typeshed_stubs
+            let vendored_path_kind = VENDORED_TYPESHED
                 .metadata(vendored_path)
                 .unwrap_or_else(|| {
                     panic!(
@@ -75,7 +81,7 @@ mod tests {
 
                         Vendored file system:
 
-                        {vendored_typeshed_stubs:#?}
+                        {VENDORED_TYPESHED:#?}
                         "
                     )
                 })

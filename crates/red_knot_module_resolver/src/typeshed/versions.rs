@@ -5,9 +5,9 @@ use std::num::{NonZeroU16, NonZeroUsize};
 use std::ops::{RangeFrom, RangeInclusive};
 use std::str::FromStr;
 
-use ruff_db::file_system::FileSystemPath;
+use once_cell::sync::Lazy;
 use ruff_db::source::source_text;
-use ruff_db::vfs::{system_path_to_file, VfsFile};
+use ruff_db::vfs::{system_path_to_file, VfsFile, VfsPathRef};
 use rustc_hash::FxHashMap;
 
 use crate::db::Db;
@@ -40,15 +40,18 @@ impl<'db> LazyTypeshedVersions<'db> {
         &self,
         module: &ModuleName,
         db: &'db dyn Db,
-        stdlib_root: &FileSystemPath,
+        stdlib_root: VfsPathRef,
         target_version: TargetVersion,
     ) -> TypeshedVersionsQueryResult {
         let versions = self.0.get_or_init(|| {
-            let versions_path = stdlib_root.join("VERSIONS");
+            let versions_path = match stdlib_root {
+                VfsPathRef::FileSystem(path) => path.join("VERSIONS"),
+                VfsPathRef::Vendored(_) => return &VENDORED_VERSIONS,
+            };
             let Some(versions_file) = system_path_to_file(db.upcast(), &versions_path) else {
                 todo!(
                     "Still need to figure out how to handle VERSIONS files being deleted \
-                    from custom typeshed directories! Expected a file to exist at {versions_path}"
+                    from custom typeshed directories! Expected a file to exist at {versions_path:?}"
                 )
             };
             // TODO(Alex/Micha): If VERSIONS is invalid,
@@ -69,6 +72,10 @@ pub(crate) fn parse_typeshed_versions(
     let file_content = source_text(db.upcast(), versions_file);
     file_content.parse()
 }
+
+static VENDORED_VERSIONS: Lazy<TypeshedVersions> = Lazy::new(|| {
+    TypeshedVersions::from_str(include_str!("../../vendor/typeshed/stdlib/VERSIONS")).unwrap()
+});
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypeshedVersionsParseError {

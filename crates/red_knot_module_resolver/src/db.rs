@@ -161,12 +161,19 @@ pub(crate) mod tests {
         custom_typeshed: FileSystemPathBuf,
         site_packages: FileSystemPathBuf,
         target_version: Option<TargetVersion>,
+        use_vendored_stubs: bool,
     }
 
     impl TestCaseBuilder {
         #[must_use]
         pub(crate) fn with_target_version(mut self, target_version: TargetVersion) -> Self {
             self.target_version = Some(target_version);
+            self
+        }
+
+        #[must_use]
+        pub(crate) fn with_vendored_stubs_used(mut self) -> Self {
+            self.use_vendored_stubs = true;
             self
         }
 
@@ -177,13 +184,18 @@ pub(crate) mod tests {
                 custom_typeshed,
                 site_packages,
                 target_version,
+                use_vendored_stubs,
             } = self;
 
             let settings = RawModuleResolutionSettings {
                 target_version: target_version.unwrap_or_default(),
                 extra_paths: vec![],
                 workspace_root: src.clone(),
-                custom_typeshed: Some(custom_typeshed.clone()),
+                custom_typeshed: if use_vendored_stubs {
+                    None
+                } else {
+                    Some(custom_typeshed.clone())
+                },
                 site_packages: Some(site_packages.clone()),
             };
 
@@ -259,6 +271,7 @@ pub(crate) mod tests {
             custom_typeshed,
             site_packages,
             target_version: None,
+            use_vendored_stubs: false,
         })
     }
 }

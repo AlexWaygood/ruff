@@ -5,11 +5,13 @@
 use std::fmt;
 
 use ruff_db::file_system::{FileSystemPath, FileSystemPathBuf};
-use ruff_db::vfs::{system_path_to_file, VfsFile};
+use ruff_db::vfs::{
+    system_path_to_file, vfs_path_to_file, VendoredPath, VendoredPathBuf, VfsFile, VfsPath, VfsPathRef,
+};
 
 use crate::module_name::ModuleName;
 use crate::state::ResolverState;
-use crate::typeshed::TypeshedVersionsQueryResult;
+use crate::typeshed::{TypeshedVersionsQueryResult, VENDORED_TYPESHED};
 
 /// Enumeration of the different kinds of search paths type checkers are expected to support.
 ///
@@ -22,14 +24,14 @@ use crate::typeshed::TypeshedVersionsQueryResult;
 enum ModuleResolutionPathBufInner {
     Extra(FileSystemPathBuf),
     FirstParty(FileSystemPathBuf),
-    StandardLibrary(FileSystemPathBuf),
+    StandardLibrary(VfsPath),
     SitePackages(FileSystemPathBuf),
 }
 
 impl ModuleResolutionPathBufInner {
     fn push(&mut self, component: &str) {
         let extension = camino::Utf8Path::new(component).extension();
-        let inner = match self {
+        match self {
             Self::Extra(ref mut path) => {
                 if let Some(extension) = extension {
                     assert!(
@@ -37,7 +39,11 @@ impl ModuleResolutionPathBufInner {
                         "Extension must be `py` or `pyi`; got `{extension}`"
                     );
                 }
-                path
+                assert!(
+                    path.extension().is_none(),
+                    "Cannot push part {component} to {path}, which already has an extension"
+                );
+                path.push(component);
             }
             Self::FirstParty(ref mut path) => {
                 if let Some(extension) = extension {
@@ -46,7 +52,11 @@ impl ModuleResolutionPathBufInner {
                         "Extension must be `py` or `pyi`; got `{extension}`"
                     );
                 }
-                path
+                assert!(
+                    path.extension().is_none(),
+                    "Cannot push part {component} to {path}, which already has an extension"
+                );
+                path.push(component);
             }
             Self::StandardLibrary(ref mut path) => {
                 if let Some(extension) = extension {
@@ -55,7 +65,14 @@ impl ModuleResolutionPathBufInner {
                         "Extension must be `pyi`; got `{extension}`"
                     );
                 }
-                path
+                assert!(
+                    path.extension().is_none(),
+                    "Cannot push part {component} to {path:?}, which already has an extension"
+                );
+                match path {
+                    VfsPath::FileSystem(path) => path.push(component),
+                    VfsPath::Vendored(path) => path.push(component),
+                }
             }
             Self::SitePackages(ref mut path) => {
                 if let Some(extension) = extension {
@@ -64,14 +81,13 @@ impl ModuleResolutionPathBufInner {
                         "Extension must be `py` or `pyi`; got `{extension}`"
                     );
                 }
-                path
+                assert!(
+                    path.extension().is_none(),
+                    "Cannot push part {component} to {path}, which already has an extension"
+                );
+                path.push(component);
             }
-        };
-        assert!(
-            inner.extension().is_none(),
-            "Cannot push part {component} to {inner}, which already has an extension"
-        );
-        inner.push(component);
+        }
     }
 }
 
@@ -106,16 +122,22 @@ impl ModuleResolutionPathBuf {
     }
 
     #[must_use]
-    pub(crate) fn standard_library(path: impl Into<FileSystemPathBuf>) -> Option<Self> {
-        let path = path.into();
+    pub(crate) fn standard_library(path: VfsPath) -> Option<Self> {
         path.extension()
             .map_or(true, |ext| ext == "pyi")
             .then_some(Self(ModuleResolutionPathBufInner::StandardLibrary(path)))
     }
 
     #[must_use]
-    pub(crate) fn stdlib_from_typeshed_root(typeshed_root: &FileSystemPath) -> Option<Self> {
-        Self::standard_library(typeshed_root.join(FileSystemPath::new("stdlib")))
+    pub(crate) fn stdlib_from_custom_typeshed_root(typeshed_root: &FileSystemPath) -> Option<Self> {
+        Self::standard_library(VfsPath::FileSystem(typeshed_root.join("stdlib")))
+    }
+
+    #[must_use]
+    pub(crate) fn vendored_stdlib() -> Self {
+        Self(ModuleResolutionPathBufInner::StandardLibrary(
+            VfsPath::Vendored(VendoredPathBuf::from("stdlib")),
+        ))
     }
 
     #[must_use]
@@ -149,9 +171,9 @@ impl ModuleResolutionPathBuf {
     #[must_use]
     pub(crate) fn relativize_path<'a>(
         &'a self,
-        absolute_path: &'a (impl AsRef<FileSystemPath> + ?Sized),
+        absolute_path: &VfsPathRef<'a>,
     ) -> Option<ModuleResolutionPathRef<'a>> {
-        ModuleResolutionPathRef::from(self).relativize_path(absolute_path.as_ref())
+        ModuleResolutionPathRef::from(self).relativize_path(absolute_path)
     }
 
     /// Returns `None` if the path doesn't exist, isn't accessible, or if the path points to a directory.
@@ -166,15 +188,24 @@ impl ModuleResolutionPathBuf {
 
 impl fmt::Debug for ModuleResolutionPathBuf {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (name, path) = match &self.0 {
-            ModuleResolutionPathBufInner::Extra(path) => ("Extra", path),
-            ModuleResolutionPathBufInner::FirstParty(path) => ("FirstParty", path),
-            ModuleResolutionPathBufInner::SitePackages(path) => ("SitePackages", path),
-            ModuleResolutionPathBufInner::StandardLibrary(path) => ("StandardLibrary", path),
-        };
-        f.debug_tuple(&format!("ModuleResolutionPathBuf::{name}"))
-            .field(path)
-            .finish()
+        match &self.0 {
+            ModuleResolutionPathBufInner::Extra(path) => f
+                .debug_tuple("ModuleResolutionPathBuf::Extra")
+                .field(path)
+                .finish(),
+            ModuleResolutionPathBufInner::FirstParty(path) => f
+                .debug_tuple("ModuleResolutionPathBuf::FirstParty")
+                .field(path)
+                .finish(),
+            ModuleResolutionPathBufInner::SitePackages(path) => f
+                .debug_tuple("ModuleResolutionPathBuf::SitePackages")
+                .field(path)
+                .finish(),
+            ModuleResolutionPathBufInner::StandardLibrary(path) => f
+                .debug_tuple("ModuleResolutionPathBuf::StandardLibrary")
+                .field(path)
+                .finish(),
+        }
     }
 }
 
@@ -182,16 +213,16 @@ impl fmt::Debug for ModuleResolutionPathBuf {
 enum ModuleResolutionPathRefInner<'a> {
     Extra(&'a FileSystemPath),
     FirstParty(&'a FileSystemPath),
-    StandardLibrary(&'a FileSystemPath),
+    StandardLibrary(VfsPathRef<'a>),
     SitePackages(&'a FileSystemPath),
 }
 
 impl<'a> ModuleResolutionPathRefInner<'a> {
     #[must_use]
     fn query_stdlib_version<'db>(
-        module_path: &'a FileSystemPath,
+        module_path: &VfsPathRef<'a>,
         stdlib_search_path: Self,
-        stdlib_root: &FileSystemPath,
+        stdlib_root: VfsPathRef,
         resolver_state: &ResolverState<'db>,
     ) -> TypeshedVersionsQueryResult {
         let Some(module_name) = stdlib_search_path
@@ -217,8 +248,15 @@ impl<'a> ModuleResolutionPathRefInner<'a> {
             (Self::StandardLibrary(path), Self::StandardLibrary(stdlib_root)) => {
                 match Self::query_stdlib_version( path, search_path, stdlib_root, resolver) {
                     TypeshedVersionsQueryResult::DoesNotExist => false,
-                    TypeshedVersionsQueryResult::Exists => resolver.file_system().is_directory(path),
-                    TypeshedVersionsQueryResult::MaybeExists => resolver.file_system().is_directory(path),
+                    // !!! (This should go via the `Vfs` struct so that it gets interned with Salsa)
+                    TypeshedVersionsQueryResult::Exists => match path {
+                        VfsPathRef::FileSystem(path) => resolver.file_system().is_directory(path),
+                        VfsPathRef::Vendored(path) => VENDORED_TYPESHED.is_directory(path)
+                    }
+                    TypeshedVersionsQueryResult::MaybeExists => match path {
+                        VfsPathRef::FileSystem(path) => resolver.file_system().is_directory(path),
+                        VfsPathRef::Vendored(path) => VENDORED_TYPESHED.is_directory(path)
+                    },
                 }
             }
             (path, root) => unreachable!(
@@ -245,8 +283,15 @@ impl<'a> ModuleResolutionPathRefInner<'a> {
             (Self::StandardLibrary(path), Self::StandardLibrary(stdlib_root)) => {
                 match Self::query_stdlib_version( path, search_path, stdlib_root, resolver) {
                     TypeshedVersionsQueryResult::DoesNotExist => false,
-                    TypeshedVersionsQueryResult::Exists => resolver.db.file_system().exists(&path.join("__init__.pyi")),
-                    TypeshedVersionsQueryResult::MaybeExists => resolver.db.file_system().exists(&path.join("__init__.pyi")),
+                    // !!! This should go via the `Vfs` struct so it gets interned with Salsa
+                    TypeshedVersionsQueryResult::Exists => match path {
+                        VfsPathRef::FileSystem(path) => resolver.db.file_system().exists(&path.join("__init__.pyi")),
+                        VfsPathRef::Vendored(path) => VENDORED_TYPESHED.exists(&path.join("__init__.pyi"))
+                    }
+                    TypeshedVersionsQueryResult::MaybeExists => match path {
+                        VfsPathRef::FileSystem(path) => resolver.db.file_system().exists(&path.join("__init__.pyi")),
+                        VfsPathRef::Vendored(path) => VENDORED_TYPESHED.exists(&path.join("__init__.pyi"))
+                    }
                 }
             }
             (path, root) => unreachable!(
@@ -263,10 +308,10 @@ impl<'a> ModuleResolutionPathRefInner<'a> {
                 system_path_to_file(resolver.db.upcast(), path)
             }
             (Self::StandardLibrary(path), Self::StandardLibrary(stdlib_root)) => {
-                match Self::query_stdlib_version(path, search_path, stdlib_root, resolver) {
+                match Self::query_stdlib_version(&path, search_path, stdlib_root, resolver) {
                     TypeshedVersionsQueryResult::DoesNotExist => None,
-                    TypeshedVersionsQueryResult::Exists => system_path_to_file(resolver.db.upcast(), path),
-                    TypeshedVersionsQueryResult::MaybeExists => system_path_to_file(resolver.db.upcast(), path)
+                    TypeshedVersionsQueryResult::Exists => vfs_path_to_file(resolver.db.upcast(), &path.to_path_buf()),
+                    TypeshedVersionsQueryResult::MaybeExists => vfs_path_to_file(resolver.db.upcast(), &path.to_path_buf())
                 }
             }
             (path, root) => unreachable!(
@@ -277,23 +322,31 @@ impl<'a> ModuleResolutionPathRefInner<'a> {
 
     #[must_use]
     fn to_module_name(self) -> Option<ModuleName> {
-        let (fs_path, skip_final_part) = match self {
-            Self::Extra(path) | Self::FirstParty(path) | Self::SitePackages(path) => (
-                path,
-                path.ends_with("__init__.py") || path.ends_with("__init__.pyi"),
-            ),
-            Self::StandardLibrary(path) => (path, path.ends_with("__init__.pyi")),
-        };
-
-        let parent_components = fs_path
-            .parent()?
-            .components()
-            .map(|component| component.as_str());
-
-        if skip_final_part {
-            ModuleName::from_components(parent_components)
-        } else {
-            ModuleName::from_components(parent_components.chain(fs_path.file_stem()))
+        match self {
+            Self::Extra(path) | Self::FirstParty(path) | Self::SitePackages(path) => {
+                let parent_components = path
+                    .parent()?
+                    .components()
+                    .map(|component| component.as_str());
+                if path.ends_with("__init__.py") || path.ends_with("__init__.pyi") {
+                    ModuleName::from_components(parent_components)
+                } else {
+                    ModuleName::from_components(parent_components.chain(path.file_stem()))
+                }
+            }
+            Self::StandardLibrary(path) => {
+                let parent = path.parent()?;
+                let parent_components = parent.components().map(|component| component.as_str());
+                let skip_final_part = match path {
+                    VfsPathRef::FileSystem(path) => path.ends_with("__init__.pyi"),
+                    VfsPathRef::Vendored(path) => path.ends_with("__init__.pyi"),
+                };
+                if skip_final_part {
+                    ModuleName::from_components(parent_components)
+                } else {
+                    ModuleName::from_components(parent_components.chain(path.file_stem()))
+                }
+            }
         }
     }
 
@@ -304,9 +357,14 @@ impl<'a> ModuleResolutionPathRefInner<'a> {
             Self::FirstParty(path) => {
                 ModuleResolutionPathBufInner::FirstParty(path.with_extension("pyi"))
             }
-            Self::StandardLibrary(path) => {
-                ModuleResolutionPathBufInner::StandardLibrary(path.with_extension("pyi"))
-            }
+            Self::StandardLibrary(path) => match path {
+                VfsPathRef::FileSystem(path) => ModuleResolutionPathBufInner::StandardLibrary(
+                    VfsPath::FileSystem(path.with_extension("pyi")),
+                ),
+                VfsPathRef::Vendored(path) => ModuleResolutionPathBufInner::StandardLibrary(
+                    VfsPath::Vendored(path.with_pyi_extension()),
+                ),
+            },
             Self::SitePackages(path) => {
                 ModuleResolutionPathBufInner::SitePackages(path.with_extension("pyi"))
             }
@@ -330,28 +388,52 @@ impl<'a> ModuleResolutionPathRefInner<'a> {
     }
 
     #[must_use]
-    fn relativize_path(&self, absolute_path: &'a FileSystemPath) -> Option<Self> {
-        match self {
-            Self::Extra(root) => absolute_path.strip_prefix(root).ok().and_then(|path| {
-                path.extension()
-                    .map_or(true, |ext| matches!(ext, "py" | "pyi"))
-                    .then_some(Self::Extra(path))
-            }),
-            Self::FirstParty(root) => absolute_path.strip_prefix(root).ok().and_then(|path| {
-                path.extension()
-                    .map_or(true, |ext| matches!(ext, "pyi" | "py"))
-                    .then_some(Self::FirstParty(path))
-            }),
-            Self::StandardLibrary(root) => absolute_path.strip_prefix(root).ok().and_then(|path| {
-                path.extension()
-                    .map_or(true, |ext| ext == "pyi")
-                    .then_some(Self::StandardLibrary(path))
-            }),
-            Self::SitePackages(root) => absolute_path.strip_prefix(root).ok().and_then(|path| {
-                path.extension()
-                    .map_or(true, |ext| matches!(ext, "pyi" | "py"))
-                    .then_some(Self::SitePackages(path))
-            }),
+    fn relativize_path(&self, absolute_path: &VfsPathRef<'a>) -> Option<Self> {
+        match (self, absolute_path) {
+            (Self::Extra(root), VfsPathRef::FileSystem(absolute_path)) => {
+                absolute_path.strip_prefix(root).ok().and_then(|path| {
+                    path.extension()
+                        .map_or(true, |ext| matches!(ext, "py" | "pyi"))
+                        .then_some(Self::Extra(path))
+                })
+            }
+            (Self::FirstParty(root), VfsPathRef::FileSystem(absolute_path)) => {
+                absolute_path.strip_prefix(root).ok().and_then(|path| {
+                    path.extension()
+                        .map_or(true, |ext| matches!(ext, "pyi" | "py"))
+                        .then_some(Self::FirstParty(path))
+                })
+            }
+            (Self::StandardLibrary(root), VfsPathRef::FileSystem(absolute_path)) => match root {
+                VfsPathRef::FileSystem(root) => {
+                    absolute_path.strip_prefix(root).ok().and_then(|path| {
+                        path.extension()
+                            .map_or(true, |ext| ext == "pyi")
+                            .then_some(Self::StandardLibrary(VfsPathRef::FileSystem(path)))
+                    })
+                }
+                VfsPathRef::Vendored(_) => None,
+            },
+            (Self::SitePackages(root), VfsPathRef::FileSystem(absolute_path)) => {
+                absolute_path.strip_prefix(root).ok().and_then(|path| {
+                    path.extension()
+                        .map_or(true, |ext| matches!(ext, "pyi" | "py"))
+                        .then_some(Self::SitePackages(path))
+                })
+            }
+            (Self::Extra(_), VfsPathRef::Vendored(_)) => None,
+            (Self::FirstParty(_), VfsPathRef::Vendored(_)) => None,
+            (Self::StandardLibrary(root), VfsPathRef::Vendored(absolute_path)) => match root {
+                VfsPathRef::FileSystem(_) => None,
+                VfsPathRef::Vendored(root) => {
+                    absolute_path.strip_prefix(root).ok().and_then(|path| {
+                        path.extension()
+                            .map_or(true, |ext| ext == "pyi")
+                            .then_some(Self::StandardLibrary(VfsPathRef::Vendored(path)))
+                    })
+                }
+            },
+            (Self::SitePackages(_), VfsPathRef::Vendored(_)) => None,
         }
     }
 }
@@ -403,22 +485,31 @@ impl<'a> ModuleResolutionPathRef<'a> {
     }
 
     #[must_use]
-    pub(crate) fn relativize_path(&self, absolute_path: &'a FileSystemPath) -> Option<Self> {
+    pub(crate) fn relativize_path(&self, absolute_path: &VfsPathRef<'a>) -> Option<Self> {
         self.0.relativize_path(absolute_path).map(Self)
     }
 }
 
 impl fmt::Debug for ModuleResolutionPathRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (name, path) = match &self.0 {
-            ModuleResolutionPathRefInner::Extra(path) => ("Extra", path),
-            ModuleResolutionPathRefInner::FirstParty(path) => ("FirstParty", path),
-            ModuleResolutionPathRefInner::SitePackages(path) => ("SitePackages", path),
-            ModuleResolutionPathRefInner::StandardLibrary(path) => ("StandardLibrary", path),
-        };
-        f.debug_tuple(&format!("ModuleResolutionPathRef::{name}"))
-            .field(path)
-            .finish()
+        match &self.0 {
+            ModuleResolutionPathRefInner::Extra(path) => f
+                .debug_tuple("ModuleResolutionPathRef::Extra")
+                .field(path)
+                .finish(),
+            ModuleResolutionPathRefInner::FirstParty(path) => f
+                .debug_tuple("ModuleResolutionPathRef::FirstParty")
+                .field(path)
+                .finish(),
+            ModuleResolutionPathRefInner::SitePackages(path) => f
+                .debug_tuple("ModuleResolutionPathRef::SitePackages")
+                .field(path)
+                .finish(),
+            ModuleResolutionPathRefInner::StandardLibrary(path) => f
+                .debug_tuple("ModuleResolutionPathRef::StandardLibrary")
+                .field(path)
+                .finish(),
+        }
     }
 }
 
@@ -429,9 +520,14 @@ impl<'a> From<&'a ModuleResolutionPathBuf> for ModuleResolutionPathRef<'a> {
             ModuleResolutionPathBufInner::FirstParty(path) => {
                 ModuleResolutionPathRefInner::FirstParty(path)
             }
-            ModuleResolutionPathBufInner::StandardLibrary(path) => {
-                ModuleResolutionPathRefInner::StandardLibrary(path)
-            }
+            ModuleResolutionPathBufInner::StandardLibrary(path) => match path {
+                VfsPath::FileSystem(path) => {
+                    ModuleResolutionPathRefInner::StandardLibrary(VfsPathRef::FileSystem(path))
+                }
+                VfsPath::Vendored(path) => {
+                    ModuleResolutionPathRefInner::StandardLibrary(VfsPathRef::Vendored(path))
+                }
+            },
             ModuleResolutionPathBufInner::SitePackages(path) => {
                 ModuleResolutionPathRefInner::SitePackages(path)
             }
@@ -442,13 +538,15 @@ impl<'a> From<&'a ModuleResolutionPathBuf> for ModuleResolutionPathRef<'a> {
 
 impl PartialEq<FileSystemPath> for ModuleResolutionPathRef<'_> {
     fn eq(&self, other: &FileSystemPath) -> bool {
-        let fs_path = match self.0 {
-            ModuleResolutionPathRefInner::Extra(path) => path,
-            ModuleResolutionPathRefInner::FirstParty(path) => path,
-            ModuleResolutionPathRefInner::SitePackages(path) => path,
-            ModuleResolutionPathRefInner::StandardLibrary(path) => path,
-        };
-        fs_path == other
+        match self.0 {
+            ModuleResolutionPathRefInner::Extra(path) => path == other,
+            ModuleResolutionPathRefInner::FirstParty(path) => path == other,
+            ModuleResolutionPathRefInner::SitePackages(path) => path == other,
+            ModuleResolutionPathRefInner::StandardLibrary(path) => match path {
+                VfsPathRef::FileSystem(path) => path == other,
+                VfsPathRef::Vendored(_) => false,
+            },
+        }
     }
 }
 
@@ -465,6 +563,38 @@ impl PartialEq<FileSystemPathBuf> for ModuleResolutionPathRef<'_> {
 }
 
 impl PartialEq<ModuleResolutionPathRef<'_>> for FileSystemPathBuf {
+    fn eq(&self, other: &ModuleResolutionPathRef<'_>) -> bool {
+        &**self == other
+    }
+}
+
+impl PartialEq<VendoredPath> for ModuleResolutionPathRef<'_> {
+    fn eq(&self, other: &VendoredPath) -> bool {
+        match self.0 {
+            ModuleResolutionPathRefInner::Extra(_) => false,
+            ModuleResolutionPathRefInner::FirstParty(_) => false,
+            ModuleResolutionPathRefInner::SitePackages(_) => false,
+            ModuleResolutionPathRefInner::StandardLibrary(path) => match path {
+                VfsPathRef::FileSystem(_) => false,
+                VfsPathRef::Vendored(path) => path == other,
+            },
+        }
+    }
+}
+
+impl PartialEq<ModuleResolutionPathRef<'_>> for VendoredPath {
+    fn eq(&self, other: &ModuleResolutionPathRef) -> bool {
+        other == self
+    }
+}
+
+impl PartialEq<VendoredPathBuf> for ModuleResolutionPathRef<'_> {
+    fn eq(&self, other: &VendoredPathBuf) -> bool {
+        self == &**other
+    }
+}
+
+impl PartialEq<ModuleResolutionPathRef<'_>> for VendoredPathBuf {
     fn eq(&self, other: &ModuleResolutionPathRef<'_>) -> bool {
         &**self == other
     }
@@ -525,9 +655,12 @@ mod tests {
 
     #[test]
     fn constructor_rejects_non_pyi_stdlib_paths() {
-        assert_eq!(ModuleResolutionPathBuf::standard_library("foo.py"), None);
         assert_eq!(
-            ModuleResolutionPathBuf::standard_library("foo/__init__.py"),
+            ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo.py")),
+            None
+        );
+        assert_eq!(
+            ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo/__init__.py")),
             None
         );
     }
@@ -535,10 +668,12 @@ mod tests {
     #[test]
     fn path_buf_debug_impl() {
         assert_debug_snapshot!(
-            ModuleResolutionPathBuf::standard_library("foo/bar.pyi").unwrap(),
+            ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo/bar.pyi")).unwrap(),
             @r###"
         ModuleResolutionPathBuf::StandardLibrary(
-            "foo/bar.pyi",
+            FileSystem(
+                "foo/bar.pyi",
+            ),
         )
         "###
         );
@@ -559,18 +694,18 @@ mod tests {
     #[test]
     fn with_extension_methods() {
         assert_eq!(
-            ModuleResolutionPathBuf::standard_library("foo")
+            ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo"))
                 .unwrap()
                 .with_py_extension(),
             None
         );
 
         assert_eq!(
-            ModuleResolutionPathBuf::standard_library("foo")
+            ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo"))
                 .unwrap()
                 .with_pyi_extension(),
             ModuleResolutionPathBuf(ModuleResolutionPathBufInner::StandardLibrary(
-                FileSystemPathBuf::from("foo.pyi")
+                VfsPath::FileSystem(FileSystemPathBuf::from("foo.pyi"))
             ))
         );
 
@@ -597,7 +732,7 @@ mod tests {
 
         assert_eq!(
             ModuleResolutionPathRef(ModuleResolutionPathRefInner::StandardLibrary(
-                FileSystemPath::new("foo.pyi")
+                VfsPathRef::FileSystem(FileSystemPath::new("foo.pyi"))
             ))
             .to_module_name(),
             ModuleName::new_static("foo")
@@ -616,7 +751,7 @@ mod tests {
     fn module_name_2_parts() {
         assert_eq!(
             ModuleResolutionPathRef(ModuleResolutionPathRefInner::StandardLibrary(
-                FileSystemPath::new("foo/bar")
+                VfsPathRef::FileSystem(FileSystemPath::new("foo/bar"))
             ))
             .to_module_name(),
             ModuleName::new_static("foo.bar")
@@ -661,19 +796,19 @@ mod tests {
     #[test]
     fn join() {
         assert_eq!(
-            ModuleResolutionPathBuf::standard_library("foo")
+            ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo"))
                 .unwrap()
                 .join("bar"),
             ModuleResolutionPathBuf(ModuleResolutionPathBufInner::StandardLibrary(
-                FileSystemPathBuf::from("foo/bar")
+                VfsPath::file_system("foo/bar")
             ))
         );
         assert_eq!(
-            ModuleResolutionPathBuf::standard_library("foo")
+            ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo"))
                 .unwrap()
                 .join("bar.pyi"),
             ModuleResolutionPathBuf(ModuleResolutionPathBufInner::StandardLibrary(
-                FileSystemPathBuf::from("foo/bar.pyi")
+                VfsPath::FileSystem(FileSystemPathBuf::from("foo/bar.pyi"))
             ))
         );
         assert_eq!(
@@ -689,7 +824,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Extension must be `pyi`; got `py`")]
     fn stdlib_path_invalid_join_py() {
-        ModuleResolutionPathBuf::standard_library("foo")
+        ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo"))
             .unwrap()
             .push("bar.py");
     }
@@ -697,7 +832,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Extension must be `pyi`; got `rs`")]
     fn stdlib_path_invalid_join_rs() {
-        ModuleResolutionPathBuf::standard_library("foo")
+        ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo"))
             .unwrap()
             .push("bar.rs");
     }
@@ -713,23 +848,26 @@ mod tests {
     #[test]
     #[should_panic(expected = "already has an extension")]
     fn invalid_stdlib_join_too_many_extensions() {
-        ModuleResolutionPathBuf::standard_library("foo.pyi")
+        ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo.pyi"))
             .unwrap()
             .push("bar.pyi");
     }
 
     #[test]
     fn relativize_stdlib_path_errors() {
-        let root = ModuleResolutionPathBuf::standard_library("foo/stdlib").unwrap();
+        let root =
+            ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo/stdlib")).unwrap();
 
         // Must have a `.pyi` extension or no extension:
-        let bad_absolute_path = FileSystemPath::new("foo/stdlib/x.py");
+        let bad_absolute_path = &VfsPathRef::FileSystem(FileSystemPath::new("foo/stdlib/x.py"));
         assert_eq!(root.relativize_path(bad_absolute_path), None);
-        let second_bad_absolute_path = FileSystemPath::new("foo/stdlib/x.rs");
+        let second_bad_absolute_path =
+            &VfsPathRef::FileSystem(FileSystemPath::new("foo/stdlib/x.rs"));
         assert_eq!(root.relativize_path(second_bad_absolute_path), None);
 
         // Must be a path that is a child of `root`:
-        let third_bad_absolute_path = FileSystemPath::new("bar/stdlib/x.pyi");
+        let third_bad_absolute_path =
+            &VfsPathRef::FileSystem(FileSystemPath::new("bar/stdlib/x.pyi"));
         assert_eq!(root.relativize_path(third_bad_absolute_path), None);
     }
 
@@ -737,22 +875,25 @@ mod tests {
     fn relativize_non_stdlib_path_errors() {
         let root = ModuleResolutionPathBuf::extra("foo/stdlib").unwrap();
         // Must have a `.py` extension, a `.pyi` extension, or no extension:
-        let bad_absolute_path = FileSystemPath::new("foo/stdlib/x.rs");
+        let bad_absolute_path = &VfsPathRef::FileSystem(FileSystemPath::new("foo/stdlib/x.rs"));
         assert_eq!(root.relativize_path(bad_absolute_path), None);
         // Must be a path that is a child of `root`:
-        let second_bad_absolute_path = FileSystemPath::new("bar/stdlib/x.pyi");
+        let second_bad_absolute_path =
+            &VfsPathRef::FileSystem(FileSystemPath::new("bar/stdlib/x.pyi"));
         assert_eq!(root.relativize_path(second_bad_absolute_path), None);
     }
 
     #[test]
     fn relativize_path() {
         assert_eq!(
-            ModuleResolutionPathBuf::standard_library("foo/baz")
+            ModuleResolutionPathBuf::standard_library(VfsPath::file_system("foo/baz"))
                 .unwrap()
-                .relativize_path("foo/baz/eggs/__init__.pyi")
+                .relativize_path(&VfsPathRef::FileSystem(FileSystemPath::new(
+                    "foo/baz/eggs/__init__.pyi"
+                )))
                 .unwrap(),
             ModuleResolutionPathRef(ModuleResolutionPathRefInner::StandardLibrary(
-                FileSystemPath::new("eggs/__init__.pyi")
+                VfsPathRef::FileSystem(FileSystemPath::new("eggs/__init__.pyi"))
             ))
         );
     }
@@ -764,7 +905,7 @@ mod tests {
             ..
         } = create_resolver_builder().unwrap().build();
         let stdlib_module_path =
-            ModuleResolutionPathBuf::stdlib_from_typeshed_root(&custom_typeshed).unwrap();
+            ModuleResolutionPathBuf::stdlib_from_custom_typeshed_root(&custom_typeshed).unwrap();
         (db, stdlib_module_path)
     }
 
@@ -908,7 +1049,7 @@ mod tests {
             .with_target_version(TargetVersion::Py39)
             .build();
         let stdlib_module_path =
-            ModuleResolutionPathBuf::stdlib_from_typeshed_root(&custom_typeshed).unwrap();
+            ModuleResolutionPathBuf::stdlib_from_custom_typeshed_root(&custom_typeshed).unwrap();
         (db, stdlib_module_path)
     }
 

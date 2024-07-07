@@ -62,6 +62,17 @@ impl VendoredFileSystem {
         None
     }
 
+    pub fn is_directory(&self, path: &VendoredPath) -> bool {
+        let normalized = NormalizedVendoredPath::from(path);
+        let mut archive = self.lock_archive();
+        archive
+            .lookup_path(&normalized)
+            .is_ok_and(|zip_file| zip_file.is_dir())
+            || archive
+                .lookup_path(&normalized.with_trailing_slash())
+                .is_ok_and(|zip_file| zip_file.is_dir())
+    }
+
     /// Read the entire contents of the zip file at `path` into a string
     ///
     /// Returns an Err() if any of the following are true:

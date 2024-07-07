@@ -1,3 +1,5 @@
+use camino::Utf8Components;
+
 use crate::file_system::{FileSystemPath, FileSystemPathBuf};
 use crate::vendored::path::{VendoredPath, VendoredPathBuf};
 
@@ -69,6 +71,14 @@ impl VfsPath {
         match self {
             VfsPath::FileSystem(path) => path.as_str(),
             VfsPath::Vendored(path) => path.as_str(),
+        }
+    }
+
+    #[must_use]
+    pub fn extension(&self) -> Option<&str> {
+        match self {
+            VfsPath::FileSystem(path) => path.extension(),
+            VfsPath::Vendored(path) => path.extension(),
         }
     }
 }
@@ -157,5 +167,50 @@ impl PartialEq<VfsPath> for VendoredPathBuf {
     #[inline]
     fn eq(&self, other: &VfsPath) -> bool {
         other == self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum VfsPathRef<'a> {
+    FileSystem(&'a FileSystemPath),
+    Vendored(&'a VendoredPath),
+}
+
+impl<'a> VfsPathRef<'a> {
+    pub fn to_path_buf(self) -> VfsPath {
+        match self {
+            Self::FileSystem(path) => VfsPath::FileSystem(path.to_path_buf()),
+            Self::Vendored(path) => VfsPath::Vendored(path.to_path_buf()),
+        }
+    }
+
+    pub fn parent(&self) -> Option<Self> {
+        match self {
+            Self::FileSystem(path) => path.parent().map(Self::FileSystem),
+            Self::Vendored(path) => path.parent().map(Self::Vendored),
+        }
+    }
+
+    pub fn components(&self) -> Utf8Components {
+        match self {
+            Self::FileSystem(path) => path.components(),
+            Self::Vendored(path) => path.components(),
+        }
+    }
+
+    pub fn file_stem(&self) -> Option<&str> {
+        match self {
+            Self::FileSystem(path) => path.file_stem(),
+            Self::Vendored(path) => path.file_stem(),
+        }
+    }
+}
+
+impl<'a> From<&'a VfsPath> for VfsPathRef<'a> {
+    fn from(value: &'a VfsPath) -> Self {
+        match value {
+            VfsPath::FileSystem(path) => VfsPathRef::FileSystem(path),
+            VfsPath::Vendored(path) => VfsPathRef::Vendored(path),
+        }
     }
 }

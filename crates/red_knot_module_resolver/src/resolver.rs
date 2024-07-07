@@ -2,7 +2,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use ruff_db::file_system::FileSystemPathBuf;
-use ruff_db::vfs::{vfs_path_to_file, VfsFile, VfsPath};
+use ruff_db::vfs::{vfs_path_to_file, VfsFile, VfsPath, VfsPathRef};
 
 use crate::db::Db;
 use crate::module::{Module, ModuleKind};
@@ -78,16 +78,14 @@ pub(crate) fn path_to_module(db: &dyn Db, path: &VfsPath) -> Option<Module> {
 pub(crate) fn file_to_module(db: &dyn Db, file: VfsFile) -> Option<Module> {
     let _span = tracing::trace_span!("file_to_module", ?file).entered();
 
-    let VfsPath::FileSystem(path) = file.path(db.upcast()) else {
-        todo!("VendoredPaths are not yet supported")
-    };
+    let path = VfsPathRef::from(file.path(db.upcast()));
 
     let resolver_settings = module_resolver_settings(db);
 
     let relative_path = resolver_settings
         .search_paths()
         .iter()
-        .find_map(|root| root.relativize_path(path))?;
+        .find_map(|root| root.relativize_path(&path))?;
 
     let module_name = relative_path.to_module_name()?;
 
@@ -161,11 +159,11 @@ impl RawModuleResolutionSettings {
 
         paths.push(ModuleResolutionPathBuf::first_party(workspace_root).unwrap());
 
-        if let Some(custom_typeshed) = custom_typeshed {
-            paths.push(
-                ModuleResolutionPathBuf::stdlib_from_typeshed_root(&custom_typeshed).unwrap(),
-            );
-        }
+        paths.push(
+            custom_typeshed.map_or_else(ModuleResolutionPathBuf::vendored_stdlib, |custom| {
+                ModuleResolutionPathBuf::stdlib_from_custom_typeshed_root(&custom).unwrap()
+            }),
+        );
 
         // TODO vendor typeshed's third-party stubs as well as the stdlib and fallback to them as a final step
         if let Some(site_packages) = site_packages {
@@ -387,7 +385,7 @@ impl PackageKind {
 #[cfg(test)]
 mod tests {
     use ruff_db::file_system::FileSystemPath;
-    use ruff_db::vfs::{system_path_to_file, VfsFile, VfsPath};
+    use ruff_db::vfs::{system_path_to_file, VendoredPath, VendoredPathBuf, VfsFile, VfsPath};
 
     use crate::db::tests::{create_resolver_builder, TestCase};
     use crate::module::ModuleKind;
@@ -437,7 +435,7 @@ mod tests {
         } = setup_resolver_test();
 
         let stdlib_dir =
-            ModuleResolutionPathBuf::stdlib_from_typeshed_root(&custom_typeshed).unwrap();
+            ModuleResolutionPathBuf::stdlib_from_custom_typeshed_root(&custom_typeshed).unwrap();
         let functools_module_name = ModuleName::new_static("functools").unwrap();
         let functools_module = resolve_module(&db, functools_module_name.clone()).unwrap();
 
@@ -588,6 +586,26 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn stdlib_uses_vendored_typeshed_when_no_custom_typeshed_supplied() {
+        let TestCase { db, .. } = create_resolver_builder()
+            .unwrap()
+            .with_vendored_stubs_used()
+            .build();
+
+        let pydoc_data_topics_name = ModuleName::new_static("pydoc_data.topics").unwrap();
+        let pydoc_data_topics = resolve_module(&db, pydoc_data_topics_name).unwrap();
+        assert_eq!("pydoc_data.topics", pydoc_data_topics.name());
+        assert_eq!(
+            pydoc_data_topics.search_path(),
+            VendoredPathBuf::from("stdlib")
+        );
+        assert_eq!(
+            &pydoc_data_topics.search_path(),
+            VendoredPath::new("stdlib/pydoc_data/topics.pyi")
+        );
     }
 
     #[test]

@@ -4,7 +4,7 @@ use countme::Count;
 use dashmap::mapref::entry::Entry;
 
 pub use crate::vendored::{VendoredPath, VendoredPathBuf};
-pub use path::VfsPath;
+pub use path::{VfsPath, VfsPathRef};
 
 use crate::file_revision::FileRevision;
 use crate::file_system::FileSystemPath;
