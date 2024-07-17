@@ -125,6 +125,9 @@ impl<T> TestCaseBuilder<T> {
         files: impl IntoIterator<Item = FileSpec>,
     ) -> SystemPathBuf {
         let root = location.as_ref().to_path_buf();
+        // Make sure we create the directory unconditionally,
+        // even if an empty list of paths has been passed:
+        db.memory_file_system().create_directory_all(&root).unwrap();
         db.write_files(
             files
                 .into_iter()

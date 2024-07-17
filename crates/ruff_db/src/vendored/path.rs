@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::ops::Deref;
 use std::path;
 
@@ -67,6 +68,19 @@ impl VendoredPath {
     ) -> Result<&Self, path::StripPrefixError> {
         self.0.strip_prefix(prefix.as_ref()).map(Self::new)
     }
+
+    #[must_use]
+    pub fn starts_with(&self, prefix: impl AsRef<VendoredPath>) -> bool {
+        self.0.starts_with(prefix.as_ref())
+    }
+}
+
+impl ToOwned for VendoredPath {
+    type Owned = VendoredPathBuf;
+
+    fn to_owned(&self) -> Self::Owned {
+        self.to_path_buf()
+    }
 }
 
 #[repr(transparent)]
@@ -90,6 +104,12 @@ impl VendoredPathBuf {
 
     pub fn push(&mut self, component: impl AsRef<VendoredPath>) {
         self.0.push(component.as_ref())
+    }
+}
+
+impl Borrow<VendoredPath> for VendoredPathBuf {
+    fn borrow(&self) -> &VendoredPath {
+        self.as_path()
     }
 }
 

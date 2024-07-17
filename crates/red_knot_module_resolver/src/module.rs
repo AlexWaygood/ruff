@@ -5,7 +5,9 @@ use ruff_db::files::File;
 
 use crate::db::Db;
 use crate::module_name::ModuleName;
-use crate::path::{ModuleResolutionPathBuf, ModuleResolutionPathRef};
+use crate::path::ModuleResolutionPathBuf;
+
+pub(crate) type SearchPathRoot = Arc<ModuleResolutionPathBuf>;
 
 /// Representation of a Python module.
 #[derive(Clone, PartialEq, Eq)]
@@ -17,7 +19,7 @@ impl Module {
     pub(crate) fn new(
         name: ModuleName,
         kind: ModuleKind,
-        search_path: Arc<ModuleResolutionPathBuf>,
+        search_path: SearchPathRoot,
         file: File,
     ) -> Self {
         Self {
@@ -41,8 +43,8 @@ impl Module {
     }
 
     /// The search path from which the module was resolved.
-    pub(crate) fn search_path(&self) -> ModuleResolutionPathRef {
-        ModuleResolutionPathRef::from(&*self.inner.search_path)
+    pub(crate) fn search_path(&self) -> &SearchPathRoot {
+        &self.inner.search_path
     }
 
     /// Determine whether this module is a single-file module or a package
@@ -77,7 +79,7 @@ impl salsa::DebugWithDb<dyn Db> for Module {
 struct ModuleInner {
     name: ModuleName,
     kind: ModuleKind,
-    search_path: Arc<ModuleResolutionPathBuf>,
+    search_path: SearchPathRoot,
     file: File,
 }
 
