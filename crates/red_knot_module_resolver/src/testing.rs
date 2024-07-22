@@ -125,6 +125,11 @@ impl<T> TestCaseBuilder<T> {
         files: impl IntoIterator<Item = FileSpec>,
     ) -> SystemPathBuf {
         let root = location.as_ref().to_path_buf();
+        // Make sure to create the directory,
+        // even if we've been passed an empty list of mock files.
+        db.memory_file_system()
+            .create_directory_all(location)
+            .unwrap();
         db.write_files(
             files
                 .into_iter()

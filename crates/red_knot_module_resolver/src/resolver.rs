@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::iter::FusedIterator;
-use std::sync::Arc;
 
 use once_cell::sync::Lazy;
 use rustc_hash::{FxBuildHasher, FxHashSet};
@@ -12,10 +11,8 @@ use ruff_db::system::{DirectoryEntry, System, SystemPath, SystemPathBuf};
 use crate::db::Db;
 use crate::module::{Module, ModuleKind};
 use crate::module_name::ModuleName;
-use crate::path::ModuleResolutionPathBuf;
+use crate::path::{ModulePath, SearchPath, SearchPathValidationError};
 use crate::state::ResolverState;
-
-type SearchPathRoot = Arc<ModuleResolutionPathBuf>;
 
 /// Resolves a module name to a module.
 pub fn resolve_module(db: &dyn Db, module_name: ModuleName) -> Option<Module> {
@@ -106,16 +103,10 @@ pub(crate) fn file_to_module(db: &dyn Db, file: File) -> Option<Module> {
 ///
 /// This method also implements the typing spec's [module resolution order].
 ///
-/// TODO(Alex): this method does multiple `.unwrap()` calls when it should really return an error.
-/// Each `.unwrap()` call is a point where we're validating a setting that the user would pass
-/// and transforming it into an internal representation for a validated path.
-/// Rather than panicking if a path fails to validate, we should display an error message to the user
-/// and exit the process with a nonzero exit code.
-/// This validation should probably be done outside of Salsa?
-///
 /// [module resolution order]: https://typing.readthedocs.io/en/latest/spec/distributing.html#import-resolution-ordering
-#[salsa::tracked(return_ref)]
-pub(crate) fn module_resolution_settings(db: &dyn Db) -> ModuleResolutionSettings {
+fn try_resolve_module_resolution_settings(
+    db: &dyn Db,
+) -> Result<ModuleResolutionSettings, SearchPathValidationError> {
     let program = Program::get(db.upcast());
 
     let SearchPathSettings {
@@ -133,43 +124,23 @@ pub(crate) fn module_resolution_settings(db: &dyn Db) -> ModuleResolutionSetting
         tracing::info!("extra search paths: {extra_paths:?}");
     }
 
-    let current_directory = db.system().current_directory();
+    let system = db.system();
+    let mut static_search_paths = vec![];
 
-    let mut static_search_paths: Vec<_> = extra_paths
-        .iter()
-        .map(|fs_path| {
-            Arc::new(
-                ModuleResolutionPathBuf::extra(SystemPath::absolute(fs_path, current_directory))
-                    .unwrap(),
-            )
-        })
-        .collect();
+    for path in extra_paths {
+        static_search_paths.push(SearchPath::extra(system, path)?);
+    }
 
-    static_search_paths.push(Arc::new(
-        ModuleResolutionPathBuf::first_party(SystemPath::absolute(
-            workspace_root,
-            current_directory,
-        ))
-        .unwrap(),
-    ));
+    static_search_paths.push(SearchPath::first_party(system, workspace_root)?);
 
-    static_search_paths.push(Arc::new(custom_typeshed.as_ref().map_or_else(
-        ModuleResolutionPathBuf::vendored_stdlib,
-        |custom| {
-            ModuleResolutionPathBuf::stdlib_from_custom_typeshed_root(&SystemPath::absolute(
-                custom,
-                current_directory,
-            ))
-            .unwrap()
-        },
-    )));
+    static_search_paths.push(if let Some(custom_typeshed) = custom_typeshed {
+        SearchPath::custom_stdlib(db, custom_typeshed)?
+    } else {
+        SearchPath::vendored_stdlib()
+    });
 
-    if let Some(path) = site_packages {
-        let site_packages_root = Arc::new(
-            ModuleResolutionPathBuf::site_packages(SystemPath::absolute(path, current_directory))
-                .unwrap(),
-        );
-        static_search_paths.push(site_packages_root);
+    if let Some(site_packages) = site_packages {
+        static_search_paths.push(SearchPath::site_packages(system, site_packages)?);
     }
 
     // TODO vendor typeshed's third-party stubs as well as the stdlib and fallback to them as a final step
@@ -187,24 +158,30 @@ pub(crate) fn module_resolution_settings(db: &dyn Db) -> ModuleResolutionSetting
         FxHashSet::with_capacity_and_hasher(static_search_paths.len(), FxBuildHasher);
 
     static_search_paths.retain(|path| {
-        if let Some(path) = path.as_system_path() {
+        if let Some(path) = path.as_system_path_buf() {
             seen_paths.insert(path.to_path_buf())
         } else {
             true
         }
     });
 
-    ModuleResolutionSettings {
+    Ok(ModuleResolutionSettings {
         target_version,
         static_search_paths,
-    }
+    })
+}
+
+#[salsa::tracked(return_ref)]
+pub(crate) fn module_resolution_settings(db: &dyn Db) -> ModuleResolutionSettings {
+    // TODO: get rid of this `.unwrap()` call:
+    try_resolve_module_resolution_settings(db).unwrap()
 }
 
 /// Collect all dynamic search paths:
 /// search paths listed in `.pth` files in the `site-packages` directory
 /// due to editable installations of third-party packages.
 #[salsa::tracked(return_ref)]
-pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<Arc<ModuleResolutionPathBuf>> {
+pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<SearchPath> {
     // This query needs to be re-executed each time a `.pth` file
     // is added, modified or removed from the `site-packages` directory.
     // However, we don't use Salsa queries to read the source text of `.pth` files;
@@ -227,7 +204,7 @@ pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<Arc<ModuleRe
 
     if let Some(site_packages) = site_packages {
         let site_packages = site_packages
-            .as_system_path()
+            .as_system_path_buf()
             .expect("Expected site-packages never to be a VendoredPath!");
 
         // As well as modules installed directly into `site-packages`,
@@ -248,7 +225,7 @@ pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<Arc<ModuleRe
 
         let mut existing_paths: FxHashSet<_> = static_search_paths
             .iter()
-            .filter_map(|path| path.as_system_path())
+            .filter_map(|path| path.as_system_path_buf())
             .map(Cow::Borrowed)
             .collect();
 
@@ -257,9 +234,9 @@ pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<Arc<ModuleRe
         for pth_file in &all_pth_files {
             for installation in pth_file.editable_installations() {
                 if existing_paths.insert(Cow::Owned(
-                    installation.as_system_path().unwrap().to_path_buf(),
+                    installation.as_system_path_buf().unwrap().to_owned(),
                 )) {
-                    dynamic_paths.push(Arc::new(installation));
+                    dynamic_paths.push(installation);
                 }
             }
         }
@@ -277,12 +254,12 @@ pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<Arc<ModuleRe
 /// [`sys.path` at runtime]: https://docs.python.org/3/library/site.html#module-site
 struct SearchPathIterator<'db> {
     db: &'db dyn Db,
-    static_paths: std::slice::Iter<'db, SearchPathRoot>,
-    dynamic_paths: Option<std::slice::Iter<'db, SearchPathRoot>>,
+    static_paths: std::slice::Iter<'db, SearchPath>,
+    dynamic_paths: Option<std::slice::Iter<'db, SearchPath>>,
 }
 
 impl<'db> Iterator for SearchPathIterator<'db> {
-    type Item = &'db SearchPathRoot;
+    type Item = &'db SearchPath;
 
     fn next(&mut self) -> Option<Self::Item> {
         let SearchPathIterator {
@@ -314,7 +291,7 @@ struct PthFile<'db> {
 impl<'db> PthFile<'db> {
     /// Yield paths in this `.pth` file that appear to represent editable installations,
     /// and should therefore be added as module-resolution search paths.
-    fn editable_installations(&'db self) -> impl Iterator<Item = ModuleResolutionPathBuf> + 'db {
+    fn editable_installations(&'db self) -> impl Iterator<Item = SearchPath> + 'db {
         let PthFile {
             system,
             path: _,
@@ -336,7 +313,7 @@ impl<'db> PthFile<'db> {
                 return None;
             }
             let possible_editable_install = SystemPath::absolute(line, site_packages);
-            ModuleResolutionPathBuf::editable_installation_root(*system, possible_editable_install)
+            SearchPath::editable(*system, possible_editable_install).ok()
         })
     }
 }
@@ -408,7 +385,7 @@ pub(crate) struct ModuleResolutionSettings {
     ///
     /// Note that `site-packages` *is included* as a search path in this sequence,
     /// but it is also stored separately so that we're able to find editable installs later.
-    static_search_paths: Vec<SearchPathRoot>,
+    static_search_paths: Vec<SearchPath>,
 }
 
 impl ModuleResolutionSettings {
@@ -491,10 +468,7 @@ static BUILTIN_MODULES: Lazy<FxHashSet<&str>> = Lazy::new(|| {
 
 /// Given a module name and a list of search paths in which to lookup modules,
 /// attempt to resolve the module name
-fn resolve_name(
-    db: &dyn Db,
-    name: &ModuleName,
-) -> Option<(Arc<ModuleResolutionPathBuf>, File, ModuleKind)> {
+fn resolve_name(db: &dyn Db, name: &ModuleName) -> Option<(SearchPath, File, ModuleKind)> {
     let resolver_settings = module_resolution_settings(db);
     let resolver_state = ResolverState::new(db, resolver_settings.target_version());
     let is_builtin_module = BUILTIN_MODULES.contains(&name.as_str());
@@ -513,7 +487,7 @@ fn resolve_name(
                 package_path.push(module_name);
 
                 // Must be a `__init__.pyi` or `__init__.py` or it isn't a package.
-                let kind = if package_path.is_directory(search_path, &resolver_state) {
+                let kind = if package_path.is_directory(&resolver_state) {
                     package_path.push("__init__");
                     ModuleKind::Package
                 } else {
@@ -521,16 +495,13 @@ fn resolve_name(
                 };
 
                 // TODO Implement full https://peps.python.org/pep-0561/#type-checker-module-resolution-order resolution
-                if let Some(stub) = package_path
-                    .with_pyi_extension()
-                    .to_file(search_path, &resolver_state)
-                {
+                if let Some(stub) = package_path.with_pyi_extension().to_file(&resolver_state) {
                     return Some((search_path.clone(), stub, kind));
                 }
 
                 if let Some(module) = package_path
                     .with_py_extension()
-                    .and_then(|path| path.to_file(search_path, &resolver_state))
+                    .and_then(|path| path.to_file(&resolver_state))
                 {
                     return Some((search_path.clone(), module, kind));
                 }
@@ -554,14 +525,14 @@ fn resolve_name(
 }
 
 fn resolve_package<'a, 'db, I>(
-    module_search_path: &ModuleResolutionPathBuf,
+    module_search_path: &SearchPath,
     components: I,
     resolver_state: &ResolverState<'db>,
 ) -> Result<ResolvedPackage, PackageKind>
 where
     I: Iterator<Item = &'a str>,
 {
-    let mut package_path = module_search_path.clone();
+    let mut package_path = module_search_path.to_module_path();
 
     // `true` if inside a folder that is a namespace package (has no `__init__.py`).
     // Namespace packages are special because they can be spread across multiple search paths.
@@ -575,12 +546,11 @@ where
     for folder in components {
         package_path.push(folder);
 
-        let is_regular_package =
-            package_path.is_regular_package(module_search_path, resolver_state);
+        let is_regular_package = package_path.is_regular_package(resolver_state);
 
         if is_regular_package {
             in_namespace_package = false;
-        } else if package_path.is_directory(module_search_path, resolver_state) {
+        } else if package_path.is_directory(resolver_state) {
             // A directory without an `__init__.py` is a namespace package, continue with the next folder.
             in_namespace_package = true;
         } else if in_namespace_package {
@@ -613,7 +583,7 @@ where
 
 #[derive(Debug)]
 struct ResolvedPackage {
-    path: ModuleResolutionPathBuf,
+    path: ModulePath<'static>,
     kind: PackageKind,
 }
 
@@ -669,7 +639,7 @@ mod tests {
         );
 
         assert_eq!("foo", foo_module.name());
-        assert_eq!(&src, &foo_module.search_path());
+        assert_eq!(&src, foo_module.search_path());
         assert_eq!(ModuleKind::Module, foo_module.kind());
 
         let expected_foo_path = src.join("foo.py");
@@ -734,7 +704,7 @@ mod tests {
             resolve_module(&db, functools_module_name).as_ref()
         );
 
-        assert_eq!(&stdlib, &functools_module.search_path().to_path_buf());
+        assert_eq!(&stdlib, functools_module.search_path());
         assert_eq!(ModuleKind::Module, functools_module.kind());
 
         let expected_functools_path = stdlib.join("functools.pyi");
@@ -786,11 +756,11 @@ mod tests {
             });
             let search_path = resolved_module.search_path();
             assert_eq!(
-                &stdlib, &search_path,
+                &stdlib, search_path,
                 "Search path for {module_name} was unexpectedly {search_path:?}"
             );
             assert!(
-                search_path.is_stdlib_search_path(),
+                search_path.is_standard_library(),
                 "Expected a stdlib search path, but got {search_path:?}"
             );
         }
@@ -882,11 +852,11 @@ mod tests {
             });
             let search_path = resolved_module.search_path();
             assert_eq!(
-                &stdlib, &search_path,
+                &stdlib, search_path,
                 "Search path for {module_name} was unexpectedly {search_path:?}"
             );
             assert!(
-                search_path.is_stdlib_search_path(),
+                search_path.is_standard_library(),
                 "Expected a stdlib search path, but got {search_path:?}"
             );
         }
@@ -941,7 +911,7 @@ mod tests {
             Some(&functools_module),
             resolve_module(&db, functools_module_name).as_ref()
         );
-        assert_eq!(&src, &functools_module.search_path());
+        assert_eq!(&src, functools_module.search_path());
         assert_eq!(ModuleKind::Module, functools_module.kind());
         assert_eq!(&src.join("functools.py"), functools_module.file().path(&db));
 
@@ -962,7 +932,7 @@ mod tests {
         let pydoc_data_topics = resolve_module(&db, pydoc_data_topics_name).unwrap();
 
         assert_eq!("pydoc_data.topics", pydoc_data_topics.name());
-        assert_eq!(pydoc_data_topics.search_path(), stdlib);
+        assert_eq!(pydoc_data_topics.search_path(), &stdlib);
         assert_eq!(
             pydoc_data_topics.file().path(&db),
             &stdlib.join("pydoc_data/topics.pyi")
@@ -979,7 +949,7 @@ mod tests {
         let foo_module = resolve_module(&db, ModuleName::new_static("foo").unwrap()).unwrap();
 
         assert_eq!("foo", foo_module.name());
-        assert_eq!(&src, &foo_module.search_path());
+        assert_eq!(&src, foo_module.search_path());
         assert_eq!(&foo_path, foo_module.file().path(&db));
 
         assert_eq!(
@@ -1006,7 +976,7 @@ mod tests {
         let foo_module = resolve_module(&db, ModuleName::new_static("foo").unwrap()).unwrap();
         let foo_init_path = src.join("foo/__init__.py");
 
-        assert_eq!(&src, &foo_module.search_path());
+        assert_eq!(&src, foo_module.search_path());
         assert_eq!(&foo_init_path, foo_module.file().path(&db));
         assert_eq!(ModuleKind::Package, foo_module.kind());
 
@@ -1029,7 +999,7 @@ mod tests {
         let foo = resolve_module(&db, ModuleName::new_static("foo").unwrap()).unwrap();
         let foo_stub = src.join("foo.pyi");
 
-        assert_eq!(&src, &foo.search_path());
+        assert_eq!(&src, foo.search_path());
         assert_eq!(&foo_stub, foo.file().path(&db));
 
         assert_eq!(Some(foo), path_to_module(&db, &FilePath::System(foo_stub)));
@@ -1053,7 +1023,7 @@ mod tests {
             resolve_module(&db, ModuleName::new_static("foo.bar.baz").unwrap()).unwrap();
         let baz_path = src.join("foo/bar/baz.py");
 
-        assert_eq!(&src, &baz_module.search_path());
+        assert_eq!(&src, baz_module.search_path());
         assert_eq!(&baz_path, baz_module.file().path(&db));
 
         assert_eq!(
@@ -1153,7 +1123,7 @@ mod tests {
         let foo_module = resolve_module(&db, ModuleName::new_static("foo").unwrap()).unwrap();
         let foo_src_path = src.join("foo.py");
 
-        assert_eq!(&src, &foo_module.search_path());
+        assert_eq!(&src, foo_module.search_path());
         assert_eq!(&foo_src_path, foo_module.file().path(&db));
         assert_eq!(
             Some(foo_module),
@@ -1186,7 +1156,8 @@ mod tests {
 
         std::fs::create_dir_all(src.as_std_path())?;
         std::fs::create_dir_all(site_packages.as_std_path())?;
-        std::fs::create_dir_all(custom_typeshed.as_std_path())?;
+        std::fs::create_dir_all(custom_typeshed.join("stdlib").as_std_path())?;
+        std::fs::File::create(custom_typeshed.join("stdlib/VERSIONS").as_std_path())?;
 
         std::fs::write(foo.as_std_path(), "")?;
         std::os::unix::fs::symlink(foo.as_std_path(), bar.as_std_path())?;
@@ -1205,12 +1176,12 @@ mod tests {
 
         assert_ne!(foo_module, bar_module);
 
-        assert_eq!(&src, &foo_module.search_path());
+        assert_eq!(&src, foo_module.search_path());
         assert_eq!(&foo, foo_module.file().path(&db));
 
         // `foo` and `bar` shouldn't resolve to the same file
 
-        assert_eq!(&src, &bar_module.search_path());
+        assert_eq!(&src, bar_module.search_path());
         assert_eq!(&bar, bar_module.file().path(&db));
         assert_eq!(&foo, foo_module.file().path(&db));
 
@@ -1326,7 +1297,7 @@ mod tests {
         let stdlib_functools_path = stdlib.join("functools.pyi");
 
         let functools_module = resolve_module(&db, functools_module_name.clone()).unwrap();
-        assert_eq!(functools_module.search_path(), stdlib);
+        assert_eq!(functools_module.search_path(), &stdlib);
         assert_eq!(
             Some(functools_module.file()),
             system_path_to_file(&db, &stdlib_functools_path)
@@ -1346,7 +1317,7 @@ mod tests {
             &ModuleNameIngredient::new(&db, functools_module_name.clone()),
             &events,
         );
-        assert_eq!(functools_module.search_path(), stdlib);
+        assert_eq!(functools_module.search_path(), &stdlib);
         assert_eq!(
             Some(functools_module.file()),
             system_path_to_file(&db, &stdlib_functools_path)
@@ -1372,7 +1343,7 @@ mod tests {
 
         let functools_module_name = ModuleName::new_static("functools").unwrap();
         let functools_module = resolve_module(&db, functools_module_name.clone()).unwrap();
-        assert_eq!(functools_module.search_path(), stdlib);
+        assert_eq!(functools_module.search_path(), &stdlib);
         assert_eq!(
             Some(functools_module.file()),
             system_path_to_file(&db, stdlib.join("functools.pyi"))
@@ -1383,7 +1354,7 @@ mod tests {
         let src_functools_path = src.join("functools.py");
         db.write_file(&src_functools_path, "FOO: int").unwrap();
         let functools_module = resolve_module(&db, functools_module_name.clone()).unwrap();
-        assert_eq!(functools_module.search_path(), src);
+        assert_eq!(functools_module.search_path(), &src);
         assert_eq!(
             Some(functools_module.file()),
             system_path_to_file(&db, &src_functools_path)
@@ -1414,7 +1385,7 @@ mod tests {
         let src_functools_path = src.join("functools.py");
 
         let functools_module = resolve_module(&db, functools_module_name.clone()).unwrap();
-        assert_eq!(functools_module.search_path(), src);
+        assert_eq!(functools_module.search_path(), &src);
         assert_eq!(
             Some(functools_module.file()),
             system_path_to_file(&db, &src_functools_path)
@@ -1427,7 +1398,7 @@ mod tests {
             .unwrap();
         File::touch_path(&mut db, &src_functools_path);
         let functools_module = resolve_module(&db, functools_module_name.clone()).unwrap();
-        assert_eq!(functools_module.search_path(), stdlib);
+        assert_eq!(functools_module.search_path(), &stdlib);
         assert_eq!(
             Some(functools_module.file()),
             system_path_to_file(&db, stdlib.join("functools.pyi"))
@@ -1677,15 +1648,10 @@ not_a_directory
             .with_site_packages_files(&[("_foo.pth", "/src")])
             .build();
 
-        let search_paths: Vec<&SearchPathRoot> =
+        let search_paths: Vec<&SearchPath> =
             module_resolution_settings(&db).search_paths(&db).collect();
 
-        assert!(search_paths.contains(&&Arc::new(
-            ModuleResolutionPathBuf::first_party("/src").unwrap()
-        )));
-
-        assert!(!search_paths.contains(&&Arc::new(
-            ModuleResolutionPathBuf::editable_installation_root(db.system(), "/src").unwrap()
-        )));
+        assert!(search_paths.contains(&&SearchPath::first_party(db.system(), "/src").unwrap()));
+        assert!(!search_paths.contains(&&SearchPath::editable(db.system(), "/src").unwrap()));
     }
 }
