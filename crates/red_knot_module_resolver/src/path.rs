@@ -67,20 +67,82 @@ impl std::error::Error for SearchPathValidationError {
 type SearchPathResult<T> = Result<T, SearchPathValidationError>;
 
 /// Trait describing fully owned, mutable paths such as `SystemPathBuf` or `VendoredPathBuf`
-trait OwnedPath: Default + fmt::Debug + Clone + PartialEq + Eq + Hash {}
+trait OwnedPath: Default + fmt::Debug + Clone + PartialEq + Eq + Hash {
+    fn push(&mut self, component: &str);
+}
 
-impl OwnedPath for VendoredPathBuf {}
-impl OwnedPath for SystemPathBuf {}
+impl OwnedPath for VendoredPathBuf {
+    fn push(&mut self, component: &str) {
+        self.push(component);
+    }
+}
+
+impl OwnedPath for SystemPathBuf {
+    fn push(&mut self, component: &str) {
+        self.push(component);
+    }
+}
 
 /// Trait describing unsized, borrowed paths such as `SystemPath` or `VendoredPath`
-trait BorrowedPath<T>: ToOwned<Owned = T> + fmt::Debug + PartialEq + Eq + Hash {}
+trait BorrowedPath<T>: ToOwned<Owned = T> + fmt::Debug + PartialEq + Eq + Hash {
+    fn extension(&self) -> Option<&str>;
+    fn join(&self, other: &Self) -> T;
+    fn strip_prefix(&self, prefix: &Self) -> Result<&Self, StripPrefixError>;
+}
 
-impl BorrowedPath<VendoredPathBuf> for VendoredPath {}
-impl BorrowedPath<SystemPathBuf> for SystemPath {}
+impl BorrowedPath<VendoredPathBuf> for VendoredPath {
+    fn extension(&self) -> Option<&str> {
+        self.extension()
+    }
+
+    fn join(&self, other: &Self) -> VendoredPathBuf {
+        self.join(other)
+    }
+
+    fn strip_prefix(&self, prefix: &Self) -> Result<&Self, StripPrefixError> {
+        self.strip_prefix(prefix)
+    }
+}
+
+impl BorrowedPath<SystemPathBuf> for SystemPath {
+    fn extension(&self) -> Option<&str> {
+        self.extension()
+    }
+
+    fn join(&self, other: &Self) -> SystemPathBuf {
+        self.join(other)
+    }
+
+    fn strip_prefix(&self, prefix: &Self) -> Result<&Self, StripPrefixError> {
+        self.strip_prefix(prefix)
+    }
+}
 
 /// A search path, from which [`ModulePath`]s can be derived.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct GenericSearchPath<T: OwnedPath>(Arc<T>);
+struct GenericSearchPath<A: OwnedPath>(Arc<A>);
+
+impl<A> GenericSearchPath<A>
+where
+    A: OwnedPath,
+{
+    fn relativize_path<'a, B>(
+        &self,
+        absolute_path: &'a B,
+    ) -> Result<GenericModulePath<'a, A, B>, StripPrefixError>
+    where
+        A: Borrow<B>,
+        B: BorrowedPath<A> + ?Sized,
+    {
+        let inner_path = A::borrow(&self.0);
+        absolute_path
+            .strip_prefix(inner_path)
+            .map(|relative_path| GenericModulePath {
+                search_path: self.clone(),
+                relative_path: Cow::Borrowed(relative_path),
+            })
+    }
+}
 
 /// A search path that points to a location on disk
 type SystemSearchPath = GenericSearchPath<SystemPathBuf>;
@@ -98,32 +160,6 @@ impl SystemSearchPath {
         } else {
             Err(SearchPathValidationError::NotADirectory(root.to_path_buf()))
         }
-    }
-
-    fn relativize_path<'a>(
-        &self,
-        absolute_path: &'a SystemPath,
-    ) -> Result<SystemModulePath<'a>, StripPrefixError> {
-        absolute_path
-            .strip_prefix(&*self.0)
-            .map(|relative_path| GenericModulePath {
-                search_path: self.clone(),
-                relative_path: Cow::Borrowed(relative_path),
-            })
-    }
-}
-
-impl VendoredSearchPath {
-    fn relativize_path<'a>(
-        &self,
-        absolute_path: &'a VendoredPath,
-    ) -> Result<VendoredModulePath<'a>, StripPrefixError> {
-        absolute_path
-            .strip_prefix(&*self.0)
-            .map(|relative_path| GenericModulePath {
-                search_path: self.clone(),
-                relative_path: Cow::Borrowed(relative_path),
-            })
     }
 }
 
@@ -154,6 +190,21 @@ where
     relative_path: Cow<'a, B>,
 }
 
+impl<'a, A, B> GenericModulePath<'a, A, B>
+where
+    A: OwnedPath + Borrow<B>,
+    B: BorrowedPath<A> + ?Sized,
+{
+    #[must_use]
+    fn to_path_buf(&self) -> A {
+        let GenericModulePath {
+            search_path: GenericSearchPath(search_path),
+            relative_path,
+        } = self;
+        A::borrow(search_path).join(&**relative_path)
+    }
+}
+
 impl<A, B> GenericModulePath<'static, A, B>
 where
     A: OwnedPath + Borrow<B>,
@@ -165,6 +216,18 @@ where
             search_path,
             relative_path: Cow::Owned(A::default()),
         }
+    }
+
+    fn push(&mut self, component: &str) {
+        let GenericModulePath {
+            search_path: _,
+            relative_path,
+        } = self;
+        assert!(
+            relative_path.extension().is_none(),
+            "Cannot push part {component} to {self:?}, which already has an extension"
+        );
+        relative_path.to_mut().push(component);
     }
 }
 
@@ -191,44 +254,7 @@ type VendoredModulePath<'a> = GenericModulePath<'a, VendoredPathBuf, VendoredPat
 /// A path to a Python module that exists in the vendored zip archive
 type SystemModulePath<'a> = GenericModulePath<'a, SystemPathBuf, SystemPath>;
 
-impl VendoredModulePath<'static> {
-    fn push(&mut self, component: &str) {
-        let GenericModulePath {
-            search_path: _,
-            relative_path,
-        } = self;
-        assert!(
-            relative_path.extension().is_none(),
-            "Cannot push part {component} to {self:?}, which already has an extension"
-        );
-        relative_path.to_mut().push(component);
-    }
-}
-
-impl SystemModulePath<'static> {
-    fn push(&mut self, component: &str) {
-        let GenericModulePath {
-            search_path: _,
-            relative_path,
-        } = self;
-        assert!(
-            relative_path.extension().is_none(),
-            "Cannot push part {component} to {self:?}, which already has an extension"
-        );
-        relative_path.to_mut().push(component);
-    }
-}
-
 impl<'a> VendoredModulePath<'a> {
-    #[must_use]
-    fn to_vendored_path_buf(&self) -> VendoredPathBuf {
-        let GenericModulePath {
-            search_path,
-            relative_path,
-        } = self;
-        search_path.0.join(relative_path)
-    }
-
     #[must_use]
     fn with_pyi_extension(&self) -> VendoredModulePath<'static> {
         let GenericModulePath {
@@ -243,15 +269,6 @@ impl<'a> VendoredModulePath<'a> {
 }
 
 impl<'a> SystemModulePath<'a> {
-    #[must_use]
-    fn to_system_path_buf(&self) -> SystemPathBuf {
-        let GenericModulePath {
-            search_path,
-            relative_path,
-        } = self;
-        search_path.0.join(relative_path)
-    }
-
     #[must_use]
     fn with_extension(&self, extension: &str) -> SystemModulePath<'static> {
         let GenericModulePath {
@@ -301,9 +318,9 @@ enum SearchPathInner {
 /// and "Standard-library" categories, however, there will always be exactly
 /// one search path from that category in any given list of search paths.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct SearchPath(SearchPathInner);
+pub(crate) struct ModuleSearchPath(SearchPathInner);
 
-impl SearchPath {
+impl ModuleSearchPath {
     /// Create a new "Extra" search path
     pub(crate) fn extra(
         system: &dyn System,
@@ -436,13 +453,13 @@ impl SearchPath {
 
         match (&self.0, path) {
             (SearchPathInner::Extra(search_path), FilePath::System(absolute_path)) => search_path
-                .relativize_path(absolute_path)
+                .relativize_path(&**absolute_path)
                 .ok()
                 .map(ModulePath::extra),
             (SearchPathInner::Extra(_), FilePath::Vendored(_)) => None,
             (SearchPathInner::FirstParty(search_path), FilePath::System(absolute_path)) => {
                 search_path
-                    .relativize_path(absolute_path)
+                    .relativize_path(&**absolute_path)
                     .ok()
                     .map(ModulePath::first_party)
             }
@@ -451,7 +468,7 @@ impl SearchPath {
                 SearchPathInner::StandardLibraryCustom(search_path),
                 FilePath::System(absolute_path),
             ) => search_path
-                .relativize_path(absolute_path)
+                .relativize_path(&**absolute_path)
                 .ok()
                 .map(ModulePath::custom_stdlib),
             (SearchPathInner::StandardLibraryCustom(_), FilePath::Vendored(_)) => None,
@@ -459,20 +476,20 @@ impl SearchPath {
                 SearchPathInner::StandardLibraryVendored(search_path),
                 FilePath::Vendored(absolute_path),
             ) => search_path
-                .relativize_path(absolute_path)
+                .relativize_path(&**absolute_path)
                 .ok()
                 .map(ModulePath::vendored_stdlib),
             (SearchPathInner::StandardLibraryVendored(_), FilePath::System(_)) => None,
             (SearchPathInner::SitePackages(search_path), FilePath::System(absolute_path)) => {
                 search_path
-                    .relativize_path(absolute_path)
+                    .relativize_path(&**absolute_path)
                     .ok()
                     .map(ModulePath::site_packages)
             }
             (SearchPathInner::SitePackages(_), FilePath::Vendored(_)) => None,
             (SearchPathInner::Editable(search_path), FilePath::System(absolute_path)) => {
                 search_path
-                    .relativize_path(absolute_path)
+                    .relativize_path(&**absolute_path)
                     .ok()
                     .map(ModulePath::editable)
             }
@@ -505,27 +522,27 @@ impl SearchPath {
     }
 }
 
-impl PartialEq<SystemPathBuf> for SearchPath {
+impl PartialEq<SystemPathBuf> for ModuleSearchPath {
     fn eq(&self, other: &SystemPathBuf) -> bool {
         self.as_system_path_buf().is_some_and(|path| path == other)
     }
 }
 
-impl PartialEq<SearchPath> for SystemPathBuf {
-    fn eq(&self, other: &SearchPath) -> bool {
+impl PartialEq<ModuleSearchPath> for SystemPathBuf {
+    fn eq(&self, other: &ModuleSearchPath) -> bool {
         other.eq(self)
     }
 }
 
-impl PartialEq<VendoredPathBuf> for SearchPath {
+impl PartialEq<VendoredPathBuf> for ModuleSearchPath {
     fn eq(&self, other: &VendoredPathBuf) -> bool {
         self.as_vendored_path_buf()
             .is_some_and(|path| path == other)
     }
 }
 
-impl PartialEq<SearchPath> for VendoredPathBuf {
-    fn eq(&self, other: &SearchPath) -> bool {
+impl PartialEq<ModuleSearchPath> for VendoredPathBuf {
+    fn eq(&self, other: &ModuleSearchPath) -> bool {
         other.eq(self)
     }
 }
@@ -679,47 +696,43 @@ impl<'a> ModulePath<'a> {
     #[must_use]
     pub(crate) fn is_directory(&self, resolver: &ResolverState) -> bool {
         match &self.0 {
-            ModulePathInner::Extra(path) => {
-                resolver.system().is_directory(&path.to_system_path_buf())
-            }
+            ModulePathInner::Extra(path) => resolver.system().is_directory(&path.to_path_buf()),
             ModulePathInner::FirstParty(path) => {
-                resolver.system().is_directory(&path.to_system_path_buf())
+                resolver.system().is_directory(&path.to_path_buf())
             }
             ModulePathInner::StandardLibraryCustom(path) => {
                 match query_custom_stdlib_version(path, resolver) {
                     TypeshedVersionsQueryResult::DoesNotExist => false,
                     TypeshedVersionsQueryResult::Exists => {
-                        resolver.system().is_directory(&path.to_system_path_buf())
+                        resolver.system().is_directory(&path.to_path_buf())
                     }
                     TypeshedVersionsQueryResult::MaybeExists => {
-                        resolver.system().is_directory(&path.to_system_path_buf())
+                        resolver.system().is_directory(&path.to_path_buf())
                     }
                 }
             }
             ModulePathInner::StandardLibraryVendored(path) => {
                 match query_vendored_stdlib_version(path, resolver) {
                     TypeshedVersionsQueryResult::DoesNotExist => false,
-                    TypeshedVersionsQueryResult::Exists => resolver
-                        .vendored()
-                        .is_directory(path.to_vendored_path_buf()),
-                    TypeshedVersionsQueryResult::MaybeExists => resolver
-                        .vendored()
-                        .is_directory(path.to_vendored_path_buf()),
+                    TypeshedVersionsQueryResult::Exists => {
+                        resolver.vendored().is_directory(path.to_path_buf())
+                    }
+                    TypeshedVersionsQueryResult::MaybeExists => {
+                        resolver.vendored().is_directory(path.to_path_buf())
+                    }
                 }
             }
             ModulePathInner::SitePackages(path) => {
-                resolver.system().is_directory(&path.to_system_path_buf())
+                resolver.system().is_directory(&path.to_path_buf())
             }
-            ModulePathInner::Editable(path) => {
-                resolver.system().is_directory(&path.to_system_path_buf())
-            }
+            ModulePathInner::Editable(path) => resolver.system().is_directory(&path.to_path_buf()),
         }
     }
 
     #[must_use]
     pub(crate) fn is_regular_package(&self, resolver: &ResolverState) -> bool {
         fn is_non_stdlib_pkg(resolver: &ResolverState, path: &SystemModulePath) -> bool {
-            let path = path.to_system_path_buf();
+            let path = path.to_path_buf();
             system_path_to_file(resolver.db.upcast(), path.join("__init__.py")).is_some()
                 || system_path_to_file(resolver.db.upcast(), path.join("__init__.py")).is_some()
         }
@@ -733,7 +746,7 @@ impl<'a> ModulePath<'a> {
                     TypeshedVersionsQueryResult::Exists
                     | TypeshedVersionsQueryResult::MaybeExists => system_path_to_file(
                         resolver.db.upcast(),
-                        path.to_system_path_buf().join("__init__.pyi"),
+                        path.to_path_buf().join("__init__.pyi"),
                     )
                     .is_some(),
                 }
@@ -744,7 +757,7 @@ impl<'a> ModulePath<'a> {
                     TypeshedVersionsQueryResult::Exists
                     | TypeshedVersionsQueryResult::MaybeExists => resolver
                         .vendored()
-                        .exists(path.to_vendored_path_buf().join("__init__.pyi")),
+                        .exists(path.to_path_buf().join("__init__.pyi")),
                 }
             }
             ModulePathInner::SitePackages(path) => is_non_stdlib_pkg(resolver, path),
@@ -756,14 +769,14 @@ impl<'a> ModulePath<'a> {
     pub(crate) fn to_file(&self, resolver: &ResolverState) -> Option<File> {
         let db = resolver.db.upcast();
         match &self.0 {
-            ModulePathInner::Extra(path) => system_path_to_file(db, path.to_system_path_buf()),
-            ModulePathInner::FirstParty(path) => system_path_to_file(db, path.to_system_path_buf()),
+            ModulePathInner::Extra(path) => system_path_to_file(db, path.to_path_buf()),
+            ModulePathInner::FirstParty(path) => system_path_to_file(db, path.to_path_buf()),
             ModulePathInner::StandardLibraryCustom(path) => {
                 match query_custom_stdlib_version(path, resolver) {
                     TypeshedVersionsQueryResult::DoesNotExist => None,
                     TypeshedVersionsQueryResult::Exists
                     | TypeshedVersionsQueryResult::MaybeExists => {
-                        system_path_to_file(db, path.to_system_path_buf())
+                        system_path_to_file(db, path.to_path_buf())
                     }
                 }
             }
@@ -772,14 +785,12 @@ impl<'a> ModulePath<'a> {
                     TypeshedVersionsQueryResult::DoesNotExist => None,
                     TypeshedVersionsQueryResult::Exists
                     | TypeshedVersionsQueryResult::MaybeExists => {
-                        vendored_path_to_file(db, path.to_vendored_path_buf())
+                        vendored_path_to_file(db, path.to_path_buf())
                     }
                 }
             }
-            ModulePathInner::SitePackages(path) => {
-                system_path_to_file(db, path.to_system_path_buf())
-            }
-            ModulePathInner::Editable(path) => system_path_to_file(db, path.to_system_path_buf()),
+            ModulePathInner::SitePackages(path) => system_path_to_file(db, path.to_path_buf()),
+            ModulePathInner::Editable(path) => system_path_to_file(db, path.to_path_buf()),
         }
     }
 
@@ -858,7 +869,7 @@ mod tests {
 
     use super::*;
 
-    impl SearchPath {
+    impl ModuleSearchPath {
         #[must_use]
         fn join(&self, component: &str) -> ModulePath<'static> {
             let mut result = self.to_module_path();
@@ -999,7 +1010,7 @@ mod tests {
             .build();
 
         assert_eq!(
-            SearchPath::custom_stdlib(&db, stdlib.parent().unwrap())
+            ModuleSearchPath::custom_stdlib(&db, stdlib.parent().unwrap())
                 .unwrap()
                 .to_module_path()
                 .with_py_extension(),
@@ -1007,7 +1018,7 @@ mod tests {
         );
 
         assert_eq!(
-            &SearchPath::custom_stdlib(&db, stdlib.parent().unwrap())
+            &ModuleSearchPath::custom_stdlib(&db, stdlib.parent().unwrap())
                 .unwrap()
                 .join("foo")
                 .with_pyi_extension(),
@@ -1015,7 +1026,7 @@ mod tests {
         );
 
         assert_eq!(
-            &SearchPath::first_party(db.system(), &src)
+            &ModuleSearchPath::first_party(db.system(), &src)
                 .unwrap()
                 .join("foo/bar")
                 .with_py_extension()
@@ -1027,7 +1038,7 @@ mod tests {
     #[test]
     fn module_name_1_part() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src).unwrap();
+        let src_search_path = ModuleSearchPath::first_party(db.system(), src).unwrap();
         let foo_module_name = ModuleName::new_static("foo").unwrap();
 
         assert_eq!(
@@ -1052,7 +1063,7 @@ mod tests {
     #[test]
     fn module_name_2_parts() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src).unwrap();
+        let src_search_path = ModuleSearchPath::first_party(db.system(), src).unwrap();
         let foo_bar_module_name = ModuleName::new_static("foo.bar").unwrap();
 
         assert_eq!(
@@ -1080,7 +1091,7 @@ mod tests {
     #[test]
     fn module_name_3_parts() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src).unwrap();
+        let src_search_path = ModuleSearchPath::first_party(db.system(), src).unwrap();
         let foo_bar_baz_module_name = ModuleName::new_static("foo.bar.baz").unwrap();
 
         assert_eq!(
@@ -1114,7 +1125,7 @@ mod tests {
         let TestCase { db, stdlib, .. } = TestCaseBuilder::new()
             .with_custom_typeshed(MockedTypeshed::default())
             .build();
-        SearchPath::custom_stdlib(&db, stdlib.parent().unwrap())
+        ModuleSearchPath::custom_stdlib(&db, stdlib.parent().unwrap())
             .unwrap()
             .to_module_path()
             .push("bar.py");
@@ -1126,7 +1137,7 @@ mod tests {
         let TestCase { db, stdlib, .. } = TestCaseBuilder::new()
             .with_custom_typeshed(MockedTypeshed::default())
             .build();
-        SearchPath::custom_stdlib(&db, stdlib.parent().unwrap())
+        ModuleSearchPath::custom_stdlib(&db, stdlib.parent().unwrap())
             .unwrap()
             .to_module_path()
             .push("bar.rs");
@@ -1136,7 +1147,7 @@ mod tests {
     #[should_panic(expected = "Extension must be `py` or `pyi`; got `rs`")]
     fn non_stdlib_path_invalid_join_rs() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        SearchPath::first_party(db.system(), src)
+        ModuleSearchPath::first_party(db.system(), src)
             .unwrap()
             .to_module_path()
             .push("bar.rs");
@@ -1146,7 +1157,7 @@ mod tests {
     #[should_panic(expected = "already has an extension")]
     fn too_many_extensions() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        SearchPath::first_party(db.system(), src)
+        ModuleSearchPath::first_party(db.system(), src)
             .unwrap()
             .join("foo.py")
             .push("bar.py");
@@ -1158,7 +1169,7 @@ mod tests {
             .with_custom_typeshed(MockedTypeshed::default())
             .build();
 
-        let root = SearchPath::custom_stdlib(&db, stdlib.parent().unwrap()).unwrap();
+        let root = ModuleSearchPath::custom_stdlib(&db, stdlib.parent().unwrap()).unwrap();
 
         // Must have a `.pyi` extension or no extension:
         let bad_absolute_path = FilePath::System(stdlib.join("x.py"));
@@ -1175,7 +1186,7 @@ mod tests {
     fn relativize_non_stdlib_path_errors() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
 
-        let root = SearchPath::extra(db.system(), &src).unwrap();
+        let root = ModuleSearchPath::extra(db.system(), &src).unwrap();
         // Must have a `.py` extension, a `.pyi` extension, or no extension:
         let bad_absolute_path = FilePath::System(src.join("x.rs"));
         assert_eq!(root.relativize_path(&bad_absolute_path), None);
@@ -1187,7 +1198,7 @@ mod tests {
     #[test]
     fn relativize_path() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), &src).unwrap();
+        let src_search_path = ModuleSearchPath::first_party(db.system(), &src).unwrap();
         let eggs_package = FilePath::System(src.join("eggs/__init__.pyi"));
 
         let ModulePath(ModulePathInner::FirstParty(path)) =
@@ -1202,20 +1213,20 @@ mod tests {
     fn typeshed_test_case(
         typeshed: MockedTypeshed,
         target_version: TargetVersion,
-    ) -> (TestDb, SearchPath) {
+    ) -> (TestDb, ModuleSearchPath) {
         let TestCase { db, stdlib, .. } = TestCaseBuilder::new()
             .with_custom_typeshed(typeshed)
             .with_target_version(target_version)
             .build();
-        let stdlib = SearchPath::custom_stdlib(&db, stdlib.parent().unwrap()).unwrap();
+        let stdlib = ModuleSearchPath::custom_stdlib(&db, stdlib.parent().unwrap()).unwrap();
         (db, stdlib)
     }
 
-    fn py38_typeshed_test_case(typeshed: MockedTypeshed) -> (TestDb, SearchPath) {
+    fn py38_typeshed_test_case(typeshed: MockedTypeshed) -> (TestDb, ModuleSearchPath) {
         typeshed_test_case(typeshed, TargetVersion::Py38)
     }
 
-    fn py39_typeshed_test_case(typeshed: MockedTypeshed) -> (TestDb, SearchPath) {
+    fn py39_typeshed_test_case(typeshed: MockedTypeshed) -> (TestDb, ModuleSearchPath) {
         typeshed_test_case(typeshed, TargetVersion::Py39)
     }
 

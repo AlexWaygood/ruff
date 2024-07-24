@@ -11,7 +11,7 @@ use ruff_db::system::{DirectoryEntry, System, SystemPath, SystemPathBuf};
 use crate::db::Db;
 use crate::module::{Module, ModuleKind};
 use crate::module_name::ModuleName;
-use crate::path::{ModulePath, SearchPath, SearchPathValidationError};
+use crate::path::{ModulePath, ModuleSearchPath, SearchPathValidationError};
 use crate::state::ResolverState;
 
 /// Resolves a module name to a module.
@@ -128,19 +128,19 @@ fn try_resolve_module_resolution_settings(
     let mut static_search_paths = vec![];
 
     for path in extra_paths {
-        static_search_paths.push(SearchPath::extra(system, path)?);
+        static_search_paths.push(ModuleSearchPath::extra(system, path)?);
     }
 
-    static_search_paths.push(SearchPath::first_party(system, workspace_root)?);
+    static_search_paths.push(ModuleSearchPath::first_party(system, workspace_root)?);
 
     static_search_paths.push(if let Some(custom_typeshed) = custom_typeshed {
-        SearchPath::custom_stdlib(db, custom_typeshed)?
+        ModuleSearchPath::custom_stdlib(db, custom_typeshed)?
     } else {
-        SearchPath::vendored_stdlib()
+        ModuleSearchPath::vendored_stdlib()
     });
 
     if let Some(site_packages) = site_packages {
-        static_search_paths.push(SearchPath::site_packages(system, site_packages)?);
+        static_search_paths.push(ModuleSearchPath::site_packages(system, site_packages)?);
     }
 
     // TODO vendor typeshed's third-party stubs as well as the stdlib and fallback to them as a final step
@@ -181,7 +181,7 @@ pub(crate) fn module_resolution_settings(db: &dyn Db) -> ModuleResolutionSetting
 /// search paths listed in `.pth` files in the `site-packages` directory
 /// due to editable installations of third-party packages.
 #[salsa::tracked(return_ref)]
-pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<SearchPath> {
+pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<ModuleSearchPath> {
     // This query needs to be re-executed each time a `.pth` file
     // is added, modified or removed from the `site-packages` directory.
     // However, we don't use Salsa queries to read the source text of `.pth` files;
@@ -254,12 +254,12 @@ pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<SearchPath> 
 /// [`sys.path` at runtime]: https://docs.python.org/3/library/site.html#module-site
 struct SearchPathIterator<'db> {
     db: &'db dyn Db,
-    static_paths: std::slice::Iter<'db, SearchPath>,
-    dynamic_paths: Option<std::slice::Iter<'db, SearchPath>>,
+    static_paths: std::slice::Iter<'db, ModuleSearchPath>,
+    dynamic_paths: Option<std::slice::Iter<'db, ModuleSearchPath>>,
 }
 
 impl<'db> Iterator for SearchPathIterator<'db> {
-    type Item = &'db SearchPath;
+    type Item = &'db ModuleSearchPath;
 
     fn next(&mut self) -> Option<Self::Item> {
         let SearchPathIterator {
@@ -291,7 +291,7 @@ struct PthFile<'db> {
 impl<'db> PthFile<'db> {
     /// Yield paths in this `.pth` file that appear to represent editable installations,
     /// and should therefore be added as module-resolution search paths.
-    fn editable_installations(&'db self) -> impl Iterator<Item = SearchPath> + 'db {
+    fn editable_installations(&'db self) -> impl Iterator<Item = ModuleSearchPath> + 'db {
         let PthFile {
             system,
             path: _,
@@ -313,7 +313,7 @@ impl<'db> PthFile<'db> {
                 return None;
             }
             let possible_editable_install = SystemPath::absolute(line, site_packages);
-            SearchPath::editable(*system, possible_editable_install).ok()
+            ModuleSearchPath::editable(*system, possible_editable_install).ok()
         })
     }
 }
@@ -385,7 +385,7 @@ pub(crate) struct ModuleResolutionSettings {
     ///
     /// Note that `site-packages` *is included* as a search path in this sequence,
     /// but it is also stored separately so that we're able to find editable installs later.
-    static_search_paths: Vec<SearchPath>,
+    static_search_paths: Vec<ModuleSearchPath>,
 }
 
 impl ModuleResolutionSettings {
@@ -468,7 +468,7 @@ static BUILTIN_MODULES: Lazy<FxHashSet<&str>> = Lazy::new(|| {
 
 /// Given a module name and a list of search paths in which to lookup modules,
 /// attempt to resolve the module name
-fn resolve_name(db: &dyn Db, name: &ModuleName) -> Option<(SearchPath, File, ModuleKind)> {
+fn resolve_name(db: &dyn Db, name: &ModuleName) -> Option<(ModuleSearchPath, File, ModuleKind)> {
     let resolver_settings = module_resolution_settings(db);
     let resolver_state = ResolverState::new(db, resolver_settings.target_version());
     let is_builtin_module = BUILTIN_MODULES.contains(&name.as_str());
@@ -525,7 +525,7 @@ fn resolve_name(db: &dyn Db, name: &ModuleName) -> Option<(SearchPath, File, Mod
 }
 
 fn resolve_package<'a, 'db, I>(
-    module_search_path: &SearchPath,
+    module_search_path: &ModuleSearchPath,
     components: I,
     resolver_state: &ResolverState<'db>,
 ) -> Result<ResolvedPackage, PackageKind>
@@ -1648,10 +1648,12 @@ not_a_directory
             .with_site_packages_files(&[("_foo.pth", "/src")])
             .build();
 
-        let search_paths: Vec<&SearchPath> =
+        let search_paths: Vec<&ModuleSearchPath> =
             module_resolution_settings(&db).search_paths(&db).collect();
 
-        assert!(search_paths.contains(&&SearchPath::first_party(db.system(), "/src").unwrap()));
-        assert!(!search_paths.contains(&&SearchPath::editable(db.system(), "/src").unwrap()));
+        assert!(
+            search_paths.contains(&&ModuleSearchPath::first_party(db.system(), "/src").unwrap())
+        );
+        assert!(!search_paths.contains(&&ModuleSearchPath::editable(db.system(), "/src").unwrap()));
     }
 }
