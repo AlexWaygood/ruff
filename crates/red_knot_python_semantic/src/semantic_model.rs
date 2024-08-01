@@ -175,13 +175,15 @@ mod tests {
 
     fn setup_db() -> TestDb {
         let db = TestDb::new();
+        let workspace_root = SystemPathBuf::from("/src");
+        db.memory_file_system().create_directory_all(&workspace_root).unwrap();
         Program::from_settings(
             &db,
             ProgramSettings {
                 target_version: TargetVersion::Py38,
                 search_paths: SearchPathSettings {
                     extra_paths: vec![],
-                    workspace_root: SystemPathBuf::from("/src"),
+                    workspace_root,
                     site_packages: vec![],
                     custom_typeshed: None,
                 },

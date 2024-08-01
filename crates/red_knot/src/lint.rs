@@ -321,6 +321,7 @@ mod tests {
 
     fn setup_db_with_root(workspace_root: SystemPathBuf) -> TestDb {
         let db = TestDb::new();
+        db.memory_file_system().create_directory_all(&workspace_root).unwrap();
 
         Program::from_settings(
             &db,

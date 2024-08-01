@@ -1496,7 +1496,7 @@ mod tests {
     use ruff_db::parsed::parsed_module;
     use ruff_db::program::{Program, ProgramSettings, TargetVersion};
     use ruff_db::search_path_settings::SearchPathSettings;
-    use ruff_db::system::{DbWithTestSystem, SystemPathBuf};
+    use ruff_db::system::{DbWithTestSystem, SystemPathBuf, SystemPath};
     use ruff_db::testing::assert_function_query_was_not_run;
     use ruff_python_ast::name::Name;
 
@@ -1511,13 +1511,16 @@ mod tests {
     fn setup_db() -> TestDb {
         let db = TestDb::new();
 
+        let workspace_root = SystemPathBuf::from("/src");
+        db.memory_file_system().create_directory_all(&workspace_root).unwrap();
+
         Program::from_settings(
             &db,
             ProgramSettings {
                 target_version: TargetVersion::Py38,
                 search_paths: SearchPathSettings {
                     extra_paths: Vec::new(),
-                    workspace_root: SystemPathBuf::from("/src"),
+                    workspace_root,
                     site_packages: vec![],
                     custom_typeshed: None,
                 },
@@ -1530,7 +1533,10 @@ mod tests {
     }
 
     fn setup_db_with_custom_typeshed(typeshed: &str) -> TestDb {
-        let db = TestDb::new();
+        let workspace_root = SystemPathBuf::from("/src");
+        let mut db = TestDb::new();
+        db.memory_file_system().create_directory_all(&workspace_root).unwrap();
+        db.write_file(SystemPath::new(typeshed).join("stdlib/VERSIONS"), "").unwrap();
 
         Program::from_settings(
             &db,
@@ -1538,7 +1544,7 @@ mod tests {
                 target_version: TargetVersion::Py38,
                 search_paths: SearchPathSettings {
                     extra_paths: Vec::new(),
-                    workspace_root: SystemPathBuf::from("/src"),
+                    workspace_root,
                     site_packages: vec![],
                     custom_typeshed: Some(SystemPathBuf::from(typeshed)),
                 },

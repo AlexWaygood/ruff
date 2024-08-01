@@ -728,10 +728,14 @@ impl ruff_cache::CacheKey for SystemVirtualPathBuf {
 ///
 /// # Examples
 /// ```rust
+/// use std::borrow::Cow;
 /// use ruff_db::system::{SystemPath, deduplicate_nested_paths};///
 ///
 /// let paths = vec![SystemPath::new("/a/b/c"), SystemPath::new("/a/b"), SystemPath::new("/a/beta"), SystemPath::new("/a/b/c")];
-/// assert_eq!(deduplicate_nested_paths(paths).collect::<Vec<_>>(), &[SystemPath::new("/a/b"), SystemPath::new("/a/beta")]);
+/// assert_eq!(
+///     deduplicate_nested_paths(paths.into_iter().map(Cow::Borrowed)).collect::<Vec<_>>(),
+///     &[Cow::Borrowed(SystemPath::new("/a/b")), Cow::Borrowed(SystemPath::new("/a/beta"))]
+/// );
 /// ```
 pub fn deduplicate_nested_paths<'a, I>(paths: I) -> DeduplicatedNestedPathsIter<'a>
 where

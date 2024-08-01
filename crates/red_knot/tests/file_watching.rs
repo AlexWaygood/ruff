@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context};
 use filetime::FileTime;
-use salsa::Setter;
 
 use red_knot::db::RootDatabase;
 use red_knot::watch;
@@ -23,6 +22,7 @@ struct TestCase {
     watcher: Option<WorkspaceWatcher>,
     changes_receiver: crossbeam::channel::Receiver<Vec<watch::ChangeEvent>>,
     temp_dir: tempfile::TempDir,
+    initial_settings: SearchPathSettings,
 }
 
 impl TestCase {
@@ -62,12 +62,18 @@ impl TestCase {
         &mut self,
         f: impl FnOnce(&SearchPathSettings) -> SearchPathSettings,
     ) {
-        let program = Program::get(self.db());
-        let search_path_settings = program.static_search_paths(self.db());
+        let mut program = Program::get(self.db());
+        let search_path_settings = &self.initial_settings;
 
         let new_settings = f(search_path_settings);
 
-        program.static_search_paths(&mut self.db).to(new_settings);
+        program
+            .apply_search_path_settings(
+                self.db_mut(),
+                new_settings,
+                red_knot_module_resolver::check_typeshed_versions,
+            )
+            .unwrap();
 
         if let Some(watcher) = &mut self.watcher {
             watcher.update(&self.db);
@@ -163,7 +169,7 @@ where
 
     let settings = ProgramSettings {
         target_version: TargetVersion::default(),
-        search_paths,
+        search_paths: search_paths.clone(),
     };
 
     let db = RootDatabase::new(workspace, settings, system);
@@ -180,6 +186,7 @@ where
         changes_receiver: receiver,
         watcher: Some(watcher),
         temp_dir,
+        initial_settings: search_paths,
     };
 
     Ok(test_case)

@@ -5,7 +5,7 @@ use crate::search_path_settings::{
 };
 use crate::typeshed_version_error::TypeshedVersionsParseError;
 use crate::Db;
-use salsa::Durability;
+use salsa::{Durability, Setter};
 
 #[salsa::input(singleton)]
 pub struct Program {
@@ -34,6 +34,22 @@ impl Program {
         Ok(Program::builder(target_version, static_search_paths)
             .durability(Durability::HIGH)
             .new(db))
+    }
+
+    pub fn apply_search_path_settings(
+        &mut self,
+        db: &mut dyn Db,
+        settings: SearchPathSettings,
+        typeshed_versions_checker: impl FnOnce(
+            &dyn Db,
+            File,
+        )
+            -> std::result::Result<(), &TypeshedVersionsParseError>,
+    ) -> Result<(), SearchPathValidationError> {
+        let static_search_paths =
+            try_resolve_module_resolution_settings(db, settings, typeshed_versions_checker)?;
+        self.set_static_search_paths(db).to(static_search_paths);
+        Ok(())
     }
 }
 
