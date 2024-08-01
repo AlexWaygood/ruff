@@ -98,7 +98,7 @@ where
             extra_paths: vec![],
             workspace_root: workspace_path.to_path_buf(),
             custom_typeshed: None,
-            site_packages: None,
+            site_packages: vec![],
         }
     })
 }
@@ -656,7 +656,7 @@ fn search_path() -> anyhow::Result<()> {
                 extra_paths: vec![],
                 workspace_root: workspace_path.to_path_buf(),
                 custom_typeshed: None,
-                site_packages: Some(root_path.join("site_packages")),
+                site_packages: vec![root_path.join("site_packages")],
             }
         })?;
 
@@ -693,7 +693,7 @@ fn add_search_path() -> anyhow::Result<()> {
 
     // Register site-packages as a search path.
     case.update_search_path_settings(|settings| SearchPathSettings {
-        site_packages: Some(site_packages.clone()),
+        site_packages: vec![site_packages.clone()],
         ..settings.clone()
     });
 
@@ -716,14 +716,14 @@ fn remove_search_path() -> anyhow::Result<()> {
                 extra_paths: vec![],
                 workspace_root: workspace_path.to_path_buf(),
                 custom_typeshed: None,
-                site_packages: Some(root_path.join("site_packages")),
+                site_packages: vec![root_path.join("site_packages")],
             }
         })?;
 
     // Remove site packages from the search path settings.
     let site_packages = case.root_path().join("site_packages");
     case.update_search_path_settings(|settings| SearchPathSettings {
-        site_packages: None,
+        site_packages: vec![],
         ..settings.clone()
     });
 
