@@ -1491,9 +1491,11 @@ impl<'db> TypeInferenceBuilder<'db> {
 
 #[cfg(test)]
 mod tests {
+    use red_knot_module_resolver::check_typeshed_versions;
     use ruff_db::files::{system_path_to_file, File};
     use ruff_db::parsed::parsed_module;
-    use ruff_db::program::{Program, SearchPathSettings, TargetVersion};
+    use ruff_db::program::{Program, ProgramSettings, TargetVersion};
+    use ruff_db::search_path_settings::SearchPathSettings;
     use ruff_db::system::{DbWithTestSystem, SystemPathBuf};
     use ruff_db::testing::assert_function_query_was_not_run;
     use ruff_python_ast::name::Name;
@@ -1509,16 +1511,20 @@ mod tests {
     fn setup_db() -> TestDb {
         let db = TestDb::new();
 
-        Program::new(
+        Program::from_settings(
             &db,
-            TargetVersion::Py38,
-            SearchPathSettings {
-                extra_paths: Vec::new(),
-                workspace_root: SystemPathBuf::from("/src"),
-                site_packages: vec![],
-                custom_typeshed: None,
+            ProgramSettings {
+                target_version: TargetVersion::Py38,
+                search_paths: SearchPathSettings {
+                    extra_paths: Vec::new(),
+                    workspace_root: SystemPathBuf::from("/src"),
+                    site_packages: vec![],
+                    custom_typeshed: None,
+                },
             },
-        );
+            check_typeshed_versions,
+        )
+        .unwrap();
 
         db
     }
@@ -1526,16 +1532,20 @@ mod tests {
     fn setup_db_with_custom_typeshed(typeshed: &str) -> TestDb {
         let db = TestDb::new();
 
-        Program::new(
+        Program::from_settings(
             &db,
-            TargetVersion::Py38,
-            SearchPathSettings {
-                extra_paths: Vec::new(),
-                workspace_root: SystemPathBuf::from("/src"),
-                site_packages: vec![],
-                custom_typeshed: Some(SystemPathBuf::from(typeshed)),
+            ProgramSettings {
+                target_version: TargetVersion::Py38,
+                search_paths: SearchPathSettings {
+                    extra_paths: Vec::new(),
+                    workspace_root: SystemPathBuf::from("/src"),
+                    site_packages: vec![],
+                    custom_typeshed: Some(SystemPathBuf::from(typeshed)),
+                },
             },
-        );
+            check_typeshed_versions,
+        )
+        .unwrap();
 
         db
     }

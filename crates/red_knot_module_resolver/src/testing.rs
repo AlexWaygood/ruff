@@ -233,7 +233,8 @@ impl TestCaseBuilder<MockedTypeshed> {
                 },
             },
             crate::check_typeshed_versions,
-        );
+        )
+        .unwrap();
 
         TestCase {
             db,
@@ -289,7 +290,8 @@ impl TestCaseBuilder<VendoredTypeshed> {
                 },
             },
             crate::check_typeshed_versions,
-        );
+        )
+        .unwrap();
 
         TestCase {
             db,

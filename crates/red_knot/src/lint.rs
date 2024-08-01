@@ -306,8 +306,10 @@ enum AnyImportRef<'a> {
 
 #[cfg(test)]
 mod tests {
+    use red_knot_module_resolver::check_typeshed_versions;
     use ruff_db::files::system_path_to_file;
-    use ruff_db::program::{Program, SearchPathSettings, TargetVersion};
+    use ruff_db::program::{Program, ProgramSettings, TargetVersion};
+    use ruff_db::search_path_settings::SearchPathSettings;
     use ruff_db::system::{DbWithTestSystem, SystemPathBuf};
 
     use super::{lint_semantic, Diagnostics};
@@ -320,16 +322,20 @@ mod tests {
     fn setup_db_with_root(workspace_root: SystemPathBuf) -> TestDb {
         let db = TestDb::new();
 
-        Program::new(
+        Program::from_settings(
             &db,
-            TargetVersion::Py38,
-            SearchPathSettings {
-                extra_paths: Vec::new(),
-                workspace_root,
-                site_packages: vec![],
-                custom_typeshed: None,
+            ProgramSettings {
+                target_version: TargetVersion::Py38,
+                search_paths: SearchPathSettings {
+                    extra_paths: Vec::new(),
+                    workspace_root,
+                    site_packages: vec![],
+                    custom_typeshed: None,
+                },
             },
-        );
+            check_typeshed_versions,
+        )
+        .unwrap();
 
         db
     }

@@ -1,5 +1,5 @@
 use std::fmt;
-use std::num::{NonZeroUsize, NonZeroU16};
+use std::num::{NonZeroU16, NonZeroUsize};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypeshedVersionsParseError {

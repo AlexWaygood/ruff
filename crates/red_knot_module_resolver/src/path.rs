@@ -315,8 +315,9 @@ fn query_stdlib_version(
 pub(crate) struct SearchPath(Arc<SearchPathInner>);
 
 impl SearchPath {
-    pub(crate) fn new(path: SearchPathInner) -> Self {
-        Self(Arc::new(path))
+    #[must_use]
+    pub(crate) fn new(search_path: Arc<SearchPathInner>) -> Self {
+        Self(search_path)
     }
 
     #[must_use]
@@ -334,12 +335,6 @@ impl SearchPath {
             &*self.0,
             SearchPathInner::StandardLibraryCustom(_) | SearchPathInner::StandardLibraryVendored(_)
         )
-    }
-
-    /// Does this search path point to the `site-packages` directory?
-    #[must_use]
-    pub(crate) fn is_site_packages(&self) -> bool {
-        matches!(&*self.0, SearchPathInner::SitePackages(_))
     }
 
     fn is_valid_extension(&self, extension: &str) -> bool {
@@ -499,7 +494,7 @@ mod tests {
             typeshed: SystemPathBuf,
         ) -> Result<Self, ruff_db::search_path_settings::SearchPathValidationError> {
             SearchPathInner::custom_stdlib(db, typeshed, crate::typeshed::check_typeshed_versions)
-                .map(Self::new)
+                .map(Self)
         }
 
         #[must_use]
@@ -542,7 +537,7 @@ mod tests {
 
         assert_eq!(
             &SearchPathInner::first_party(db.system(), src.clone())
-                .map(SearchPath::new)
+                .map(SearchPath)
                 .unwrap()
                 .join("foo/bar")
                 .with_py_extension()
@@ -555,7 +550,7 @@ mod tests {
     fn module_name_1_part() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
         let src_search_path = SearchPathInner::first_party(db.system(), src)
-            .map(SearchPath::new)
+            .map(SearchPath)
             .unwrap();
         let foo_module_name = ModuleName::new_static("foo").unwrap();
 
@@ -586,7 +581,7 @@ mod tests {
     fn module_name_2_parts() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
         let src_search_path = SearchPathInner::first_party(db.system(), src)
-            .map(SearchPath::new)
+            .map(SearchPath)
             .unwrap();
         let foo_bar_module_name = ModuleName::new_static("foo.bar").unwrap();
 
@@ -616,7 +611,7 @@ mod tests {
     fn module_name_3_parts() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
         let src_search_path = SearchPathInner::first_party(db.system(), src)
-            .map(SearchPath::new)
+            .map(SearchPath)
             .unwrap();
         let foo_bar_baz_module_name = ModuleName::new_static("foo.bar.baz").unwrap();
 
@@ -674,7 +669,7 @@ mod tests {
     fn non_stdlib_path_invalid_join_rs() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
         SearchPathInner::first_party(db.system(), src)
-            .map(SearchPath::new)
+            .map(SearchPath)
             .unwrap()
             .to_module_path()
             .push("bar.rs");
@@ -685,7 +680,7 @@ mod tests {
     fn too_many_extensions() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
         SearchPathInner::first_party(db.system(), src)
-            .map(SearchPath::new)
+            .map(SearchPath)
             .unwrap()
             .join("foo.py")
             .push("bar.py");
@@ -715,7 +710,7 @@ mod tests {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
 
         let root = SearchPathInner::extra(db.system(), src.clone())
-            .map(SearchPath::new)
+            .map(SearchPath)
             .unwrap();
         // Must have a `.py` extension, a `.pyi` extension, or no extension:
         let bad_absolute_path = src.join("x.rs");
@@ -729,7 +724,7 @@ mod tests {
     fn relativize_path() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
         let src_search_path = SearchPathInner::first_party(db.system(), src.clone())
-            .map(SearchPath::new)
+            .map(SearchPath)
             .unwrap();
         let eggs_package = src.join("eggs/__init__.pyi");
         let module_path = src_search_path

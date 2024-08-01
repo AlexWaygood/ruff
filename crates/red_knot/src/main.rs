@@ -13,7 +13,8 @@ use red_knot::db::RootDatabase;
 use red_knot::watch;
 use red_knot::watch::WorkspaceWatcher;
 use red_knot::workspace::WorkspaceMetadata;
-use ruff_db::program::{ProgramSettings, SearchPathSettings};
+use ruff_db::program::ProgramSettings;
+use ruff_db::search_path_settings::SearchPathSettings;
 use ruff_db::system::{OsSystem, System, SystemPathBuf};
 
 use cli::target_version::TargetVersion;

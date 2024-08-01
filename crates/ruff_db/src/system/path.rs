@@ -3,7 +3,7 @@
 //    but there's no compile time guarantee that a [`OsSystem`] never gets an untitled file path.
 
 use camino::{Utf8Path, Utf8PathBuf};
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use std::fmt::Formatter;
 use std::ops::Deref;
 use std::path::{Path, StripPrefixError};
@@ -735,20 +735,20 @@ impl ruff_cache::CacheKey for SystemVirtualPathBuf {
 /// ```
 pub fn deduplicate_nested_paths<'a, I>(paths: I) -> DeduplicatedNestedPathsIter<'a>
 where
-    I: IntoIterator<Item = &'a SystemPath>,
+    I: IntoIterator<Item = Cow<'a, SystemPath>>,
 {
     DeduplicatedNestedPathsIter::new(paths)
 }
 
 pub struct DeduplicatedNestedPathsIter<'a> {
-    inner: std::vec::IntoIter<&'a SystemPath>,
-    next: Option<&'a SystemPath>,
+    inner: std::vec::IntoIter<Cow<'a, SystemPath>>,
+    next: Option<Cow<'a, SystemPath>>,
 }
 
 impl<'a> DeduplicatedNestedPathsIter<'a> {
     fn new<I>(paths: I) -> Self
     where
-        I: IntoIterator<Item = &'a SystemPath>,
+        I: IntoIterator<Item = Cow<'a, SystemPath>>,
     {
         let mut paths = paths.into_iter().collect::<Vec<_>>();
         // Sort the path to ensure that e.g. `/a/b/c`, comes right after `/a/b`.
@@ -764,14 +764,14 @@ impl<'a> DeduplicatedNestedPathsIter<'a> {
 }
 
 impl<'a> Iterator for DeduplicatedNestedPathsIter<'a> {
-    type Item = &'a SystemPath;
+    type Item = Cow<'a, SystemPath>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let current = self.next.take()?;
 
         for next in self.inner.by_ref() {
             // Skip all paths that have the same prefix as the current path
-            if !next.starts_with(current) {
+            if !next.starts_with(&*current) {
                 self.next = Some(next);
                 break;
             }

@@ -1,4 +1,6 @@
 use std::fmt;
+use std::ops::Deref;
+use std::sync::Arc;
 
 use rustc_hash::{FxBuildHasher, FxHashSet};
 
@@ -78,18 +80,18 @@ pub enum ValidatedSearchPath {
 
 impl ValidatedSearchPath {
     /// Create a new "Extra" search path
-    pub fn extra(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Self> {
+    pub fn extra(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Arc<Self>> {
         if system.is_directory(&root) {
-            Ok(Self::Extra(root))
+            Ok(Arc::new(Self::Extra(root)))
         } else {
             Err(SearchPathValidationError::NotADirectory(root))
         }
     }
 
     /// Create a new first-party search path, pointing to the user code we were directly invoked on
-    pub fn first_party(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Self> {
+    pub fn first_party(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Arc<Self>> {
         if system.is_directory(&root) {
-            Ok(Self::FirstParty(root))
+            Ok(Arc::new(Self::FirstParty(root)))
         } else {
             Err(SearchPathValidationError::NotADirectory(root))
         }
@@ -103,7 +105,7 @@ impl ValidatedSearchPath {
             &dyn Db,
             File,
         ) -> std::result::Result<(), &TypeshedVersionsParseError>,
-    ) -> SearchPathResult<Self> {
+    ) -> SearchPathResult<Arc<Self>> {
         let system = db.system();
         if !system.is_directory(&typeshed) {
             return Err(SearchPathValidationError::NotADirectory(
@@ -126,28 +128,35 @@ impl ValidatedSearchPath {
         check_versions_fn(db, typeshed_versions).map_err(|validation_error| {
             SearchPathValidationError::VersionsParseError(validation_error.clone())
         })?;
-        Ok(Self::StandardLibraryCustom(stdlib))
+        Ok(Arc::new(Self::StandardLibraryCustom(stdlib)))
     }
 
     /// Create a new search path pointing to the `stdlib/` subdirectory in the vendored zip archive
     #[must_use]
-    pub fn vendored_stdlib() -> Self {
-        Self::StandardLibraryVendored(VendoredPathBuf::from("stdlib"))
+    pub fn vendored_stdlib() -> Arc<Self> {
+        Arc::new(Self::StandardLibraryVendored(VendoredPathBuf::from(
+            "stdlib",
+        )))
     }
 
     /// Create a new search path pointing to the `site-packages` directory on disk
-    pub fn site_packages(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Self> {
+    pub fn site_packages(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Arc<Self>> {
         if system.is_directory(&root) {
-            Ok(Self::SitePackages(root))
+            Ok(Arc::new(Self::SitePackages(root)))
         } else {
             Err(SearchPathValidationError::NotADirectory(root))
         }
     }
 
+    /// Does this search path point to a `site-packages` directory?
+    pub const fn is_site_packages(&self) -> bool {
+        matches!(self, Self::SitePackages(_))
+    }
+
     /// Create a new search path pointing to an editable installation
-    pub fn editable(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Self> {
+    pub fn editable(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Arc<Self>> {
         if system.is_directory(&root) {
-            Ok(Self::Editable(root))
+            Ok(Arc::new(Self::Editable(root)))
         } else {
             Err(SearchPathValidationError::NotADirectory(root))
         }
@@ -270,4 +279,12 @@ pub(crate) fn try_resolve_module_resolution_settings(
 /// Search paths that have been statically determined purely from reading Ruff's configuration settings.
 /// These shouldn't ever change unless the config settings themselves change.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StaticSearchPaths(Vec<ValidatedSearchPath>);
+pub struct StaticSearchPaths(Vec<Arc<ValidatedSearchPath>>);
+
+impl Deref for StaticSearchPaths {
+    type Target = [Arc<ValidatedSearchPath>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}

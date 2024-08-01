@@ -1,7 +1,9 @@
 use std::borrow::Cow;
 use std::iter::FusedIterator;
+use std::sync::Arc;
 
 use once_cell::sync::Lazy;
+use ruff_db::program::Program;
 use rustc_hash::FxHashSet;
 
 use ruff_db::files::{File, FilePath};
@@ -114,47 +116,19 @@ pub(crate) fn file_to_module(db: &dyn Db, file: File) -> Option<Module> {
 /// search paths listed in `.pth` files in the `site-packages` directory
 /// due to editable installations of third-party packages.
 #[salsa::tracked(return_ref)]
-pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<SearchPath> {
-    let static_search_paths = &db.static_search_paths;
+pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<Arc<SearchPathInner>> {
+    let static_search_paths = Program::get(db).static_search_paths(db);
 
-    let site_packages = static_search_paths
+    let site_packages_dirs: Vec<&SystemPath> = static_search_paths
         .iter()
-        .find(|path| path.is_site_packages());
+        .filter(|path| path.is_site_packages())
+        .map(|path| {
+            path.as_system_path()
+                .expect("Expected site-packages never to be a VendoredPath!")
+        })
+        .collect();
 
-    let Some(site_packages) = site_packages else {
-        return Vec::new();
-    };
-
-    let site_packages = site_packages
-        .as_system_path()
-        .expect("Expected site-packages never to be a VendoredPath!");
-
-    let mut dynamic_paths = Vec::default();
-
-    // This query needs to be re-executed each time a `.pth` file
-    // is added, modified or removed from the `site-packages` directory.
-    // However, we don't use Salsa queries to read the source text of `.pth` files;
-    // we use the APIs on the `System` trait directly. As such, add a dependency on the
-    // site-package directory's revision.
-    if let Some(site_packages_root) = db.files().root(db.upcast(), site_packages) {
-        let _ = site_packages_root.revision(db.upcast());
-    }
-
-    // As well as modules installed directly into `site-packages`,
-    // the directory may also contain `.pth` files.
-    // Each `.pth` file in `site-packages` may contain one or more lines
-    // containing a (relative or absolute) path.
-    // Each of these paths may point to an editable install of a package,
-    // so should be considered an additional search path.
-    let Ok(pth_file_iterator) = PthFileIterator::new(db, site_packages) else {
-        return dynamic_paths;
-    };
-
-    // The Python documentation specifies that `.pth` files in `site-packages`
-    // are processed in alphabetical order, so collecting and then sorting is necessary.
-    // https://docs.python.org/3/library/site.html#module-site
-    let mut all_pth_files: Vec<PthFile> = pth_file_iterator.collect();
-    all_pth_files.sort_by(|a, b| a.path.cmp(&b.path));
+    let mut dynamic_paths = Vec::new();
 
     let mut existing_paths: FxHashSet<_> = static_search_paths
         .iter()
@@ -162,14 +136,39 @@ pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<SearchPath> 
         .map(Cow::Borrowed)
         .collect();
 
-    dynamic_paths.reserve(all_pth_files.len());
+    for site_packages in site_packages_dirs {
+        // This query needs to be re-executed each time a `.pth` file
+        // is added, modified or removed from the `site-packages` directory.
+        // However, we don't use Salsa queries to read the source text of `.pth` files;
+        // we use the APIs on the `System` trait directly. As such, add a dependency on the
+        // site-package directory's revision.
+        if let Some(site_packages_root) = db.files().root(db.upcast(), site_packages) {
+            let _ = site_packages_root.revision(db.upcast());
+        }
 
-    for pth_file in &all_pth_files {
-        for installation in pth_file.editable_installations() {
-            if existing_paths.insert(Cow::Owned(
-                installation.as_system_path().unwrap().to_path_buf(),
-            )) {
-                dynamic_paths.push(installation);
+        // As well as modules installed directly into `site-packages`,
+        // the directory may also contain `.pth` files.
+        // Each `.pth` file in `site-packages` may contain one or more lines
+        // containing a (relative or absolute) path.
+        // Each of these paths may point to an editable install of a package,
+        // so should be considered an additional search path.
+        let Ok(pth_file_iterator) = PthFileIterator::new(db, site_packages) else {
+            continue;
+        };
+
+        // The Python documentation specifies that `.pth` files in `site-packages`
+        // are processed in alphabetical order, so collecting and then sorting is necessary.
+        // https://docs.python.org/3/library/site.html#module-site
+        let mut all_pth_files: Vec<PthFile> = pth_file_iterator.collect();
+        all_pth_files.sort_by(|a, b| a.path.cmp(&b.path));
+
+        for pth_file in &all_pth_files {
+            for installation in pth_file.editable_installations() {
+                if existing_paths.insert(Cow::Owned(
+                    installation.as_system_path().unwrap().to_path_buf(),
+                )) {
+                    dynamic_paths.push(installation);
+                }
             }
         }
     }
@@ -186,12 +185,12 @@ pub(crate) fn editable_install_resolution_paths(db: &dyn Db) -> Vec<SearchPath> 
 /// [`sys.path` at runtime]: https://docs.python.org/3/library/site.html#module-site
 pub(crate) struct SearchPathIterator<'db> {
     db: &'db dyn Db,
-    static_paths: std::slice::Iter<'db, SearchPath>,
-    dynamic_paths: Option<std::slice::Iter<'db, SearchPath>>,
+    static_paths: std::slice::Iter<'db, Arc<SearchPathInner>>,
+    dynamic_paths: Option<std::slice::Iter<'db, Arc<SearchPathInner>>>,
 }
 
 impl<'db> Iterator for SearchPathIterator<'db> {
-    type Item = &'db SearchPath;
+    type Item = SearchPath;
 
     fn next(&mut self) -> Option<Self::Item> {
         let SearchPathIterator {
@@ -200,11 +199,14 @@ impl<'db> Iterator for SearchPathIterator<'db> {
             dynamic_paths,
         } = self;
 
-        static_paths.next().or_else(|| {
-            dynamic_paths
-                .get_or_insert_with(|| editable_install_resolution_paths(*db).iter())
-                .next()
-        })
+        static_paths
+            .next()
+            .or_else(|| {
+                dynamic_paths
+                    .get_or_insert_with(|| editable_install_resolution_paths(*db).iter())
+                    .next()
+            })
+            .map(|path| SearchPath::new(Arc::clone(path)))
     }
 }
 
@@ -223,7 +225,7 @@ struct PthFile<'db> {
 impl<'db> PthFile<'db> {
     /// Yield paths in this `.pth` file that appear to represent editable installations,
     /// and should therefore be added as module-resolution search paths.
-    fn editable_installations(&'db self) -> impl Iterator<Item = SearchPath> + 'db {
+    fn editable_installations(&'db self) -> impl Iterator<Item = Arc<SearchPathInner>> + 'db {
         let PthFile {
             system,
             path: _,
@@ -245,9 +247,7 @@ impl<'db> PthFile<'db> {
                 return None;
             }
             let possible_editable_install = SystemPath::absolute(line, site_packages);
-            SearchPathInner::editable(*system, possible_editable_install)
-                .ok()
-                .map(SearchPath::new)
+            SearchPathInner::editable(*system, possible_editable_install).ok()
         })
     }
 }
@@ -313,7 +313,7 @@ impl<'db> Iterator for PthFileIterator<'db> {
 pub(crate) fn search_paths(db: &dyn Db) -> SearchPathIterator {
     SearchPathIterator {
         db,
-        static_paths: db.static_search_paths.iter(),
+        static_paths: Program::get(db).static_search_paths(db).iter(),
         dynamic_paths: None,
     }
 }
@@ -376,7 +376,8 @@ static BUILTIN_MODULES: Lazy<FxHashSet<&str>> = Lazy::new(|| {
 /// Given a module name and a list of search paths in which to lookup modules,
 /// attempt to resolve the module name
 fn resolve_name(db: &dyn Db, name: &ModuleName) -> Option<(SearchPath, File, ModuleKind)> {
-    let resolver_state = ResolverState::new(db, db.target_version());
+    let program = Program::get(db);
+    let resolver_state = ResolverState::new(db, program.target_version(db));
     let is_builtin_module = BUILTIN_MODULES.contains(&name.as_str());
 
     for search_path in search_paths(db) {
@@ -387,7 +388,7 @@ fn resolve_name(db: &dyn Db, name: &ModuleName) -> Option<(SearchPath, File, Mod
         let mut components = name.components();
         let module_name = components.next_back()?;
 
-        match resolve_package(search_path, components, &resolver_state) {
+        match resolve_package(&search_path, components, &resolver_state) {
             Ok(resolved_package) => {
                 let mut package_path = resolved_package.path;
 
@@ -1087,7 +1088,8 @@ mod tests {
                 search_paths,
             },
             crate::check_typeshed_versions,
-        );
+        )
+        .unwrap();
 
         let foo_module = resolve_module(&db, ModuleName::new_static("foo").unwrap()).unwrap();
         let bar_module = resolve_module(&db, ModuleName::new_static("bar").unwrap()).unwrap();
@@ -1551,14 +1553,13 @@ not_a_directory
             .with_site_packages_files(&[("_foo.pth", "/src")])
             .build();
 
-        let search_paths: Vec<&SearchPath> =
-            module_resolution_settings(&db).search_paths(&db).collect();
+        let search_paths: Vec<SearchPath> = search_paths(&db).collect();
 
-        assert!(search_paths.contains(
-            &&SearchPathInner::first_party(db.system(), SystemPathBuf::from("/src")).unwrap()
-        ));
-        assert!(!search_paths.contains(
-            &&SearchPathInner::editable(db.system(), SystemPathBuf::from("/src")).unwrap()
-        ));
+        assert!(search_paths.contains(&SearchPath::new(
+            SearchPathInner::first_party(db.system(), SystemPathBuf::from("/src")).unwrap()
+        )));
+        assert!(!search_paths.contains(&SearchPath::new(
+            SearchPathInner::editable(db.system(), SystemPathBuf::from("/src")).unwrap()
+        )));
     }
 }

@@ -4,7 +4,7 @@ pub use db::Db;
 pub use module::{Module, ModuleKind};
 pub use module_name::ModuleName;
 pub use resolver::resolve_module;
-use ruff_db::system::SystemPath;
+use ruff_db::system::SystemPathBuf;
 pub use typeshed::{check_typeshed_versions, vendored_typeshed_stubs};
 
 use crate::resolver::{search_paths, SearchPathIterator};
@@ -32,14 +32,14 @@ pub struct SystemModuleSearchPathsIter<'db> {
 }
 
 impl<'db> Iterator for SystemModuleSearchPathsIter<'db> {
-    type Item = &'db SystemPath;
+    type Item = SystemPathBuf;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let next = self.inner.next()?;
 
             if let Some(system_path) = next.as_system_path() {
-                return Some(system_path);
+                return Some(system_path.to_path_buf());
             }
         }
     }
