@@ -1,6 +1,8 @@
-use ruff_db::program::{Program, SearchPathSettings, TargetVersion};
+use ruff_db::program::{Program, ProgramSettings, TargetVersion};
+use ruff_db::search_path_settings::SearchPathSettings;
 use ruff_db::system::{DbWithTestSystem, SystemPath, SystemPathBuf};
 use ruff_db::vendored::VendoredPathBuf;
+use ruff_db::Upcast;
 
 use crate::db::tests::TestDb;
 
@@ -219,15 +221,18 @@ impl TestCaseBuilder<MockedTypeshed> {
         let src = Self::write_mock_directory(&mut db, "/src", first_party_files);
         let typeshed = Self::build_typeshed_mock(&mut db, &typeshed_option);
 
-        Program::new(
-            &db,
-            target_version,
-            SearchPathSettings {
-                extra_paths: vec![],
-                workspace_root: src.clone(),
-                custom_typeshed: Some(typeshed.clone()),
-                site_packages: vec![site_packages.clone()],
+        Program::from_settings(
+            db.upcast(),
+            ProgramSettings {
+                target_version,
+                search_paths: SearchPathSettings {
+                    extra_paths: vec![],
+                    workspace_root: src.clone(),
+                    custom_typeshed: Some(typeshed.clone()),
+                    site_packages: vec![site_packages.clone()],
+                },
             },
+            crate::check_typeshed_versions,
         );
 
         TestCase {
@@ -272,15 +277,18 @@ impl TestCaseBuilder<VendoredTypeshed> {
             Self::write_mock_directory(&mut db, "/site-packages", site_packages_files);
         let src = Self::write_mock_directory(&mut db, "/src", first_party_files);
 
-        Program::new(
-            &db,
-            target_version,
-            SearchPathSettings {
-                extra_paths: vec![],
-                workspace_root: src.clone(),
-                custom_typeshed: None,
-                site_packages: vec![site_packages.clone()],
+        Program::from_settings(
+            db.upcast(),
+            ProgramSettings {
+                target_version,
+                search_paths: SearchPathSettings {
+                    extra_paths: vec![],
+                    workspace_root: src.clone(),
+                    custom_typeshed: None,
+                    site_packages: vec![site_packages.clone()],
+                },
             },
+            crate::check_typeshed_versions,
         );
 
         TestCase {

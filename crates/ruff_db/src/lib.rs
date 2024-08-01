@@ -10,9 +10,11 @@ pub mod file_revision;
 pub mod files;
 pub mod parsed;
 pub mod program;
+pub mod search_path_settings;
 pub mod source;
 pub mod system;
 pub mod testing;
+pub mod typeshed_version_error;
 pub mod vendored;
 
 pub type FxDashMap<K, V> = dashmap::DashMap<K, V, BuildHasherDefault<FxHasher>>;

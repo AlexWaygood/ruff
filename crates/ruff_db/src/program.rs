@@ -1,4 +1,10 @@
-use crate::{system::SystemPathBuf, Db};
+use crate::files::File;
+use crate::search_path_settings::{
+    try_resolve_module_resolution_settings, SearchPathSettings, SearchPathValidationError,
+    StaticSearchPaths,
+};
+use crate::typeshed_version_error::TypeshedVersionsParseError;
+use crate::Db;
 use salsa::Durability;
 
 #[salsa::input(singleton)]
@@ -6,14 +12,28 @@ pub struct Program {
     pub target_version: TargetVersion,
 
     #[return_ref]
-    pub search_paths: SearchPathSettings,
+    pub static_search_paths: StaticSearchPaths,
 }
 
 impl Program {
-    pub fn from_settings(db: &dyn Db, settings: ProgramSettings) -> Self {
-        Program::builder(settings.target_version, settings.search_paths)
+    pub fn from_settings(
+        db: &dyn Db,
+        settings: ProgramSettings,
+        typeshed_versions_checker: impl FnOnce(
+            &dyn Db,
+            File,
+        )
+            -> std::result::Result<(), &TypeshedVersionsParseError>,
+    ) -> Result<Self, SearchPathValidationError> {
+        let ProgramSettings {
+            target_version,
+            search_paths,
+        } = settings;
+        let static_search_paths =
+            try_resolve_module_resolution_settings(db, search_paths, typeshed_versions_checker)?;
+        Ok(Program::builder(target_version, static_search_paths)
             .durability(Durability::HIGH)
-            .new(db)
+            .new(db))
     }
 }
 
@@ -62,24 +82,4 @@ impl std::fmt::Debug for TargetVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self, f)
     }
-}
-
-/// Configures the search paths for module resolution.
-#[derive(Eq, PartialEq, Debug, Clone)]
-pub struct SearchPathSettings {
-    /// List of user-provided paths that should take first priority in the module resolution.
-    /// Examples in other type checkers are mypy's MYPYPATH environment variable,
-    /// or pyright's stubPath configuration setting.
-    pub extra_paths: Vec<SystemPathBuf>,
-
-    /// The root of the workspace, used for finding first-party modules.
-    pub workspace_root: SystemPathBuf,
-
-    /// Optional path to a "custom typeshed" directory on disk for us to use for standard-library types.
-    /// If this is not provided, we will fallback to our vendored typeshed stubs for the stdlib,
-    /// bundled as a zip file in the binary
-    pub custom_typeshed: Option<SystemPathBuf>,
-
-    /// The path to the user's `site-packages` directory, where third-party packages from ``PyPI`` are installed.
-    pub site_packages: Vec<SystemPathBuf>,
 }

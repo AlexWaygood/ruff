@@ -1,18 +1,17 @@
 //! Internal abstractions for differentiating between different kinds of search paths.
 
-use std::fmt;
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 use ruff_db::files::{system_path_to_file, vendored_path_to_file, File, FileError};
-use ruff_db::system::{System, SystemPath, SystemPathBuf};
+use ruff_db::search_path_settings::ValidatedSearchPath as SearchPathInner;
+use ruff_db::system::{SystemPath, SystemPathBuf};
 use ruff_db::vendored::{VendoredPath, VendoredPathBuf};
 
-use crate::db::Db;
 use crate::module_name::ModuleName;
 use crate::state::ResolverState;
-use crate::typeshed::{TypeshedVersionsParseError, TypeshedVersionsQueryResult};
+use crate::typeshed::TypeshedVersionsQueryResult;
 
 /// A path that points to a Python module.
 ///
@@ -287,72 +286,6 @@ fn query_stdlib_version(
     typeshed_versions.query_module(*db, &module_name, custom_stdlib_root, *target_version)
 }
 
-/// Enumeration describing the various ways in which validation of a search path might fail.
-///
-/// If validation fails for a search path derived from the user settings,
-/// a message must be displayed to the user,
-/// as type checking cannot be done reliably in these circumstances.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum SearchPathValidationError {
-    /// The path provided by the user was not a directory
-    NotADirectory(SystemPathBuf),
-
-    /// The path provided by the user is a directory,
-    /// but no `stdlib/` subdirectory exists.
-    /// (This is only relevant for stdlib search paths.)
-    NoStdlibSubdirectory(SystemPathBuf),
-
-    /// The typeshed path provided by the user is a directory,
-    /// but no `stdlib/VERSIONS` file exists.
-    /// (This is only relevant for stdlib search paths.)
-    NoVersionsFile(SystemPathBuf),
-
-    /// `stdlib/VERSIONS` is a directory.
-    /// (This is only relevant for stdlib search paths.)
-    VersionsIsADirectory(SystemPathBuf),
-
-    /// The path provided by the user is a directory,
-    /// and a `stdlib/VERSIONS` file exists, but it fails to parse.
-    /// (This is only relevant for stdlib search paths.)
-    VersionsParseError(TypeshedVersionsParseError),
-}
-
-impl fmt::Display for SearchPathValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NotADirectory(path) => write!(f, "{path} does not point to a directory"),
-            Self::NoStdlibSubdirectory(path) => {
-                write!(f, "The directory at {path} has no `stdlib/` subdirectory")
-            }
-            Self::NoVersionsFile(path) => write!(f, "Expected a file at {path}/stdlib/VERSIONS"),
-            Self::VersionsIsADirectory(path) => write!(f, "{path}/stdlib/VERSIONS is a directory."),
-            Self::VersionsParseError(underlying_error) => underlying_error.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for SearchPathValidationError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        if let Self::VersionsParseError(underlying_error) = self {
-            Some(underlying_error)
-        } else {
-            None
-        }
-    }
-}
-
-type SearchPathResult<T> = Result<T, SearchPathValidationError>;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum SearchPathInner {
-    Extra(SystemPathBuf),
-    FirstParty(SystemPathBuf),
-    StandardLibraryCustom(SystemPathBuf),
-    StandardLibraryVendored(VendoredPathBuf),
-    SitePackages(SystemPathBuf),
-    Editable(SystemPathBuf),
-}
-
 /// Unification of the various kinds of search paths
 /// that can be used to locate Python modules.
 ///
@@ -382,82 +315,8 @@ enum SearchPathInner {
 pub(crate) struct SearchPath(Arc<SearchPathInner>);
 
 impl SearchPath {
-    /// Create a new "Extra" search path
-    pub(crate) fn extra(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Self> {
-        if system.is_directory(&root) {
-            Ok(Self(Arc::new(SearchPathInner::Extra(root))))
-        } else {
-            Err(SearchPathValidationError::NotADirectory(root))
-        }
-    }
-
-    /// Create a new first-party search path, pointing to the user code we were directly invoked on
-    pub(crate) fn first_party(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Self> {
-        if system.is_directory(&root) {
-            Ok(Self(Arc::new(SearchPathInner::FirstParty(root))))
-        } else {
-            Err(SearchPathValidationError::NotADirectory(root))
-        }
-    }
-
-    /// Create a new standard-library search path pointing to a custom directory on disk
-    pub(crate) fn custom_stdlib(db: &dyn Db, typeshed: SystemPathBuf) -> SearchPathResult<Self> {
-        let system = db.system();
-        if !system.is_directory(&typeshed) {
-            return Err(SearchPathValidationError::NotADirectory(
-                typeshed.to_path_buf(),
-            ));
-        }
-        let stdlib = typeshed.join("stdlib");
-        if !system.is_directory(&stdlib) {
-            return Err(SearchPathValidationError::NoStdlibSubdirectory(
-                typeshed.to_path_buf(),
-            ));
-        }
-        let typeshed_versions =
-            system_path_to_file(db.upcast(), stdlib.join("VERSIONS")).map_err(|err| match err {
-                FileError::NotFound => SearchPathValidationError::NoVersionsFile(typeshed),
-                FileError::IsADirectory => {
-                    SearchPathValidationError::VersionsIsADirectory(typeshed)
-                }
-            })?;
-        crate::typeshed::parse_typeshed_versions(db, typeshed_versions)
-            .as_ref()
-            .map_err(|validation_error| {
-                SearchPathValidationError::VersionsParseError(validation_error.clone())
-            })?;
-        Ok(Self(Arc::new(SearchPathInner::StandardLibraryCustom(
-            stdlib,
-        ))))
-    }
-
-    /// Create a new search path pointing to the `stdlib/` subdirectory in the vendored zip archive
-    #[must_use]
-    pub(crate) fn vendored_stdlib() -> Self {
-        Self(Arc::new(SearchPathInner::StandardLibraryVendored(
-            VendoredPathBuf::from("stdlib"),
-        )))
-    }
-
-    /// Create a new search path pointing to the `site-packages` directory on disk
-    pub(crate) fn site_packages(
-        system: &dyn System,
-        root: SystemPathBuf,
-    ) -> SearchPathResult<Self> {
-        if system.is_directory(&root) {
-            Ok(Self(Arc::new(SearchPathInner::SitePackages(root))))
-        } else {
-            Err(SearchPathValidationError::NotADirectory(root))
-        }
-    }
-
-    /// Create a new search path pointing to an editable installation
-    pub(crate) fn editable(system: &dyn System, root: SystemPathBuf) -> SearchPathResult<Self> {
-        if system.is_directory(&root) {
-            Ok(Self(Arc::new(SearchPathInner::Editable(root))))
-        } else {
-            Err(SearchPathValidationError::NotADirectory(root))
-        }
+    pub(crate) fn new(path: SearchPathInner) -> Self {
+        Self(Arc::new(path))
     }
 
     #[must_use]
@@ -618,7 +477,7 @@ impl PartialEq<SearchPath> for VendoredPathBuf {
 #[cfg(test)]
 mod tests {
     use ruff_db::program::TargetVersion;
-    use ruff_db::Db;
+    use ruff_db::{Db, Upcast};
 
     use crate::db::tests::TestDb;
     use crate::testing::{FileSpec, MockedTypeshed, TestCase, TestCaseBuilder};
@@ -635,6 +494,14 @@ mod tests {
     }
 
     impl SearchPath {
+        pub(crate) fn custom_stdlib(
+            db: &dyn Db,
+            typeshed: SystemPathBuf,
+        ) -> Result<Self, ruff_db::search_path_settings::SearchPathValidationError> {
+            SearchPathInner::custom_stdlib(db, typeshed, crate::typeshed::check_typeshed_versions)
+                .map(Self::new)
+        }
+
         #[must_use]
         pub(crate) fn is_stdlib_search_path(&self) -> bool {
             matches!(
@@ -658,7 +525,7 @@ mod tests {
             .build();
 
         assert_eq!(
-            SearchPath::custom_stdlib(&db, stdlib.parent().unwrap().to_path_buf())
+            SearchPath::custom_stdlib(db.upcast(), stdlib.parent().unwrap().to_path_buf(),)
                 .unwrap()
                 .to_module_path()
                 .with_py_extension(),
@@ -674,7 +541,8 @@ mod tests {
         );
 
         assert_eq!(
-            &SearchPath::first_party(db.system(), src.clone())
+            &SearchPathInner::first_party(db.system(), src.clone())
+                .map(SearchPath::new)
                 .unwrap()
                 .join("foo/bar")
                 .with_py_extension()
@@ -686,7 +554,9 @@ mod tests {
     #[test]
     fn module_name_1_part() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src).unwrap();
+        let src_search_path = SearchPathInner::first_party(db.system(), src)
+            .map(SearchPath::new)
+            .unwrap();
         let foo_module_name = ModuleName::new_static("foo").unwrap();
 
         assert_eq!(
@@ -715,7 +585,9 @@ mod tests {
     #[test]
     fn module_name_2_parts() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src).unwrap();
+        let src_search_path = SearchPathInner::first_party(db.system(), src)
+            .map(SearchPath::new)
+            .unwrap();
         let foo_bar_module_name = ModuleName::new_static("foo.bar").unwrap();
 
         assert_eq!(
@@ -743,7 +615,9 @@ mod tests {
     #[test]
     fn module_name_3_parts() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src).unwrap();
+        let src_search_path = SearchPathInner::first_party(db.system(), src)
+            .map(SearchPath::new)
+            .unwrap();
         let foo_bar_baz_module_name = ModuleName::new_static("foo.bar.baz").unwrap();
 
         assert_eq!(
@@ -799,7 +673,8 @@ mod tests {
     #[should_panic(expected = "Extension must be `py` or `pyi`; got `rs`")]
     fn non_stdlib_path_invalid_join_rs() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        SearchPath::first_party(db.system(), src)
+        SearchPathInner::first_party(db.system(), src)
+            .map(SearchPath::new)
             .unwrap()
             .to_module_path()
             .push("bar.rs");
@@ -809,7 +684,8 @@ mod tests {
     #[should_panic(expected = "already has an extension")]
     fn too_many_extensions() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        SearchPath::first_party(db.system(), src)
+        SearchPathInner::first_party(db.system(), src)
+            .map(SearchPath::new)
             .unwrap()
             .join("foo.py")
             .push("bar.py");
@@ -838,7 +714,9 @@ mod tests {
     fn relativize_non_stdlib_path_errors() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
 
-        let root = SearchPath::extra(db.system(), src.clone()).unwrap();
+        let root = SearchPathInner::extra(db.system(), src.clone())
+            .map(SearchPath::new)
+            .unwrap();
         // Must have a `.py` extension, a `.pyi` extension, or no extension:
         let bad_absolute_path = src.join("x.rs");
         assert_eq!(root.relativize_system_path(&bad_absolute_path), None);
@@ -850,7 +728,9 @@ mod tests {
     #[test]
     fn relativize_path() {
         let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src.clone()).unwrap();
+        let src_search_path = SearchPathInner::first_party(db.system(), src.clone())
+            .map(SearchPath::new)
+            .unwrap();
         let eggs_package = src.join("eggs/__init__.pyi");
         let module_path = src_search_path
             .relativize_system_path(&eggs_package)

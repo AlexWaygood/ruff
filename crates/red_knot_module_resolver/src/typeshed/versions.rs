@@ -6,11 +6,12 @@ use std::ops::{RangeFrom, RangeInclusive};
 use std::str::FromStr;
 
 use once_cell::sync::Lazy;
-use ruff_db::program::TargetVersion;
-use ruff_db::system::SystemPath;
 use rustc_hash::FxHashMap;
 
 use ruff_db::files::{system_path_to_file, File};
+use ruff_db::program::TargetVersion;
+use ruff_db::system::SystemPath;
+use ruff_db::typeshed_version_error::{TypeshedVersionsParseError, TypeshedVersionsParseErrorKind};
 
 use crate::db::Db;
 use crate::module_name::ModuleName;
@@ -62,21 +63,30 @@ impl<'db> LazyTypeshedVersions<'db> {
             // this should invalidate not just the specific module resolution we're currently attempting,
             // but all type inference that depends on any standard-library types.
             // Unwrapping here is not correct...
-            parse_typeshed_versions(db, versions_file).as_ref().unwrap()
+            parse_typeshed_versions(db.upcast(), versions_file)
+                .as_ref()
+                .unwrap()
         });
         versions.query_module(module, PyVersion::from(target_version))
     }
 }
 
+pub fn check_typeshed_versions(
+    db: &dyn ruff_db::Db,
+    versions_file: File,
+) -> Result<(), &TypeshedVersionsParseError> {
+    parse_typeshed_versions(db, versions_file)
+        .as_ref()
+        .map(|_| ())
+}
+
 #[salsa::tracked(return_ref)]
 pub(crate) fn parse_typeshed_versions(
-    db: &dyn Db,
+    db: &dyn ruff_db::Db,
     versions_file: File,
 ) -> Result<TypeshedVersions, TypeshedVersionsParseError> {
     // TODO: Handle IO errors
-    let file_content = versions_file
-        .read_to_string(db.upcast())
-        .unwrap_or_default();
+    let file_content = versions_file.read_to_string(db).unwrap_or_default();
     file_content.parse()
 }
 
@@ -88,82 +98,6 @@ static VENDORED_VERSIONS: Lazy<TypeshedVersions> = Lazy::new(|| {
     )
     .unwrap()
 });
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct TypeshedVersionsParseError {
-    line_number: Option<NonZeroU16>,
-    reason: TypeshedVersionsParseErrorKind,
-}
-
-impl fmt::Display for TypeshedVersionsParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let TypeshedVersionsParseError {
-            line_number,
-            reason,
-        } = self;
-        if let Some(line_number) = line_number {
-            write!(
-                f,
-                "Error while parsing line {line_number} of typeshed's VERSIONS file: {reason}"
-            )
-        } else {
-            write!(f, "Error while parsing typeshed's VERSIONS file: {reason}")
-        }
-    }
-}
-
-impl std::error::Error for TypeshedVersionsParseError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        if let TypeshedVersionsParseErrorKind::IntegerParsingFailure { err, .. } = &self.reason {
-            Some(err)
-        } else {
-            None
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum TypeshedVersionsParseErrorKind {
-    TooManyLines(NonZeroUsize),
-    UnexpectedNumberOfColons,
-    InvalidModuleName(String),
-    UnexpectedNumberOfHyphens,
-    UnexpectedNumberOfPeriods(String),
-    IntegerParsingFailure {
-        version: String,
-        err: std::num::ParseIntError,
-    },
-}
-
-impl fmt::Display for TypeshedVersionsParseErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TooManyLines(num_lines) => write!(
-                f,
-                "File has too many lines ({num_lines}); maximum allowed is {}",
-                NonZeroU16::MAX
-            ),
-            Self::UnexpectedNumberOfColons => {
-                f.write_str("Expected every non-comment line to have exactly one colon")
-            }
-            Self::InvalidModuleName(name) => write!(
-                f,
-                "Expected all components of '{name}' to be valid Python identifiers"
-            ),
-            Self::UnexpectedNumberOfHyphens => {
-                f.write_str("Expected every non-comment line to have exactly one '-' character")
-            }
-            Self::UnexpectedNumberOfPeriods(format) => write!(
-                f,
-                "Expected all versions to be in the form {{MAJOR}}.{{MINOR}}; got '{format}'"
-            ),
-            Self::IntegerParsingFailure { version, err } => write!(
-                f,
-                "Failed to convert '{version}' to a pair of integers due to {err}",
-            ),
-        }
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct TypeshedVersions(FxHashMap<ModuleName, PyVersionRange>);

@@ -5,11 +5,9 @@ pub use module::{Module, ModuleKind};
 pub use module_name::ModuleName;
 pub use resolver::resolve_module;
 use ruff_db::system::SystemPath;
-pub use typeshed::{
-    vendored_typeshed_stubs, TypeshedVersionsParseError, TypeshedVersionsParseErrorKind,
-};
+pub use typeshed::{check_typeshed_versions, vendored_typeshed_stubs};
 
-use crate::resolver::{module_resolution_settings, SearchPathIterator};
+use crate::resolver::{search_paths, SearchPathIterator};
 
 mod db;
 mod module;
@@ -25,7 +23,7 @@ mod testing;
 /// Returns an iterator over all search paths pointing to a system path
 pub fn system_module_search_paths(db: &dyn Db) -> SystemModuleSearchPathsIter {
     SystemModuleSearchPathsIter {
-        inner: module_resolution_settings(db).search_paths(db),
+        inner: search_paths(db),
     }
 }
 

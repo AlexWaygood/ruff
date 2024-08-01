@@ -62,11 +62,11 @@ impl TestCase {
         f: impl FnOnce(&SearchPathSettings) -> SearchPathSettings,
     ) {
         let program = Program::get(self.db());
-        let search_path_settings = program.search_paths(self.db());
+        let search_path_settings = program.static_search_paths(self.db());
 
         let new_settings = f(search_path_settings);
 
-        program.set_search_paths(&mut self.db).to(new_settings);
+        program.static_search_paths(&mut self.db).to(new_settings);
 
         if let Some(watcher) = &mut self.watcher {
             watcher.update(&self.db);
