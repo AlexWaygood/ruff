@@ -59,3 +59,12 @@ def negative_cases():
     # See https://docs.python.org/3/howto/logging-cookbook.html#formatting-styles
     import logging
     logging.info("yet {another} non-f-string")
+
+    # If an f-string is assigned to a variable and then that variable is used in
+    # a method call or a gettext() call or a logging call,
+    # we should also recognise that as not intended to be an f-string
+    a_format_string = "{another} string that's not meant to be an f-string"
+    a_format_string.format(another=42)
+
+    a_log_string = "yet {another} string"
+    logging.error(a_log_string)

@@ -1,10 +1,11 @@
 use ruff_diagnostics::{AlwaysFixableViolation, Diagnostic, Edit, Fix};
 use ruff_macros::{derive_message_formats, violation};
-use ruff_python_ast::{self as ast};
+use ruff_python_ast as ast;
+use ruff_python_ast::visitor::Visitor;
 use ruff_python_literal::format::FormatSpec;
 use ruff_python_parser::parse_expression;
 use ruff_python_semantic::analyze::logging;
-use ruff_python_semantic::SemanticModel;
+use ruff_python_semantic::{ScopeKind, SemanticModel};
 use ruff_source_file::Locator;
 use ruff_text_size::{Ranged, TextRange};
 
@@ -75,18 +76,167 @@ pub(crate) fn missing_fstring_syntax(checker: &mut Checker, literal: &ast::Strin
         }
     }
 
+    let logger_objects = &checker.settings.logger_objects;
+
     // We also want to avoid expressions that are intended to be translated.
-    if semantic.current_expressions().any(|expr| {
-        is_gettext(expr, semantic)
-            || is_logger_call(expr, semantic, &checker.settings.logger_objects)
-    }) {
+    // And we should avoid "foo {}" strings passed to loggers as well,
+    // since the `logging` module lazily evaluates these strings:
+    // https://docs.python.org/3/howto/logging-cookbook.html#using-particular-formatting-styles-throughout-your-application
+    if semantic
+        .current_expressions()
+        .any(|expr| is_gettext(expr, semantic) || is_logger_call(expr, semantic, logger_objects))
+    {
         return;
     }
+
+    let variable_name = match semantic.current_statement() {
+        ast::Stmt::AnnAssign(ast::StmtAnnAssign { target, .. }) => Some(&**target),
+        ast::Stmt::Assign(ast::StmtAssign { targets, .. }) => match targets.as_slice() {
+            [target] => Some(target),
+            _ => None,
+        },
+        _ => None,
+    };
+
+    if let Some(ast::Expr::Name(ast::ExprName {
+        id: variable_name, ..
+    })) = variable_name
+    {
+        if variable_could_be_template_string(variable_name, semantic, logger_objects) {
+            return;
+        }
+    };
 
     if should_be_fstring(literal, checker.locator(), semantic) {
         let diagnostic = Diagnostic::new(MissingFStringSyntax, literal.range())
             .with_fix(fix_fstring_syntax(literal.range()));
         checker.diagnostics.push(diagnostic);
+    }
+}
+
+/// Return `true` if any `logging` or `gettext` calls inside the current scope
+/// are passed the variable to which the string literal we're linting was assigned.
+///
+/// E.g. return `true` for something like the following:
+/// ```python
+/// import logging
+///
+/// def foo():
+///     template_string = "{foo}"
+///     logging.log(template_string)
+/// ```
+///
+/// Also return true if `.format()` is called on the variable
+/// anywhere in the same scope, e.g.
+/// ```python
+/// def foo():
+///     bar = {x}
+///     bar.format(42)
+/// ```
+fn variable_could_be_template_string(
+    variable_name: &ast::name::Name,
+    semantic: &SemanticModel,
+    logger_objects: &[String],
+) -> bool {
+    let current_scope_body = match semantic.current_scope().kind {
+        ScopeKind::Class(ast::StmtClassDef { body, .. }) => body,
+        ScopeKind::Function(ast::StmtFunctionDef { body, .. }) => body,
+        _ => return false,
+    };
+    let mut searcher = StringTemplateSearcher {
+        variable_name,
+        semantic,
+        logger_objects,
+        found_template_string: false,
+    };
+    searcher.visit_body(current_scope_body);
+    searcher.found_template_string
+}
+
+/// AST visitor that searches the body of a given scope for call expressions
+/// that match one of the following two criteria:
+/// (1) - They're passed a variable with a specific name, AND
+///     - They look like they could be `logging` or `gettext` calls
+///       (both of which accept template strings), OR
+/// (2) - The function being called is `${variable_name}.format(...)`
+struct StringTemplateSearcher<'a> {
+    variable_name: &'a ast::name::Name,
+    semantic: &'a SemanticModel<'a>,
+    logger_objects: &'a [String],
+    found_template_string: bool,
+}
+
+impl Visitor<'_> for StringTemplateSearcher<'_> {
+    fn visit_expr(&mut self, expr: &ast::Expr) {
+        if self.found_template_string {
+            return;
+        }
+
+        if let ast::Expr::Call(ast::ExprCall {
+            func,
+            arguments: ast::Arguments { args, keywords, .. },
+            ..
+        }) = expr
+        {
+            if let ast::Expr::Attribute(ast::ExprAttribute { value, attr, .. }) = &**func {
+                if attr == "format" {
+                    if let ast::Expr::Name(ast::ExprName { id, .. }) = &**value {
+                        if id == self.variable_name {
+                            self.found_template_string = true;
+                            return;
+                        }
+                    }
+                }
+            }
+            for name_passed in args
+                .iter()
+                .chain(keywords.iter().map(|keyword| &keyword.value))
+                .filter_map(ast::Expr::as_name_expr)
+            {
+                if &name_passed.id != self.variable_name {
+                    continue;
+                }
+                if logging::is_logger_candidate(func, self.semantic, self.logger_objects) {
+                    self.found_template_string = true;
+                    return;
+                }
+                if is_gettext(func, self.semantic) {
+                    self.found_template_string = true;
+                    return;
+                }
+            }
+        }
+
+        ast::visitor::walk_expr(self, expr);
+    }
+
+    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        if self.found_template_string {
+            return;
+        }
+
+        // Don't iterate into sub-scopes, just look at the scope we're given.
+        // Also don't both with imports, since imports can't contain call expressions
+        if matches!(
+            stmt,
+            ast::Stmt::FunctionDef(_)
+                | ast::Stmt::ClassDef(_)
+                | ast::Stmt::Import(_)
+                | ast::Stmt::ImportFrom(_)
+        ) {
+            return;
+        }
+
+        ast::visitor::walk_stmt(self, stmt);
+    }
+
+    fn visit_body(&mut self, body: &[ruff_python_ast::Stmt]) {
+        for stmt in body {
+            if self.found_template_string {
+                return;
+            }
+            self.visit_stmt(stmt);
+        }
     }
 }
 
