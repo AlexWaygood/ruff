@@ -80,10 +80,6 @@ impl AlwaysFixableViolation for MissingFStringSyntax {
 /// or `x: str = "foo"`. These are checked by the [`missing_fstring_syntax_binding`] function
 /// below, which is part of the same check.
 pub(crate) fn missing_fstring_syntax_expr(checker: &mut Checker, literal: &ast::StringLiteral) {
-    if !has_brackets(&literal.value) {
-        return;
-    }
-
     let semantic = checker.semantic();
 
     // we want to avoid statement expressions that are just a string literal.
@@ -161,30 +157,58 @@ pub(crate) fn missing_fstring_syntax_expr(checker: &mut Checker, literal: &ast::
 /// but is missing an `f` prefix. False positives are minimized by analyzing the references
 /// to the binding, to see if the binding is ever used in a way that indicates that the
 /// string is clearly meant to be a string template rather than an f-string.
-pub(crate) fn missing_fstring_syntax_binding(
-    checker: &Checker,
-    binding: &Binding,
-) -> Option<Diagnostic> {
+pub(crate) fn missing_fstring_syntax_binding<'a>(
+    checker: &'a Checker,
+    binding: &'a Binding,
+) -> Option<Vec<Diagnostic>> {
+    fn find_strings<'a>(
+        expr: &'a ast::Expr,
+        strings_in_assignment: &mut Option<Vec<&'a ast::StringLiteral>>,
+    ) {
+        let Some(strings) = strings_in_assignment else {
+            return;
+        };
+        match expr {
+            ast::Expr::StringLiteral(ast::ExprStringLiteral { value, .. }) => {
+                strings.extend(value.iter());
+            }
+            ast::Expr::FString(ast::ExprFString { value, .. }) => strings.extend(value.literals()),
+            ast::Expr::Named(ast::ExprNamed {
+                target: _,
+                value,
+                range: _,
+            }) => find_strings(value, strings_in_assignment),
+            ast::Expr::If(ast::ExprIf {
+                test: _,
+                range: _,
+                body,
+                orelse,
+            }) => {
+                find_strings(body, strings_in_assignment);
+                find_strings(orelse, strings_in_assignment);
+            }
+            _ => *strings_in_assignment = None,
+        }
+    }
+
     let semantic = checker.semantic();
     let locator = checker.locator();
 
     let stmt = binding.statement(semantic)?;
-    let string_literal = match stmt {
-        ast::Stmt::Assign(ast::StmtAssign { targets, value, .. }) => match targets.as_slice() {
-            [_] => value.as_string_literal_expr()?,
+    let stmt_value = match stmt {
+        ast::Stmt::Assign(ast::StmtAssign { targets, value, .. }) => match targets.len() {
+            1 => &**value,
             _ => return None,
         },
         ast::Stmt::AnnAssign(ast::StmtAnnAssign {
             value: Some(value), ..
-        }) => value.as_string_literal_expr()?,
+        }) => &**value,
         _ => return None,
     };
-    let [string_literal] = string_literal.value.as_slice() else {
-        return None;
-    };
-    if !has_brackets(&string_literal.value) {
-        return None;
-    }
+
+    let mut strings_in_assignment = Some(vec![]);
+    find_strings(stmt_value, &mut strings_in_assignment);
+    let strings_in_assignment = strings_in_assignment?;
 
     let logger_objects = &checker.settings.logger_objects;
     let fastapi_seen = semantic.seen_module(Modules::FASTAPI);
@@ -224,31 +248,42 @@ pub(crate) fn missing_fstring_syntax_binding(
         }
     }
 
-    should_be_fstring(string_literal, locator, semantic, binding.scope, &arg_names).then(|| {
-        Diagnostic::new(MissingFStringSyntax, string_literal.range())
-            .with_fix(fix_fstring_syntax(string_literal.range()))
-    })
+    let diagnostics = strings_in_assignment
+        .into_iter()
+        .filter(|string_literal| {
+            should_be_fstring(string_literal, locator, semantic, binding.scope, &arg_names)
+        })
+        .map(|string_literal| {
+            Diagnostic::new(MissingFStringSyntax, string_literal.range())
+                .with_fix(fix_fstring_syntax(string_literal.range()))
+        })
+        .collect();
+
+    Some(diagnostics)
 }
 
 /// Determine whether `stmt` represents a "simple assignment" to the string literal `literal`.
 ///
 /// For our purposes here, a "simple assignment" is any assignment
 /// where `literal` appears on the right-hand side
-/// and `literal` is not part of an implicitly concatenated string.
+/// and none of the following hold true:
+/// - `literal` is one part of an implicitly concatenated string or f-string
+/// - `literal` is part of a call expression
+/// - `literal` is part of a larger literal expression - a literal dictionary, list, set or tuple
 fn is_simple_assignment_to_literal(literal: &ast::StringLiteral, semantic: &SemanticModel) -> bool {
     if semantic.current_expressions().any(|expr| match expr {
-        ast::Expr::Call(_) => true,
         ast::Expr::StringLiteral(ast::ExprStringLiteral { value, .. }) => {
             value.is_implicit_concatenated()
         }
         ast::Expr::FString(ast::ExprFString { value, .. }) => value.is_implicit_concatenated(),
-        _ => false,
+        ast::Expr::Named(_) | ast::Expr::If(_) => false,
+        _ => true,
     }) {
         return false;
     }
     match semantic.current_statement() {
-        ast::Stmt::Assign(ast::StmtAssign { value, .. }) => {
-            value.range().contains_range(literal.range())
+        ast::Stmt::Assign(ast::StmtAssign { targets, value, .. }) => {
+            targets.len() == 1 && value.range().contains_range(literal.range())
         }
         ast::Stmt::AnnAssign(ast::StmtAnnAssign {
             value: Some(value), ..
@@ -330,6 +365,10 @@ fn should_be_fstring(
     scope: ScopeId,
     relevant_argument_names: &FxHashSet<&ast::name::Name>,
 ) -> bool {
+    if !has_brackets(&literal.value) {
+        return false;
+    }
+
     let fstring_expr = format!("f{}", locator.slice(literal));
     let Ok(parsed) = parse_expression(&fstring_expr) else {
         return false;

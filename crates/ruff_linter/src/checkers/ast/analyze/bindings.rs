@@ -79,9 +79,9 @@ pub(crate) fn bindings(checker: &mut Checker) {
             }
         }
         if checker.enabled(Rule::MissingFStringSyntax) {
-            if let Some(diagnostic) = ruff::rules::missing_fstring_syntax_binding(checker, binding)
+            if let Some(diagnostics) = ruff::rules::missing_fstring_syntax_binding(checker, binding)
             {
-                checker.diagnostics.push(diagnostic);
+                checker.diagnostics.extend(diagnostics);
             }
         }
     }

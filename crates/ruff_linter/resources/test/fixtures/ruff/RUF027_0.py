@@ -85,3 +85,11 @@ def method_call_passed_to_logging(x: int):
     y = foo("{x}")  # RUF027
     import logging
     logging.log(0, y)
+
+
+def if_expression(x: int):
+    y = (
+        f"foo{x}"
+        if bool()
+        else f"bar{x}"
+    )
