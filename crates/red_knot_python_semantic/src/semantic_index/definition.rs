@@ -160,6 +160,7 @@ pub(crate) struct ComprehensionDefinitionNodeRef<'a> {
     pub(crate) iterable: &'a ast::Expr,
     pub(crate) target: &'a ast::ExprName,
     pub(crate) first: bool,
+    pub(crate) is_async: bool,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -220,10 +221,12 @@ impl DefinitionNodeRef<'_> {
                 iterable,
                 target,
                 first,
+                is_async,
             }) => DefinitionKind::Comprehension(ComprehensionDefinitionKind {
                 iterable: AstNodeRef::new(parsed.clone(), iterable),
                 target: AstNodeRef::new(parsed, target),
                 first,
+                is_async,
             }),
             DefinitionNodeRef::Parameter(parameter) => match parameter {
                 ast::AnyParameterRef::Variadic(parameter) => {
@@ -325,6 +328,7 @@ pub struct ComprehensionDefinitionKind {
     iterable: AstNodeRef<ast::Expr>,
     target: AstNodeRef<ast::ExprName>,
     first: bool,
+    is_async: bool,
 }
 
 impl ComprehensionDefinitionKind {
@@ -338,6 +342,10 @@ impl ComprehensionDefinitionKind {
 
     pub(crate) fn is_first(&self) -> bool {
         self.first
+    }
+
+    pub(crate) fn is_async(&self) -> bool {
+        self.is_async
     }
 }
 

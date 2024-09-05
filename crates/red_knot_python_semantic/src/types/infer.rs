@@ -362,7 +362,7 @@ impl<'db> TypeInferenceBuilder<'db> {
     }
 
     fn infer_region_definition(&mut self, definition: Definition<'db>) {
-        match definition.node(self.db) {
+        match dbg!(definition.node(self.db)) {
             DefinitionKind::Function(function) => {
                 self.infer_function_definition(function.node(), definition);
             }
@@ -406,6 +406,7 @@ impl<'db> TypeInferenceBuilder<'db> {
                     comprehension.iterable(),
                     comprehension.target(),
                     comprehension.is_first(),
+                    comprehension.is_async(),
                     definition,
                 );
             }
@@ -1397,7 +1398,7 @@ impl<'db> TypeInferenceBuilder<'db> {
 
         let expr_id = expression.scoped_ast_id(self.db, self.scope);
         let previous = self.types.expressions.insert(expr_id, ty);
-        assert!(previous.is_none());
+        assert_eq!(previous, None);
 
         ty
     }
@@ -1694,27 +1695,43 @@ impl<'db> TypeInferenceBuilder<'db> {
         }
     }
 
+    /// Causes crashes in the corpus test on:
+    /// - `crates/red_knot_workspace/resources/test/corpus/51_gen_comp2.py`
+    /// - `crates/red_knot_workspace/resources/test/corpus/52_gen_comp_if.py`
+    /// - `crates/red_knot_workspace/resources/test/corpus/53_dict_comp.py`
     fn infer_comprehension_definition(
         &mut self,
         iterable: &ast::Expr,
         target: &ast::ExprName,
         is_first: bool,
+        is_async: bool,
         definition: Definition<'db>,
     ) {
-        if !is_first {
-            let expression = self.index.expression(iterable);
-            let result = infer_expression_types(self.db, expression);
-            self.extend(result);
-            let _iterable_ty = self
-                .types
-                .expression_ty(iterable.scoped_ast_id(self.db, self.scope));
-        }
-        // TODO(dhruvmanila): The iter type for the first comprehension is coming from the
-        // enclosing scope.
+        let expression = self.index.expression(iterable);
+        let result = infer_expression_types(self.db, expression);
+        self.extend(result);
 
-        // TODO(dhruvmanila): The target type should be inferred based on the iter type instead,
-        // similar to how it's done in `infer_for_statement_definition`.
-        let target_ty = Type::Unknown;
+        let lookup_scope = if is_first {
+            self.index
+                .parent_scope_id(self.scope.file_scope_id(self.db))
+                .expect("A comprehension should never be the top-level scope")
+                .to_scope_id(self.db, self.file)
+        } else {
+            self.scope
+        };
+
+        let iterable_ty = self
+            .types
+            .expression_ty(iterable.scoped_ast_id(self.db, lookup_scope));
+
+        let target_ty = if is_async {
+            // TODO: async iterables/iterators! -- Alex
+            Type::Unknown
+        } else {
+            iterable_ty
+                .iterate(self.db)
+                .unwrap_with_diagnostic(iterable.into(), self)
+        };
 
         self.types
             .expressions
@@ -3065,7 +3082,6 @@ mod tests {
             ",
         )?;
 
-        // TODO(Alex) async iterables/iterators!
         assert_scope_ty(&db, "src/a.py", &["foo"], "x", "Unknown");
 
         Ok(())
@@ -3094,6 +3110,93 @@ mod tests {
 
         // TODO(Alex) async iterables/iterators!
         assert_scope_ty(&db, "src/a.py", &["foo"], "x", "Unknown");
+
+        Ok(())
+    }
+
+    #[test]
+    fn basic_comprehension() -> anyhow::Result<()> {
+        let mut db = setup_db();
+
+        db.write_dedented(
+            "src/a.py",
+            "
+            def foo():
+                [x for y in IterableOfIterables() for x in y]
+
+            class IntIterator:
+                def __next__(self) -> int:
+                    return 42
+
+            class IntIterable:
+                def __iter__(self) -> IntIterator:
+                    return IntIterator()
+
+            class IteratorOfIterables:
+                def __next__(self) -> IntIterable:
+                    return IntIterable()
+
+            class IterableOfIterables:
+                def __iter__(self) -> IteratorOfIterables:
+                    return IteratorOfIterables()
+            ",
+        )?;
+
+        assert_scope_ty(&db, "src/a.py", &["foo", "<listcomp>"], "x", "int");
+        assert_scope_ty(&db, "src/a.py", &["foo", "<listcomp>"], "y", "IntIterable");
+
+        Ok(())
+    }
+
+    /// This tests that we understand that `async` comprehensions
+    /// do not work according to the synchronous iteration protocol
+    #[test]
+    fn invalid_async_comprehension() -> anyhow::Result<()> {
+        let mut db = setup_db();
+
+        db.write_dedented(
+            "src/a.py",
+            "
+            async def foo():
+                [x async for x in Iterable()]
+
+            class Iterator:
+                def __next__(self) -> int:
+                    return 42
+
+            class Iterable:
+                def __iter__(self) -> Iterator:
+                    return Iterator()
+            ",
+        )?;
+
+        assert_scope_ty(&db, "src/a.py", &["foo", "<listcomp>"], "x", "Unknown");
+
+        Ok(())
+    }
+
+    #[test]
+    fn basic_async_comprehension() -> anyhow::Result<()> {
+        let mut db = setup_db();
+
+        db.write_dedented(
+            "src/a.py",
+            "
+            async def foo():
+                [x async for x in AsyncIterable()]
+
+            class AsyncIterator:
+                async def __anext__(self) -> int:
+                    return 42
+
+            class AsyncIterable:
+                def __aiter__(self) -> AsyncIterator:
+                    return AsyncIterator()
+            ",
+        )?;
+
+        // TODO async iterables/iterators! --Alex
+        assert_scope_ty(&db, "src/a.py", &["foo", "<listcomp>"], "x", "Unknown");
 
         Ok(())
     }
