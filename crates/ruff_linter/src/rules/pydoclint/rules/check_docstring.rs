@@ -617,8 +617,7 @@ impl<'a> BodyVisitor<'a> {
 
 impl<'a> Visitor<'a> for BodyVisitor<'a> {
     fn visit_except_handler(&mut self, handler: &'a ast::ExceptHandler) {
-        let ast::ExceptHandler::ExceptHandler(handler_inner) = handler;
-        self.currently_suspended_exceptions = handler_inner.type_.as_deref();
+        self.currently_suspended_exceptions = handler.type_.as_deref();
         visitor::walk_except_handler(self, handler);
         self.currently_suspended_exceptions = None;
     }

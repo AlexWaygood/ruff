@@ -276,14 +276,8 @@ impl<'a> StatementVisitor<'a> for BlockBuilder<'a> {
     fn visit_except_handler(&mut self, except_handler: &'a ExceptHandler) {
         let prev_nested = self.nested;
         self.nested = true;
-
-        let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { body, .. }) =
-            except_handler;
-        for stmt in body {
-            self.visit_stmt(stmt);
-        }
+        self.visit_body(&except_handler.body);
         self.finalize(None);
-
         self.nested = prev_nested;
     }
 

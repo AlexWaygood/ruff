@@ -2066,40 +2066,38 @@ impl<'ast> IntoFormat<PyFormatContext<'ast>> for ast::ExprIpyEscapeCommand {
     }
 }
 
-impl FormatRule<ast::ExceptHandlerExceptHandler, PyFormatContext<'_>>
-    for crate::other::except_handler_except_handler::FormatExceptHandlerExceptHandler
+impl FormatRule<ast::ExceptHandler, PyFormatContext<'_>>
+    for crate::other::except_handler::FormatExceptHandler
 {
     #[inline]
-    fn fmt(&self, node: &ast::ExceptHandlerExceptHandler, f: &mut PyFormatter) -> FormatResult<()> {
-        FormatNodeRule::<ast::ExceptHandlerExceptHandler>::fmt(self, node, f)
+    fn fmt(&self, node: &ast::ExceptHandler, f: &mut PyFormatter) -> FormatResult<()> {
+        FormatNodeRule::<ast::ExceptHandler>::fmt(self, node, f)
     }
 }
-impl<'ast> AsFormat<PyFormatContext<'ast>> for ast::ExceptHandlerExceptHandler {
+impl<'ast> AsFormat<PyFormatContext<'ast>> for ast::ExceptHandler {
     type Format<'a> = FormatRefWithRule<
         'a,
-        ast::ExceptHandlerExceptHandler,
-        crate::other::except_handler_except_handler::FormatExceptHandlerExceptHandler,
+        ast::ExceptHandler,
+        crate::other::except_handler::FormatExceptHandler,
         PyFormatContext<'ast>,
     >;
     fn format(&self) -> Self::Format<'_> {
         FormatRefWithRule::new(
             self,
-            crate::other::except_handler_except_handler::FormatExceptHandlerExceptHandler::default(
-            ),
+            crate::other::except_handler::FormatExceptHandler::default(),
         )
     }
 }
-impl<'ast> IntoFormat<PyFormatContext<'ast>> for ast::ExceptHandlerExceptHandler {
+impl<'ast> IntoFormat<PyFormatContext<'ast>> for ast::ExceptHandler {
     type Format = FormatOwnedWithRule<
-        ast::ExceptHandlerExceptHandler,
-        crate::other::except_handler_except_handler::FormatExceptHandlerExceptHandler,
+        ast::ExceptHandler,
+        crate::other::except_handler::FormatExceptHandler,
         PyFormatContext<'ast>,
     >;
     fn into_format(self) -> Self::Format {
         FormatOwnedWithRule::new(
             self,
-            crate::other::except_handler_except_handler::FormatExceptHandlerExceptHandler::default(
-            ),
+            crate::other::except_handler::FormatExceptHandler::default(),
         )
     }
 }

@@ -1546,30 +1546,28 @@ impl<'a> Visitor<'a> for Checker<'a> {
         self.semantic.flags |= SemanticModelFlags::EXCEPTION_HANDLER;
 
         // Step 1: Binding
-        let binding = match except_handler {
-            ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                type_: _,
-                name,
-                body: _,
-                range: _,
-            }) => {
-                if let Some(name) = name {
-                    // Store the existing binding, if any.
-                    let binding_id = self.semantic.lookup_symbol(name.as_str());
+        let ast::ExceptHandler {
+            type_: _,
+            name,
+            body: _,
+            range: _,
+        } = except_handler;
 
-                    // Add the bound exception name to the scope.
-                    self.add_binding(
-                        name.as_str(),
-                        name.range(),
-                        BindingKind::BoundException,
-                        BindingFlags::empty(),
-                    );
+        let binding = if let Some(name) = name {
+            // Store the existing binding, if any.
+            let binding_id = self.semantic.lookup_symbol(name.as_str());
 
-                    Some((name, binding_id))
-                } else {
-                    None
-                }
-            }
+            // Add the bound exception name to the scope.
+            self.add_binding(
+                name.as_str(),
+                name.range(),
+                BindingKind::BoundException,
+                BindingFlags::empty(),
+            );
+
+            Some((name, binding_id))
+        } else {
+            None
         };
 
         // Step 2: Traversal

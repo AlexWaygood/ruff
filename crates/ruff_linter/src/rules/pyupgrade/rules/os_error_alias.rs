@@ -144,11 +144,10 @@ fn tuple_diagnostic(checker: &mut Checker, tuple: &ast::ExprTuple, aliases: &[&E
 /// UP024
 pub(crate) fn os_error_alias_handlers(checker: &mut Checker, handlers: &[ExceptHandler]) {
     for handler in handlers {
-        let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { type_, .. }) = handler;
-        let Some(expr) = type_.as_ref() else {
+        let Some(expr) = handler.type_.as_deref() else {
             continue;
         };
-        match expr.as_ref() {
+        match expr {
             Expr::Name(_) | Expr::Attribute(_) => {
                 if is_alias(expr, checker.semantic()) {
                     atom_diagnostic(checker, expr);

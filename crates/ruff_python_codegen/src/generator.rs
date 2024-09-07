@@ -638,29 +638,27 @@ impl<'a> Generator<'a> {
     }
 
     fn unparse_except_handler(&mut self, ast: &ExceptHandler, star: bool) {
-        match ast {
-            ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                type_,
-                name,
-                body,
-                range: _,
-            }) => {
-                self.p("except");
-                if star {
-                    self.p("*");
-                }
-                if let Some(type_) = type_ {
-                    self.p(" ");
-                    self.unparse_expr(type_, precedence::MAX);
-                }
-                if let Some(name) = name {
-                    self.p(" as ");
-                    self.p_id(name);
-                }
-                self.p(":");
-                self.body(body);
-            }
+        let ast::ExceptHandler {
+            type_,
+            name,
+            body,
+            range: _,
+        } = ast;
+
+        self.p("except");
+        if star {
+            self.p("*");
         }
+        if let Some(type_) = type_ {
+            self.p(" ");
+            self.unparse_expr(type_, precedence::MAX);
+        }
+        if let Some(name) = name {
+            self.p(" as ");
+            self.p_id(name);
+        }
+        self.p(":");
+        self.body(body);
     }
 
     fn unparse_pattern(&mut self, ast: &Pattern) {

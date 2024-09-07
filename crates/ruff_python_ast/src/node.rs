@@ -94,7 +94,7 @@ pub enum AnyNode {
     ExprTuple(ast::ExprTuple),
     ExprSlice(ast::ExprSlice),
     ExprIpyEscapeCommand(ast::ExprIpyEscapeCommand),
-    ExceptHandlerExceptHandler(ast::ExceptHandlerExceptHandler),
+    ExceptHandler(ast::ExceptHandler),
     FStringExpressionElement(ast::FStringExpressionElement),
     FStringLiteralElement(ast::FStringLiteralElement),
     FStringFormatSpec(ast::FStringFormatSpec),
@@ -196,7 +196,7 @@ impl AnyNode {
             | AnyNode::StmtBreak(_)
             | AnyNode::StmtContinue(_)
             | AnyNode::StmtIpyEscapeCommand(_)
-            | AnyNode::ExceptHandlerExceptHandler(_)
+            | AnyNode::ExceptHandler(_)
             | AnyNode::FStringExpressionElement(_)
             | AnyNode::FStringLiteralElement(_)
             | AnyNode::FStringFormatSpec(_)
@@ -297,7 +297,7 @@ impl AnyNode {
             | AnyNode::ExprTuple(_)
             | AnyNode::ExprSlice(_)
             | AnyNode::ExprIpyEscapeCommand(_)
-            | AnyNode::ExceptHandlerExceptHandler(_)
+            | AnyNode::ExceptHandler(_)
             | AnyNode::PatternMatchValue(_)
             | AnyNode::PatternMatchSingleton(_)
             | AnyNode::PatternMatchSequence(_)
@@ -403,105 +403,7 @@ impl AnyNode {
             | AnyNode::ExprTuple(_)
             | AnyNode::ExprSlice(_)
             | AnyNode::ExprIpyEscapeCommand(_)
-            | AnyNode::ExceptHandlerExceptHandler(_)
-            | AnyNode::PatternArguments(_)
-            | AnyNode::PatternKeyword(_)
-            | AnyNode::Comprehension(_)
-            | AnyNode::Arguments(_)
-            | AnyNode::Parameters(_)
-            | AnyNode::Parameter(_)
-            | AnyNode::ParameterWithDefault(_)
-            | AnyNode::Keyword(_)
-            | AnyNode::Alias(_)
-            | AnyNode::WithItem(_)
-            | AnyNode::MatchCase(_)
-            | AnyNode::Decorator(_)
-            | AnyNode::TypeParams(_)
-            | AnyNode::TypeParamTypeVar(_)
-            | AnyNode::TypeParamTypeVarTuple(_)
-            | AnyNode::TypeParamParamSpec(_)
-            | AnyNode::FString(_)
-            | AnyNode::StringLiteral(_)
-            | AnyNode::BytesLiteral(_)
-            | AnyNode::Identifier(_)
-            | AnyNode::ElifElseClause(_) => None,
-        }
-    }
-
-    pub fn except_handler(self) -> Option<ExceptHandler> {
-        match self {
-            AnyNode::ExceptHandlerExceptHandler(node) => Some(ExceptHandler::ExceptHandler(node)),
-
-            AnyNode::ModModule(_)
-            | AnyNode::ModExpression(_)
-            | AnyNode::StmtFunctionDef(_)
-            | AnyNode::StmtClassDef(_)
-            | AnyNode::StmtReturn(_)
-            | AnyNode::StmtDelete(_)
-            | AnyNode::StmtTypeAlias(_)
-            | AnyNode::StmtAssign(_)
-            | AnyNode::StmtAugAssign(_)
-            | AnyNode::StmtAnnAssign(_)
-            | AnyNode::StmtFor(_)
-            | AnyNode::StmtWhile(_)
-            | AnyNode::StmtIf(_)
-            | AnyNode::StmtWith(_)
-            | AnyNode::StmtMatch(_)
-            | AnyNode::StmtRaise(_)
-            | AnyNode::StmtTry(_)
-            | AnyNode::StmtAssert(_)
-            | AnyNode::StmtImport(_)
-            | AnyNode::StmtImportFrom(_)
-            | AnyNode::StmtGlobal(_)
-            | AnyNode::StmtNonlocal(_)
-            | AnyNode::StmtExpr(_)
-            | AnyNode::StmtPass(_)
-            | AnyNode::StmtBreak(_)
-            | AnyNode::StmtContinue(_)
-            | AnyNode::StmtIpyEscapeCommand(_)
-            | AnyNode::ExprBoolOp(_)
-            | AnyNode::ExprNamed(_)
-            | AnyNode::ExprBinOp(_)
-            | AnyNode::ExprUnaryOp(_)
-            | AnyNode::ExprLambda(_)
-            | AnyNode::ExprIf(_)
-            | AnyNode::ExprDict(_)
-            | AnyNode::ExprSet(_)
-            | AnyNode::ExprListComp(_)
-            | AnyNode::ExprSetComp(_)
-            | AnyNode::ExprDictComp(_)
-            | AnyNode::ExprGenerator(_)
-            | AnyNode::ExprAwait(_)
-            | AnyNode::ExprYield(_)
-            | AnyNode::ExprYieldFrom(_)
-            | AnyNode::ExprCompare(_)
-            | AnyNode::ExprCall(_)
-            | AnyNode::FStringExpressionElement(_)
-            | AnyNode::FStringLiteralElement(_)
-            | AnyNode::FStringFormatSpec(_)
-            | AnyNode::ExprFString(_)
-            | AnyNode::ExprStringLiteral(_)
-            | AnyNode::ExprBytesLiteral(_)
-            | AnyNode::ExprNumberLiteral(_)
-            | AnyNode::ExprBooleanLiteral(_)
-            | AnyNode::ExprNoneLiteral(_)
-            | AnyNode::ExprEllipsisLiteral(_)
-            | AnyNode::ExprAttribute(_)
-            | AnyNode::ExprSubscript(_)
-            | AnyNode::ExprStarred(_)
-            | AnyNode::ExprName(_)
-            | AnyNode::ExprList(_)
-            | AnyNode::ExprTuple(_)
-            | AnyNode::ExprSlice(_)
-            | AnyNode::ExprIpyEscapeCommand(_)
-            | AnyNode::PatternMatchValue(_)
-            | AnyNode::PatternMatchSingleton(_)
-            | AnyNode::PatternMatchSequence(_)
-            | AnyNode::PatternMatchMapping(_)
-            | AnyNode::PatternMatchClass(_)
-            | AnyNode::PatternMatchStar(_)
-            | AnyNode::PatternMatchAs(_)
-            | AnyNode::PatternMatchOr(_)
+            | AnyNode::ExceptHandler(_)
             | AnyNode::PatternArguments(_)
             | AnyNode::PatternKeyword(_)
             | AnyNode::Comprehension(_)
@@ -540,10 +442,6 @@ impl AnyNode {
 
     pub const fn is_pattern(&self) -> bool {
         self.as_ref().is_pattern()
-    }
-
-    pub const fn is_except_handler(&self) -> bool {
-        self.as_ref().is_except_handler()
     }
 
     pub const fn as_ref(&self) -> AnyNodeRef {
@@ -610,7 +508,7 @@ impl AnyNode {
             Self::ExprTuple(node) => AnyNodeRef::ExprTuple(node),
             Self::ExprSlice(node) => AnyNodeRef::ExprSlice(node),
             Self::ExprIpyEscapeCommand(node) => AnyNodeRef::ExprIpyEscapeCommand(node),
-            Self::ExceptHandlerExceptHandler(node) => AnyNodeRef::ExceptHandlerExceptHandler(node),
+            Self::ExceptHandler(node) => AnyNodeRef::ExceptHandler(node),
             Self::PatternMatchValue(node) => AnyNodeRef::PatternMatchValue(node),
             Self::PatternMatchSingleton(node) => AnyNodeRef::PatternMatchSingleton(node),
             Self::PatternMatchSequence(node) => AnyNodeRef::PatternMatchSequence(node),
@@ -3591,13 +3489,13 @@ impl AstNode for ast::ExprIpyEscapeCommand {
         } = self;
     }
 }
-impl AstNode for ast::ExceptHandlerExceptHandler {
+impl AstNode for ast::ExceptHandler {
     type Ref<'a> = &'a Self;
     fn cast(kind: AnyNode) -> Option<Self>
     where
         Self: Sized,
     {
-        if let AnyNode::ExceptHandlerExceptHandler(node) = kind {
+        if let AnyNode::ExceptHandler(node) = kind {
             Some(node)
         } else {
             None
@@ -3605,7 +3503,7 @@ impl AstNode for ast::ExceptHandlerExceptHandler {
     }
 
     fn cast_ref(kind: AnyNodeRef) -> Option<&Self> {
-        if let AnyNodeRef::ExceptHandlerExceptHandler(node) = kind {
+        if let AnyNodeRef::ExceptHandler(node) = kind {
             Some(node)
         } else {
             None
@@ -3613,7 +3511,7 @@ impl AstNode for ast::ExceptHandlerExceptHandler {
     }
 
     fn can_cast(kind: NodeKind) -> bool {
-        matches!(kind, NodeKind::ExceptHandlerExceptHandler)
+        matches!(kind, NodeKind::ExceptHandler)
     }
 
     fn as_any_node_ref(&self) -> AnyNodeRef {
@@ -3628,7 +3526,7 @@ impl AstNode for ast::ExceptHandlerExceptHandler {
     where
         V: SourceOrderVisitor<'a> + ?Sized,
     {
-        let ast::ExceptHandlerExceptHandler {
+        let ast::ExceptHandler {
             range: _,
             type_,
             name: _,
@@ -4999,7 +4897,7 @@ impl AstNode for Stmt {
             | AnyNode::ExprTuple(_)
             | AnyNode::ExprSlice(_)
             | AnyNode::ExprIpyEscapeCommand(_)
-            | AnyNode::ExceptHandlerExceptHandler(_)
+            | AnyNode::ExceptHandler(_)
             | AnyNode::PatternMatchValue(_)
             | AnyNode::PatternMatchSingleton(_)
             | AnyNode::PatternMatchSequence(_)
@@ -5098,7 +4996,7 @@ impl AstNode for Stmt {
             | AnyNodeRef::ExprTuple(_)
             | AnyNodeRef::ExprSlice(_)
             | AnyNodeRef::ExprIpyEscapeCommand(_)
-            | AnyNodeRef::ExceptHandlerExceptHandler(_)
+            | AnyNodeRef::ExceptHandler(_)
             | AnyNodeRef::PatternMatchValue(_)
             | AnyNodeRef::PatternMatchSingleton(_)
             | AnyNodeRef::PatternMatchSequence(_)
@@ -5197,7 +5095,7 @@ impl AstNode for Stmt {
             | NodeKind::ExprTuple
             | NodeKind::ExprSlice
             | NodeKind::ExprIpyEscapeCommand
-            | NodeKind::ExceptHandlerExceptHandler
+            | NodeKind::ExceptHandler
             | NodeKind::PatternMatchValue
             | NodeKind::PatternMatchSingleton
             | NodeKind::PatternMatchSequence
@@ -5492,9 +5390,7 @@ impl From<Pattern> for AnyNode {
 
 impl From<ExceptHandler> for AnyNode {
     fn from(handler: ExceptHandler) -> Self {
-        match handler {
-            ExceptHandler::ExceptHandler(handler) => AnyNode::ExceptHandlerExceptHandler(handler),
-        }
+        AnyNode::ExceptHandler(handler)
     }
 }
 
@@ -5876,12 +5772,6 @@ impl From<ast::ExprIpyEscapeCommand> for AnyNode {
     }
 }
 
-impl From<ast::ExceptHandlerExceptHandler> for AnyNode {
-    fn from(node: ast::ExceptHandlerExceptHandler) -> Self {
-        AnyNode::ExceptHandlerExceptHandler(node)
-    }
-}
-
 impl From<ast::PatternMatchValue> for AnyNode {
     fn from(node: ast::PatternMatchValue) -> Self {
         AnyNode::PatternMatchValue(node)
@@ -6104,7 +5994,7 @@ impl Ranged for AnyNode {
             AnyNode::ExprTuple(node) => node.range(),
             AnyNode::ExprSlice(node) => node.range(),
             AnyNode::ExprIpyEscapeCommand(node) => node.range(),
-            AnyNode::ExceptHandlerExceptHandler(node) => node.range(),
+            AnyNode::ExceptHandler(node) => node.range(),
             AnyNode::PatternMatchValue(node) => node.range(),
             AnyNode::PatternMatchSingleton(node) => node.range(),
             AnyNode::PatternMatchSequence(node) => node.range(),
@@ -6202,7 +6092,7 @@ pub enum AnyNodeRef<'a> {
     ExprTuple(&'a ast::ExprTuple),
     ExprSlice(&'a ast::ExprSlice),
     ExprIpyEscapeCommand(&'a ast::ExprIpyEscapeCommand),
-    ExceptHandlerExceptHandler(&'a ast::ExceptHandlerExceptHandler),
+    ExceptHandler(&'a ast::ExceptHandler),
     PatternMatchValue(&'a ast::PatternMatchValue),
     PatternMatchSingleton(&'a ast::PatternMatchSingleton),
     PatternMatchSequence(&'a ast::PatternMatchSequence),
@@ -6299,7 +6189,7 @@ impl<'a> AnyNodeRef<'a> {
             AnyNodeRef::ExprTuple(node) => NonNull::from(*node).cast(),
             AnyNodeRef::ExprSlice(node) => NonNull::from(*node).cast(),
             AnyNodeRef::ExprIpyEscapeCommand(node) => NonNull::from(*node).cast(),
-            AnyNodeRef::ExceptHandlerExceptHandler(node) => NonNull::from(*node).cast(),
+            AnyNodeRef::ExceptHandler(node) => NonNull::from(*node).cast(),
             AnyNodeRef::PatternMatchValue(node) => NonNull::from(*node).cast(),
             AnyNodeRef::PatternMatchSingleton(node) => NonNull::from(*node).cast(),
             AnyNodeRef::PatternMatchSequence(node) => NonNull::from(*node).cast(),
@@ -6402,7 +6292,7 @@ impl<'a> AnyNodeRef<'a> {
             AnyNodeRef::ExprTuple(_) => NodeKind::ExprTuple,
             AnyNodeRef::ExprSlice(_) => NodeKind::ExprSlice,
             AnyNodeRef::ExprIpyEscapeCommand(_) => NodeKind::ExprIpyEscapeCommand,
-            AnyNodeRef::ExceptHandlerExceptHandler(_) => NodeKind::ExceptHandlerExceptHandler,
+            AnyNodeRef::ExceptHandler(_) => NodeKind::ExceptHandler,
             AnyNodeRef::PatternMatchValue(_) => NodeKind::PatternMatchValue,
             AnyNodeRef::PatternMatchSingleton(_) => NodeKind::PatternMatchSingleton,
             AnyNodeRef::PatternMatchSequence(_) => NodeKind::PatternMatchSequence,
@@ -6500,7 +6390,7 @@ impl<'a> AnyNodeRef<'a> {
             | AnyNodeRef::ExprTuple(_)
             | AnyNodeRef::ExprSlice(_)
             | AnyNodeRef::ExprIpyEscapeCommand(_)
-            | AnyNodeRef::ExceptHandlerExceptHandler(_)
+            | AnyNodeRef::ExceptHandler(_)
             | AnyNodeRef::PatternMatchValue(_)
             | AnyNodeRef::PatternMatchSingleton(_)
             | AnyNodeRef::PatternMatchSequence(_)
@@ -6595,7 +6485,7 @@ impl<'a> AnyNodeRef<'a> {
             | AnyNodeRef::StmtBreak(_)
             | AnyNodeRef::StmtContinue(_)
             | AnyNodeRef::StmtIpyEscapeCommand(_)
-            | AnyNodeRef::ExceptHandlerExceptHandler(_)
+            | AnyNodeRef::ExceptHandler(_)
             | AnyNodeRef::FStringExpressionElement(_)
             | AnyNodeRef::FStringLiteralElement(_)
             | AnyNodeRef::FStringFormatSpec(_)
@@ -6695,7 +6585,7 @@ impl<'a> AnyNodeRef<'a> {
             | AnyNodeRef::ExprTuple(_)
             | AnyNodeRef::ExprSlice(_)
             | AnyNodeRef::ExprIpyEscapeCommand(_)
-            | AnyNodeRef::ExceptHandlerExceptHandler(_)
+            | AnyNodeRef::ExceptHandler(_)
             | AnyNodeRef::PatternMatchValue(_)
             | AnyNodeRef::PatternMatchSingleton(_)
             | AnyNodeRef::PatternMatchSequence(_)
@@ -6803,105 +6693,7 @@ impl<'a> AnyNodeRef<'a> {
             | AnyNodeRef::ExprIpyEscapeCommand(_)
             | AnyNodeRef::PatternArguments(_)
             | AnyNodeRef::PatternKeyword(_)
-            | AnyNodeRef::ExceptHandlerExceptHandler(_)
-            | AnyNodeRef::Comprehension(_)
-            | AnyNodeRef::Arguments(_)
-            | AnyNodeRef::Parameters(_)
-            | AnyNodeRef::Parameter(_)
-            | AnyNodeRef::ParameterWithDefault(_)
-            | AnyNodeRef::Keyword(_)
-            | AnyNodeRef::Alias(_)
-            | AnyNodeRef::WithItem(_)
-            | AnyNodeRef::MatchCase(_)
-            | AnyNodeRef::Decorator(_)
-            | AnyNodeRef::TypeParams(_)
-            | AnyNodeRef::TypeParamTypeVar(_)
-            | AnyNodeRef::TypeParamTypeVarTuple(_)
-            | AnyNodeRef::TypeParamParamSpec(_)
-            | AnyNodeRef::FString(_)
-            | AnyNodeRef::StringLiteral(_)
-            | AnyNodeRef::BytesLiteral(_)
-            | AnyNodeRef::Identifier(_)
-            | AnyNodeRef::ElifElseClause(_) => false,
-        }
-    }
-
-    pub const fn is_except_handler(self) -> bool {
-        match self {
-            AnyNodeRef::ExceptHandlerExceptHandler(_) => true,
-
-            AnyNodeRef::ModModule(_)
-            | AnyNodeRef::ModExpression(_)
-            | AnyNodeRef::StmtFunctionDef(_)
-            | AnyNodeRef::StmtClassDef(_)
-            | AnyNodeRef::StmtReturn(_)
-            | AnyNodeRef::StmtDelete(_)
-            | AnyNodeRef::StmtTypeAlias(_)
-            | AnyNodeRef::StmtAssign(_)
-            | AnyNodeRef::StmtAugAssign(_)
-            | AnyNodeRef::StmtAnnAssign(_)
-            | AnyNodeRef::StmtFor(_)
-            | AnyNodeRef::StmtWhile(_)
-            | AnyNodeRef::StmtIf(_)
-            | AnyNodeRef::StmtWith(_)
-            | AnyNodeRef::StmtMatch(_)
-            | AnyNodeRef::StmtRaise(_)
-            | AnyNodeRef::StmtTry(_)
-            | AnyNodeRef::StmtAssert(_)
-            | AnyNodeRef::StmtImport(_)
-            | AnyNodeRef::StmtImportFrom(_)
-            | AnyNodeRef::StmtGlobal(_)
-            | AnyNodeRef::StmtNonlocal(_)
-            | AnyNodeRef::StmtExpr(_)
-            | AnyNodeRef::StmtPass(_)
-            | AnyNodeRef::StmtBreak(_)
-            | AnyNodeRef::StmtContinue(_)
-            | AnyNodeRef::StmtIpyEscapeCommand(_)
-            | AnyNodeRef::ExprBoolOp(_)
-            | AnyNodeRef::ExprNamed(_)
-            | AnyNodeRef::ExprBinOp(_)
-            | AnyNodeRef::ExprUnaryOp(_)
-            | AnyNodeRef::ExprLambda(_)
-            | AnyNodeRef::ExprIf(_)
-            | AnyNodeRef::ExprDict(_)
-            | AnyNodeRef::ExprSet(_)
-            | AnyNodeRef::ExprListComp(_)
-            | AnyNodeRef::ExprSetComp(_)
-            | AnyNodeRef::ExprDictComp(_)
-            | AnyNodeRef::ExprGenerator(_)
-            | AnyNodeRef::ExprAwait(_)
-            | AnyNodeRef::ExprYield(_)
-            | AnyNodeRef::ExprYieldFrom(_)
-            | AnyNodeRef::ExprCompare(_)
-            | AnyNodeRef::ExprCall(_)
-            | AnyNodeRef::FStringExpressionElement(_)
-            | AnyNodeRef::FStringLiteralElement(_)
-            | AnyNodeRef::FStringFormatSpec(_)
-            | AnyNodeRef::ExprFString(_)
-            | AnyNodeRef::ExprStringLiteral(_)
-            | AnyNodeRef::ExprBytesLiteral(_)
-            | AnyNodeRef::ExprNumberLiteral(_)
-            | AnyNodeRef::ExprBooleanLiteral(_)
-            | AnyNodeRef::ExprNoneLiteral(_)
-            | AnyNodeRef::ExprEllipsisLiteral(_)
-            | AnyNodeRef::ExprAttribute(_)
-            | AnyNodeRef::ExprSubscript(_)
-            | AnyNodeRef::ExprStarred(_)
-            | AnyNodeRef::ExprName(_)
-            | AnyNodeRef::ExprList(_)
-            | AnyNodeRef::ExprTuple(_)
-            | AnyNodeRef::ExprSlice(_)
-            | AnyNodeRef::ExprIpyEscapeCommand(_)
-            | AnyNodeRef::PatternMatchValue(_)
-            | AnyNodeRef::PatternMatchSingleton(_)
-            | AnyNodeRef::PatternMatchSequence(_)
-            | AnyNodeRef::PatternMatchMapping(_)
-            | AnyNodeRef::PatternMatchClass(_)
-            | AnyNodeRef::PatternMatchStar(_)
-            | AnyNodeRef::PatternMatchAs(_)
-            | AnyNodeRef::PatternMatchOr(_)
-            | AnyNodeRef::PatternArguments(_)
-            | AnyNodeRef::PatternKeyword(_)
+            | AnyNodeRef::ExceptHandler(_)
             | AnyNodeRef::Comprehension(_)
             | AnyNodeRef::Arguments(_)
             | AnyNodeRef::Parameters(_)
@@ -6930,7 +6722,7 @@ impl<'a> AnyNodeRef<'a> {
     pub const fn is_alternative_branch_with_node(self) -> bool {
         matches!(
             self,
-            AnyNodeRef::ExceptHandlerExceptHandler(_) | AnyNodeRef::ElifElseClause(_)
+            AnyNodeRef::ExceptHandler(_) | AnyNodeRef::ElifElseClause(_)
         )
     }
 
@@ -7002,7 +6794,7 @@ impl<'a> AnyNodeRef<'a> {
             AnyNodeRef::ExprTuple(node) => node.visit_source_order(visitor),
             AnyNodeRef::ExprSlice(node) => node.visit_source_order(visitor),
             AnyNodeRef::ExprIpyEscapeCommand(node) => node.visit_source_order(visitor),
-            AnyNodeRef::ExceptHandlerExceptHandler(node) => node.visit_source_order(visitor),
+            AnyNodeRef::ExceptHandler(node) => node.visit_source_order(visitor),
             AnyNodeRef::PatternMatchValue(node) => node.visit_source_order(visitor),
             AnyNodeRef::PatternMatchSingleton(node) => node.visit_source_order(visitor),
             AnyNodeRef::PatternMatchSequence(node) => node.visit_source_order(visitor),
@@ -7042,10 +6834,7 @@ impl<'a> AnyNodeRef<'a> {
             | AnyNodeRef::StmtClassDef(ast::StmtClassDef { body, .. })
             | AnyNodeRef::StmtWith(ast::StmtWith { body, .. })
             | AnyNodeRef::MatchCase(MatchCase { body, .. })
-            | AnyNodeRef::ExceptHandlerExceptHandler(ast::ExceptHandlerExceptHandler {
-                body,
-                ..
-            })
+            | AnyNodeRef::ExceptHandler(ast::ExceptHandler { body, .. })
             | AnyNodeRef::ElifElseClause(ast::ElifElseClause { body, .. }) => body,
             AnyNodeRef::StmtIf(ast::StmtIf {
                 body,
@@ -7119,8 +6908,8 @@ impl<'a> AnyNodeRef<'a> {
     ///
     /// For nodes with multiple bodies, we check all bodies that don't have their own node. For
     /// try-except-else-finally, each except branch has it's own node, so for the `StmtTry`, we check
-    /// the `try:`, `else:` and `finally:`, bodies, while `ExceptHandlerExceptHandler` has it's own
-    /// check. For for-else and while-else, we check both branches for the whole statement.
+    /// the `try:`, `else:` and `finally:`, bodies, while `ExceptHandler` has it's own check.
+    /// For for-else and while-else, we check both branches for the whole statement.
     ///
     /// ```python
     /// try:        <- has body (a)
@@ -7157,10 +6946,7 @@ impl<'a> AnyNodeRef<'a> {
             AnyNodeRef::StmtIf(ast::StmtIf { body, .. })
             | AnyNodeRef::ElifElseClause(ast::ElifElseClause { body, .. })
             | AnyNodeRef::StmtWith(ast::StmtWith { body, .. })
-            | AnyNodeRef::ExceptHandlerExceptHandler(ast::ExceptHandlerExceptHandler {
-                body,
-                ..
-            })
+            | AnyNodeRef::ExceptHandler(ast::ExceptHandler { body, .. })
             | AnyNodeRef::MatchCase(MatchCase { body, .. })
             | AnyNodeRef::StmtFunctionDef(ast::StmtFunctionDef { body, .. })
             | AnyNodeRef::StmtClassDef(ast::StmtClassDef { body, .. }) => {
@@ -7588,9 +7374,9 @@ impl<'a> From<&'a ast::ExprIpyEscapeCommand> for AnyNodeRef<'a> {
     }
 }
 
-impl<'a> From<&'a ast::ExceptHandlerExceptHandler> for AnyNodeRef<'a> {
-    fn from(node: &'a ast::ExceptHandlerExceptHandler) -> Self {
-        AnyNodeRef::ExceptHandlerExceptHandler(node)
+impl<'a> From<&'a ast::ExceptHandler> for AnyNodeRef<'a> {
+    fn from(node: &'a ast::ExceptHandler) -> Self {
+        AnyNodeRef::ExceptHandler(node)
     }
 }
 
@@ -7815,16 +7601,6 @@ impl<'a> From<&'a TypeParam> for AnyNodeRef<'a> {
     }
 }
 
-impl<'a> From<&'a ExceptHandler> for AnyNodeRef<'a> {
-    fn from(handler: &'a ExceptHandler) -> Self {
-        match handler {
-            ExceptHandler::ExceptHandler(handler) => {
-                AnyNodeRef::ExceptHandlerExceptHandler(handler)
-            }
-        }
-    }
-}
-
 impl<'a> From<&'a Comprehension> for AnyNodeRef<'a> {
     fn from(node: &'a Comprehension) -> Self {
         AnyNodeRef::Comprehension(node)
@@ -7941,7 +7717,7 @@ impl Ranged for AnyNodeRef<'_> {
             AnyNodeRef::ExprTuple(node) => node.range(),
             AnyNodeRef::ExprSlice(node) => node.range(),
             AnyNodeRef::ExprIpyEscapeCommand(node) => node.range(),
-            AnyNodeRef::ExceptHandlerExceptHandler(node) => node.range(),
+            AnyNodeRef::ExceptHandler(node) => node.range(),
             AnyNodeRef::PatternMatchValue(node) => node.range(),
             AnyNodeRef::PatternMatchSingleton(node) => node.range(),
             AnyNodeRef::PatternMatchSequence(node) => node.range(),
@@ -8041,7 +7817,7 @@ pub enum NodeKind {
     ExprTuple,
     ExprSlice,
     ExprIpyEscapeCommand,
-    ExceptHandlerExceptHandler,
+    ExceptHandler,
     PatternMatchValue,
     PatternMatchSingleton,
     PatternMatchSequence,

@@ -1,5 +1,4 @@
-use ruff_python_ast::{self as ast};
-use ruff_python_ast::{ExceptHandler, Expr};
+use ruff_python_ast as ast;
 
 use ruff_diagnostics::{Diagnostic, Violation};
 use ruff_macros::{derive_message_formats, violation};
@@ -44,16 +43,11 @@ impl Violation for ExceptWithEmptyTuple {
 }
 
 /// B029
-pub(crate) fn except_with_empty_tuple(checker: &mut Checker, except_handler: &ExceptHandler) {
-    let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { type_, .. }) =
-        except_handler;
-    let Some(type_) = type_ else {
+pub(crate) fn except_with_empty_tuple(checker: &mut Checker, except_handler: &ast::ExceptHandler) {
+    let Some(ast::Expr::Tuple(tuple)) = except_handler.type_.as_deref() else {
         return;
     };
-    let Expr::Tuple(ast::ExprTuple { elts, .. }) = type_.as_ref() else {
-        return;
-    };
-    if elts.is_empty() {
+    if tuple.is_empty() {
         checker.diagnostics.push(Diagnostic::new(
             ExceptWithEmptyTuple,
             except_handler.range(),

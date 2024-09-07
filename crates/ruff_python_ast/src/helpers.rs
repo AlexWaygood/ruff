@@ -493,11 +493,7 @@ pub fn any_over_stmt(stmt: &Stmt, func: &dyn Fn(&Expr) -> bool) -> bool {
         }) => {
             any_over_body(body, func)
                 || handlers.iter().any(|handler| {
-                    let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                        type_,
-                        body,
-                        ..
-                    }) = handler;
+                    let ast::ExceptHandler { type_, body, .. } = handler;
                     type_.as_ref().is_some_and(|expr| any_over_expr(expr, func))
                         || any_over_body(body, func)
                 })
@@ -626,18 +622,14 @@ pub const fn is_mutable_iterable_initializer(expr: &Expr) -> bool {
 /// Extract the names of all handled exceptions.
 pub fn extract_handled_exceptions(handlers: &[ExceptHandler]) -> Vec<&Expr> {
     let mut handled_exceptions = Vec::new();
-    for handler in handlers {
-        match handler {
-            ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { type_, .. }) => {
-                if let Some(type_) = type_ {
-                    if let Expr::Tuple(tuple) = &**type_ {
-                        for type_ in tuple {
-                            handled_exceptions.push(type_);
-                        }
-                    } else {
-                        handled_exceptions.push(type_);
-                    }
+    for ast::ExceptHandler { type_, .. } in handlers {
+        if let Some(type_) = type_ {
+            if let Expr::Tuple(tuple) = &**type_ {
+                for type_ in tuple {
+                    handled_exceptions.push(type_);
                 }
+            } else {
+                handled_exceptions.push(type_);
             }
         }
     }

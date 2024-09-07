@@ -20,25 +20,23 @@ Module(
                         ),
                     ],
                     handlers: [
-                        ExceptHandler(
-                            ExceptHandlerExceptHandler {
-                                range: 14..37,
-                                type_: None,
-                                name: Some(
-                                    Identifier {
-                                        id: Name("exc"),
-                                        range: 24..27,
+                        ExceptHandler {
+                            range: 14..37,
+                            type_: None,
+                            name: Some(
+                                Identifier {
+                                    id: Name("exc"),
+                                    range: 24..27,
+                                },
+                            ),
+                            body: [
+                                Pass(
+                                    StmtPass {
+                                        range: 33..37,
                                     },
                                 ),
-                                body: [
-                                    Pass(
-                                        StmtPass {
-                                            range: 33..37,
-                                        },
-                                    ),
-                                ],
-                            },
-                        ),
+                            ],
+                        },
                     ],
                     orelse: [],
                     finalbody: [],
@@ -56,53 +54,47 @@ Module(
                         ),
                     ],
                     handlers: [
-                        ExceptHandler(
-                            ExceptHandlerExceptHandler {
-                                range: 106..123,
-                                type_: None,
-                                name: None,
-                                body: [
-                                    Pass(
-                                        StmtPass {
-                                            range: 119..123,
-                                        },
-                                    ),
-                                ],
-                            },
-                        ),
-                        ExceptHandler(
-                            ExceptHandlerExceptHandler {
-                                range: 124..140,
-                                type_: None,
-                                name: None,
-                                body: [
-                                    Pass(
-                                        StmtPass {
-                                            range: 136..140,
-                                        },
-                                    ),
-                                ],
-                            },
-                        ),
-                        ExceptHandler(
-                            ExceptHandlerExceptHandler {
-                                range: 141..165,
-                                type_: None,
-                                name: Some(
-                                    Identifier {
-                                        id: Name("exc"),
-                                        range: 152..155,
+                        ExceptHandler {
+                            range: 106..123,
+                            type_: None,
+                            name: None,
+                            body: [
+                                Pass(
+                                    StmtPass {
+                                        range: 119..123,
                                     },
                                 ),
-                                body: [
-                                    Pass(
-                                        StmtPass {
-                                            range: 161..165,
-                                        },
-                                    ),
-                                ],
-                            },
-                        ),
+                            ],
+                        },
+                        ExceptHandler {
+                            range: 124..140,
+                            type_: None,
+                            name: None,
+                            body: [
+                                Pass(
+                                    StmtPass {
+                                        range: 136..140,
+                                    },
+                                ),
+                            ],
+                        },
+                        ExceptHandler {
+                            range: 141..165,
+                            type_: None,
+                            name: Some(
+                                Identifier {
+                                    id: Name("exc"),
+                                    range: 152..155,
+                                },
+                            ),
+                            body: [
+                                Pass(
+                                    StmtPass {
+                                        range: 161..165,
+                                    },
+                                ),
+                            ],
+                        },
                     ],
                     orelse: [],
                     finalbody: [],

@@ -83,11 +83,7 @@ pub fn walk_except_handler<'a, V: StatementVisitor<'a> + ?Sized>(
     visitor: &mut V,
     except_handler: &'a ExceptHandler,
 ) {
-    match except_handler {
-        ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { body, .. }) => {
-            visitor.visit_body(body);
-        }
-    }
+    visitor.visit_body(&except_handler.body);
 }
 
 pub fn walk_elif_else_clause<'a, V: StatementVisitor<'a> + ?Sized>(

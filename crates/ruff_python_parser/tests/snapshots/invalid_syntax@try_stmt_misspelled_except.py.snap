@@ -89,20 +89,18 @@ Module(
                         ),
                     ],
                     handlers: [
-                        ExceptHandler(
-                            ExceptHandlerExceptHandler {
-                                range: 97..113,
-                                type_: None,
-                                name: None,
-                                body: [
-                                    Pass(
-                                        StmtPass {
-                                            range: 109..113,
-                                        },
-                                    ),
-                                ],
-                            },
-                        ),
+                        ExceptHandler {
+                            range: 97..113,
+                            type_: None,
+                            name: None,
+                            body: [
+                                Pass(
+                                    StmtPass {
+                                        range: 109..113,
+                                    },
+                                ),
+                            ],
+                        },
                     ],
                     orelse: [],
                     finalbody: [],

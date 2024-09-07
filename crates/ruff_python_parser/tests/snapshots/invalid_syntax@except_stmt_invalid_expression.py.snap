@@ -20,35 +20,33 @@ Module(
                         ),
                     ],
                     handlers: [
-                        ExceptHandler(
-                            ExceptHandlerExceptHandler {
-                                range: 14..38,
-                                type_: Some(
-                                    Yield(
-                                        ExprYield {
-                                            range: 21..28,
-                                            value: Some(
-                                                Name(
-                                                    ExprName {
-                                                        range: 27..28,
-                                                        id: Name("x"),
-                                                        ctx: Load,
-                                                    },
-                                                ),
+                        ExceptHandler {
+                            range: 14..38,
+                            type_: Some(
+                                Yield(
+                                    ExprYield {
+                                        range: 21..28,
+                                        value: Some(
+                                            Name(
+                                                ExprName {
+                                                    range: 27..28,
+                                                    id: Name("x"),
+                                                    ctx: Load,
+                                                },
                                             ),
-                                        },
-                                    ),
+                                        ),
+                                    },
                                 ),
-                                name: None,
-                                body: [
-                                    Pass(
-                                        StmtPass {
-                                            range: 34..38,
-                                        },
-                                    ),
-                                ],
-                            },
-                        ),
+                            ),
+                            name: None,
+                            body: [
+                                Pass(
+                                    StmtPass {
+                                        range: 34..38,
+                                    },
+                                ),
+                            ],
+                        },
                     ],
                     orelse: [],
                     finalbody: [],
@@ -66,34 +64,32 @@ Module(
                         ),
                     ],
                     handlers: [
-                        ExceptHandler(
-                            ExceptHandlerExceptHandler {
-                                range: 53..73,
-                                type_: Some(
-                                    Starred(
-                                        ExprStarred {
-                                            range: 61..63,
-                                            value: Name(
-                                                ExprName {
-                                                    range: 62..63,
-                                                    id: Name("x"),
-                                                    ctx: Load,
-                                                },
-                                            ),
-                                            ctx: Load,
-                                        },
-                                    ),
+                        ExceptHandler {
+                            range: 53..73,
+                            type_: Some(
+                                Starred(
+                                    ExprStarred {
+                                        range: 61..63,
+                                        value: Name(
+                                            ExprName {
+                                                range: 62..63,
+                                                id: Name("x"),
+                                                ctx: Load,
+                                            },
+                                        ),
+                                        ctx: Load,
+                                    },
                                 ),
-                                name: None,
-                                body: [
-                                    Pass(
-                                        StmtPass {
-                                            range: 69..73,
-                                        },
-                                    ),
-                                ],
-                            },
-                        ),
+                            ),
+                            name: None,
+                            body: [
+                                Pass(
+                                    StmtPass {
+                                        range: 69..73,
+                                    },
+                                ),
+                            ],
+                        },
                     ],
                     orelse: [],
                     finalbody: [],

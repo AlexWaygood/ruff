@@ -343,11 +343,7 @@ where
 {
     let node = AnyNodeRef::from(except_handler);
     if visitor.enter_node(node).is_traverse() {
-        match except_handler {
-            ExceptHandler::ExceptHandler(except_handler) => {
-                except_handler.visit_source_order(visitor);
-            }
-        }
+        except_handler.visit_source_order(visitor);
     }
     visitor.leave_node(node);
 }

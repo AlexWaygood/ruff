@@ -639,7 +639,7 @@ impl Format<PyFormatContext<'_>> for FormatEnclosingNode<'_> {
             AnyNodeRef::StmtBreak(node) => node.format().fmt(f),
             AnyNodeRef::StmtContinue(node) => node.format().fmt(f),
             AnyNodeRef::StmtIpyEscapeCommand(node) => node.format().fmt(f),
-            AnyNodeRef::ExceptHandlerExceptHandler(node) => node.format().fmt(f),
+            AnyNodeRef::ExceptHandler(node) => node.format().fmt(f),
             AnyNodeRef::MatchCase(node) => node.format().fmt(f),
             AnyNodeRef::Decorator(node) => node.format().fmt(f),
             AnyNodeRef::ElifElseClause(node) => node.format().fmt(f),

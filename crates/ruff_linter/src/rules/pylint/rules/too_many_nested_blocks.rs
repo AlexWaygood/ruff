@@ -1,4 +1,3 @@
-use ast::ExceptHandler;
 use ruff_diagnostics::{Diagnostic, Violation};
 use ruff_macros::{derive_message_formats, violation};
 use ruff_python_ast::{self as ast, Stmt};
@@ -118,11 +117,9 @@ fn has_nested_block(stmt: &Stmt) -> bool {
             ..
         }) => {
             body.iter().any(is_nested_block)
-                || handlers.iter().any(|handler| match handler {
-                    ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                        body, ..
-                    }) => body.iter().any(is_nested_block),
-                })
+                || handlers
+                    .iter()
+                    .any(|handler| handler.body.iter().any(is_nested_block))
                 || orelse.iter().any(is_nested_block)
                 || finalbody.iter().any(is_nested_block)
         }

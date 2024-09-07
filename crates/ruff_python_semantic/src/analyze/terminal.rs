@@ -1,4 +1,4 @@
-use ruff_python_ast::{self as ast, ExceptHandler, Stmt};
+use ruff_python_ast::{self as ast, Stmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Terminal {
@@ -115,13 +115,11 @@ impl Terminal {
                     // if the `finally` block raises, the `try` block must also raise.)
                     terminal = terminal.and_then(Self::from_body(finalbody));
 
-                    let branch_terminal = Terminal::branches(handlers.iter().map(|handler| {
-                        let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                            body,
-                            ..
-                        }) = handler;
-                        Self::from_body(body)
-                    }));
+                    let branch_terminal = Terminal::branches(
+                        handlers
+                            .iter()
+                            .map(|handler| Self::from_body(&handler.body)),
+                    );
 
                     if orelse.is_empty() {
                         // If there's no `else`, we may fall through, so only mark that this can't
@@ -288,13 +286,9 @@ fn sometimes_breaks(stmts: &[Stmt]) -> bool {
                 ..
             }) => {
                 if sometimes_breaks(body)
-                    || handlers.iter().any(|handler| {
-                        let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                            body,
-                            ..
-                        }) = handler;
-                        sometimes_breaks(body)
-                    })
+                    || handlers
+                        .iter()
+                        .any(|handler| sometimes_breaks(&handler.body))
                     || sometimes_breaks(orelse)
                     || sometimes_breaks(finalbody)
                 {

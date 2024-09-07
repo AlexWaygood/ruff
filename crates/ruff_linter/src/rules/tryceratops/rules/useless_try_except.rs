@@ -1,7 +1,6 @@
-use ruff_python_ast::{self as ast, ExceptHandler, ExceptHandlerExceptHandler, Expr, Stmt};
-
 use ruff_diagnostics::{Diagnostic, Violation};
 use ruff_macros::{derive_message_formats, violation};
+use ruff_python_ast::{self as ast, ExceptHandler, Expr, Stmt};
 use ruff_text_size::Ranged;
 
 use crate::checkers::ast::Checker;
@@ -43,8 +42,7 @@ pub(crate) fn useless_try_except(checker: &mut Checker, handlers: &[ExceptHandle
     if let Some(diagnostics) = handlers
         .iter()
         .map(|handler| {
-            let ExceptHandler::ExceptHandler(ExceptHandlerExceptHandler { name, body, .. }) =
-                handler;
+            let ast::ExceptHandler { name, body, .. } = handler;
             let Some(Stmt::Raise(ast::StmtRaise {
                 exc, cause: None, ..
             })) = &body.first()

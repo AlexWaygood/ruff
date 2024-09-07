@@ -4,7 +4,7 @@ use ast::whitespace::indentation;
 use ruff_diagnostics::{Diagnostic, Edit, Fix, FixAvailability, Violation};
 use ruff_macros::{derive_message_formats, violation};
 use ruff_python_ast::identifier;
-use ruff_python_ast::{self as ast, ExceptHandler, MatchCase, Stmt};
+use ruff_python_ast::{self as ast, MatchCase, Stmt};
 use ruff_python_codegen::Stylist;
 use ruff_python_index::Indexer;
 use ruff_source_file::Locator;
@@ -116,11 +116,9 @@ fn loop_exits_early(body: &[Stmt]) -> bool {
             loop_exits_early(body)
                 || loop_exits_early(orelse)
                 || loop_exits_early(finalbody)
-                || handlers.iter().any(|handler| match handler {
-                    ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                        body, ..
-                    }) => loop_exits_early(body),
-                })
+                || handlers
+                    .iter()
+                    .any(|handler| loop_exits_early(&handler.body))
         }
         Stmt::For(ast::StmtFor { orelse, .. }) | Stmt::While(ast::StmtWhile { orelse, .. }) => {
             loop_exits_early(orelse)

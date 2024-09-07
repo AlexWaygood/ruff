@@ -39,7 +39,7 @@ expression: comments.debug(test_case.source_code)
         ],
     },
     Node {
-        kind: ExceptHandlerExceptHandler,
+        kind: ExceptHandler,
         range: 68..100,
         source: `except Exception as ex:⏎`,
     }: {

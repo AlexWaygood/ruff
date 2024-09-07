@@ -482,30 +482,22 @@ impl<'a> From<&'a ast::Comprehension> for ComparableComprehension<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct ExceptHandlerExceptHandler<'a> {
+pub struct ComparableExceptHandler<'a> {
     type_: Option<Box<ComparableExpr<'a>>>,
     name: Option<&'a str>,
     body: Vec<ComparableStmt<'a>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub enum ComparableExceptHandler<'a> {
-    ExceptHandler(ExceptHandlerExceptHandler<'a>),
-}
-
 impl<'a> From<&'a ast::ExceptHandler> for ComparableExceptHandler<'a> {
     fn from(except_handler: &'a ast::ExceptHandler) -> Self {
-        let ast::ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-            type_,
-            name,
-            body,
-            ..
-        }) = except_handler;
-        Self::ExceptHandler(ExceptHandlerExceptHandler {
+        let ast::ExceptHandler {
+            type_, name, body, ..
+        } = except_handler;
+        Self {
             type_: type_.as_ref().map(Into::into),
             name: name.as_deref(),
             body: body.iter().map(Into::into).collect(),
-        })
+        }
     }
 }
 

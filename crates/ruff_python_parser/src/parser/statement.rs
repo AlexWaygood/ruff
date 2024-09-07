@@ -1546,12 +1546,12 @@ impl<'src> Parser<'src> {
         let except_body = self.parse_body(Clause::Except);
 
         (
-            ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
+            ast::ExceptHandler {
                 type_,
                 name,
                 body: except_body,
                 range: self.node_range(start),
-            }),
+            },
             block_kind,
         )
     }

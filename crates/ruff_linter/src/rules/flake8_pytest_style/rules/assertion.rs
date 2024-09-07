@@ -501,19 +501,15 @@ pub(crate) fn assert_falsy(checker: &mut Checker, stmt: &Stmt, test: &Expr) {
 
 /// PT017
 pub(crate) fn assert_in_exception_handler(checker: &mut Checker, handlers: &[ExceptHandler]) {
-    checker
-        .diagnostics
-        .extend(handlers.iter().flat_map(|handler| match handler {
-            ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                name, body, ..
-            }) => {
-                if let Some(name) = name {
-                    check_assert_in_except(name, body)
-                } else {
-                    Vec::new()
-                }
+    checker.diagnostics.extend(handlers.iter().flat_map(
+        |ast::ExceptHandler { name, body, .. }| {
+            if let Some(name) = name {
+                check_assert_in_except(name, body)
+            } else {
+                Vec::new()
             }
-        }));
+        },
+    ));
 }
 
 #[derive(Copy, Clone)]

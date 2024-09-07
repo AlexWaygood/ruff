@@ -95,9 +95,7 @@ pub(crate) fn suppressible_exception(
         return;
     }
 
-    let [ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { body, range, .. })] =
-        handlers
-    else {
+    let [ast::ExceptHandler { body, range, .. }] = handlers else {
         return;
     };
 

@@ -57,7 +57,7 @@ impl NeedsParentheses for ExprNamed {
             || parent.is_stmt_aug_assign()
             || parent.is_stmt_assert()
             || parent.is_stmt_return()
-            || parent.is_except_handler_except_handler()
+            || parent.is_except_handler()
             || parent.is_with_item()
             || parent.is_expr_yield()
             || parent.is_expr_yield_from()

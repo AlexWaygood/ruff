@@ -1,4 +1,4 @@
-use ruff_python_ast::{self as ast, ExceptHandler, Stmt};
+use ruff_python_ast as ast;
 
 use ruff_diagnostics::{Diagnostic, Violation};
 use ruff_macros::{derive_message_formats, violation};
@@ -50,22 +50,21 @@ impl Violation for ReturnInTryExceptFinally {
     }
 }
 
-fn find_return(stmts: &[Stmt]) -> Option<&Stmt> {
+fn find_return(stmts: &[ast::Stmt]) -> Option<&ast::Stmt> {
     stmts.iter().find(|stmt| stmt.is_return_stmt())
 }
 
 /// SIM107
 pub(crate) fn return_in_try_except_finally(
     checker: &mut Checker,
-    body: &[Stmt],
-    handlers: &[ExceptHandler],
-    finalbody: &[Stmt],
+    body: &[ast::Stmt],
+    handlers: &[ast::ExceptHandler],
+    finalbody: &[ast::Stmt],
 ) {
     let try_has_return = find_return(body).is_some();
-    let except_has_return = handlers.iter().any(|handler| {
-        let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { body, .. }) = handler;
-        find_return(body).is_some()
-    });
+    let except_has_return = handlers
+        .iter()
+        .any(|handler| find_return(&handler.body).is_some());
 
     if try_has_return || except_has_return {
         if let Some(finally_return) = find_return(finalbody) {

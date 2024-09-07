@@ -743,11 +743,18 @@ impl<'db> TypeInferenceBuilder<'db> {
         } = try_statement;
 
         self.infer_body(body);
-        for handler in handlers {
-            let ast::ExceptHandler::ExceptHandler(handler) = handler;
-            self.infer_optional_expression(handler.type_.as_deref());
-            self.infer_body(&handler.body);
+
+        for ast::ExceptHandler {
+            type_,
+            body,
+            name: _,
+            range: _,
+        } in handlers
+        {
+            self.infer_optional_expression(type_.as_deref());
+            self.infer_body(body);
         }
+
         self.infer_body(orelse);
         self.infer_body(finalbody);
     }

@@ -49,9 +49,7 @@ pub(crate) fn except_with_non_exception_classes(
     checker: &mut Checker,
     except_handler: &ExceptHandler,
 ) {
-    let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { type_, .. }) =
-        except_handler;
-    let Some(type_) = type_ else {
+    let Some(type_) = except_handler.type_.as_deref() else {
         return;
     };
     for expr in flatten_iterables(type_) {

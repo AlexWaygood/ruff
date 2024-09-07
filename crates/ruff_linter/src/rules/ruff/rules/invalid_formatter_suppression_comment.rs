@@ -272,7 +272,7 @@ const fn is_valid_enclosing_node(node: AnyNodeRef) -> bool {
         | AnyNodeRef::StmtBreak(_)
         | AnyNodeRef::StmtContinue(_)
         | AnyNodeRef::StmtIpyEscapeCommand(_)
-        | AnyNodeRef::ExceptHandlerExceptHandler(_)
+        | AnyNodeRef::ExceptHandler(_)
         | AnyNodeRef::MatchCase(_)
         | AnyNodeRef::ElifElseClause(_) => true,
 

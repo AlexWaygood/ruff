@@ -1,6 +1,6 @@
 use ruff_formatter::write;
 use ruff_formatter::FormatRuleWithOptions;
-use ruff_python_ast::ExceptHandlerExceptHandler;
+use ruff_python_ast::ExceptHandler;
 
 use crate::expression::maybe_parenthesize_expression;
 use crate::expression::parentheses::Parenthesize;
@@ -16,15 +16,13 @@ pub(crate) enum ExceptHandlerKind {
 }
 
 #[derive(Default)]
-pub struct FormatExceptHandlerExceptHandler {
+pub struct FormatExceptHandler {
     pub(crate) except_handler_kind: ExceptHandlerKind,
     pub(crate) last_suite_in_statement: bool,
 }
 
-impl FormatRuleWithOptions<ExceptHandlerExceptHandler, PyFormatContext<'_>>
-    for FormatExceptHandlerExceptHandler
-{
-    type Options = FormatExceptHandlerExceptHandler;
+impl FormatRuleWithOptions<ExceptHandler, PyFormatContext<'_>> for FormatExceptHandler {
+    type Options = FormatExceptHandler;
 
     fn with_options(mut self, options: Self::Options) -> Self {
         self.except_handler_kind = options.except_handler_kind;
@@ -33,14 +31,10 @@ impl FormatRuleWithOptions<ExceptHandlerExceptHandler, PyFormatContext<'_>>
     }
 }
 
-impl FormatNodeRule<ExceptHandlerExceptHandler> for FormatExceptHandlerExceptHandler {
-    fn fmt_fields(
-        &self,
-        item: &ExceptHandlerExceptHandler,
-        f: &mut PyFormatter,
-    ) -> FormatResult<()> {
+impl FormatNodeRule<ExceptHandler> for FormatExceptHandler {
+    fn fmt_fields(&self, item: &ExceptHandler, f: &mut PyFormatter) -> FormatResult<()> {
         let except_handler_kind = self.except_handler_kind;
-        let ExceptHandlerExceptHandler {
+        let ExceptHandler {
             range: _,
             type_,
             name,

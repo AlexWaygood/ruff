@@ -70,11 +70,10 @@ impl Violation for ErrorInsteadOfException {
 /// TRY400
 pub(crate) fn error_instead_of_exception(checker: &mut Checker, handlers: &[ExceptHandler]) {
     for handler in handlers {
-        let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { body, .. }) = handler;
         let calls = {
             let mut visitor =
                 LoggerCandidateVisitor::new(checker.semantic(), &checker.settings.logger_objects);
-            visitor.visit_body(body);
+            visitor.visit_body(&handler.body);
             visitor.calls
         };
         for (expr, logging_level) in calls {

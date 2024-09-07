@@ -174,14 +174,10 @@ pub(crate) fn duplicate_exceptions(checker: &mut Checker, handlers: &[ExceptHand
     let mut seen: FxHashSet<UnqualifiedName> = FxHashSet::default();
     let mut duplicates: FxHashMap<UnqualifiedName, Vec<&Expr>> = FxHashMap::default();
     for handler in handlers {
-        let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-            type_: Some(type_),
-            ..
-        }) = handler
-        else {
+        let Some(type_) = handler.type_.as_deref() else {
             continue;
         };
-        match type_.as_ref() {
+        match type_ {
             Expr::Attribute(_) | Expr::Name(_) => {
                 if let Some(name) = UnqualifiedName::from_expr(type_) {
                     if seen.contains(&name) {

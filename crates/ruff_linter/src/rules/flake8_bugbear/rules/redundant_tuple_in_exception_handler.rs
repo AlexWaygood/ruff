@@ -1,6 +1,6 @@
 use ruff_diagnostics::{AlwaysFixableViolation, Diagnostic, Edit, Fix};
 use ruff_macros::{derive_message_formats, violation};
-use ruff_python_ast::{self as ast, ExceptHandler, Expr};
+use ruff_python_ast as ast;
 use ruff_text_size::Ranged;
 
 use crate::checkers::ast::Checker;
@@ -55,20 +55,13 @@ impl AlwaysFixableViolation for RedundantTupleInExceptionHandler {
 /// B013
 pub(crate) fn redundant_tuple_in_exception_handler(
     checker: &mut Checker,
-    handlers: &[ExceptHandler],
+    handlers: &[ast::ExceptHandler],
 ) {
     for handler in handlers {
-        let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-            type_: Some(type_),
-            ..
-        }) = handler
-        else {
+        let Some(ast::Expr::Tuple(exception_tuple)) = handler.type_.as_deref() else {
             continue;
         };
-        let Expr::Tuple(ast::ExprTuple { elts, .. }) = type_.as_ref() else {
-            continue;
-        };
-        let [elt] = elts.as_slice() else {
+        let [elt] = exception_tuple.elts.as_slice() else {
             continue;
         };
         // It is not safe to replace a single-element
@@ -86,7 +79,7 @@ pub(crate) fn redundant_tuple_in_exception_handler(
             RedundantTupleInExceptionHandler {
                 name: checker.generator().expr(elt),
             },
-            type_.range(),
+            exception_tuple.range(),
         );
         // If there's no space between the `except` and the tuple, we need to insert a space,
         // as in:
@@ -98,10 +91,10 @@ pub(crate) fn redundant_tuple_in_exception_handler(
         diagnostic.set_fix(Fix::safe_edit(Edit::range_replacement(
             pad(
                 checker.generator().expr(elt),
-                type_.range(),
+                exception_tuple.range(),
                 checker.locator(),
             ),
-            type_.range(),
+            exception_tuple.range(),
         )));
         checker.diagnostics.push(diagnostic);
     }

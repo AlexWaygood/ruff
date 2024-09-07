@@ -3036,25 +3036,13 @@ pub struct Comprehension {
     pub is_async: bool,
 }
 
-/// See also [excepthandler](https://docs.python.org/3/library/ast.html#ast.excepthandler)
-#[derive(Clone, Debug, PartialEq, is_macro::Is)]
-pub enum ExceptHandler {
-    ExceptHandler(ExceptHandlerExceptHandler),
-}
-
 /// See also [ExceptHandler](https://docs.python.org/3/library/ast.html#ast.ExceptHandler)
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExceptHandlerExceptHandler {
+pub struct ExceptHandler {
     pub range: TextRange,
     pub type_: Option<Box<Expr>>,
     pub name: Option<Identifier>,
     pub body: Vec<Stmt>,
-}
-
-impl From<ExceptHandlerExceptHandler> for ExceptHandler {
-    fn from(payload: ExceptHandlerExceptHandler) -> Self {
-        ExceptHandler::ExceptHandler(payload)
-    }
 }
 
 /// See also [arg](https://docs.python.org/3/library/ast.html#ast.arg)
@@ -4302,16 +4290,9 @@ impl Ranged for crate::nodes::Comprehension {
         self.range
     }
 }
-impl Ranged for crate::nodes::ExceptHandlerExceptHandler {
+impl Ranged for crate::nodes::ExceptHandler {
     fn range(&self) -> TextRange {
         self.range
-    }
-}
-impl Ranged for crate::ExceptHandler {
-    fn range(&self) -> TextRange {
-        match self {
-            Self::ExceptHandler(node) => node.range(),
-        }
     }
 }
 impl Ranged for crate::nodes::Parameter {

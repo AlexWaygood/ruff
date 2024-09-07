@@ -1,4 +1,4 @@
-use ruff_python_ast::{self as ast, ExceptHandler, Stmt};
+use ruff_python_ast::{self as ast, Stmt};
 
 use ruff_diagnostics::{Diagnostic, Violation};
 use ruff_macros::{derive_message_formats, violation};
@@ -133,10 +133,7 @@ fn get_complexity_number(stmts: &[Stmt]) -> usize {
                 complexity += get_complexity_number(finalbody);
                 for handler in handlers {
                     complexity += 1;
-                    let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                        body, ..
-                    }) = handler;
-                    complexity += get_complexity_number(body);
+                    complexity += get_complexity_number(&handler.body);
                 }
             }
             Stmt::FunctionDef(ast::StmtFunctionDef { body, .. }) => {

@@ -1,8 +1,8 @@
 use ruff_formatter::{write, Argument, Arguments, FormatError};
 use ruff_python_ast::AnyNodeRef;
 use ruff_python_ast::{
-    ElifElseClause, ExceptHandlerExceptHandler, MatchCase, StmtClassDef, StmtFor, StmtFunctionDef,
-    StmtIf, StmtMatch, StmtTry, StmtWhile, StmtWith, Suite,
+    ElifElseClause, ExceptHandler, MatchCase, StmtClassDef, StmtFor, StmtFunctionDef, StmtIf,
+    StmtMatch, StmtTry, StmtWhile, StmtWith, Suite,
 };
 use ruff_python_trivia::{SimpleToken, SimpleTokenKind, SimpleTokenizer};
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -26,7 +26,7 @@ pub(crate) enum ClauseHeader<'a> {
     If(&'a StmtIf),
     ElifElse(&'a ElifElseClause),
     Try(&'a StmtTry),
-    ExceptHandler(&'a ExceptHandlerExceptHandler),
+    ExceptHandler(&'a ExceptHandler),
     TryFinally(&'a StmtTry),
     Match(&'a StmtMatch),
     MatchCase(&'a MatchCase),
@@ -136,7 +136,7 @@ impl<'a> ClauseHeader<'a> {
                 }
             }
 
-            ClauseHeader::ExceptHandler(ExceptHandlerExceptHandler {
+            ClauseHeader::ExceptHandler(ExceptHandler {
                 type_: type_expr,
                 range: _,
                 name: _,

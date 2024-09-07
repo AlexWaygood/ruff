@@ -46,13 +46,11 @@ impl Violation for VerboseLogMessage {
 /// TRY401
 pub(crate) fn verbose_log_message(checker: &mut Checker, handlers: &[ExceptHandler]) {
     for handler in handlers {
-        let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { body, .. }) = handler;
-
         // Find all calls to `logging.exception`.
         let calls = {
             let mut visitor =
                 LoggerCandidateVisitor::new(checker.semantic(), &checker.settings.logger_objects);
-            visitor.visit_body(body);
+            visitor.visit_body(&handler.body);
             visitor.calls
         };
 

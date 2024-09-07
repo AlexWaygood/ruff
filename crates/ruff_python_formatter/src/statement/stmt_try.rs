@@ -1,63 +1,18 @@
-use ruff_formatter::{write, FormatRuleWithOptions};
-use ruff_python_ast::{ExceptHandler, StmtTry};
+use ruff_formatter::write;
+use ruff_python_ast::StmtTry;
 use ruff_text_size::Ranged;
 
 use crate::comments;
 use crate::comments::leading_alternate_branch_comments;
 use crate::comments::SourceComment;
-use crate::other::except_handler_except_handler::{
-    ExceptHandlerKind, FormatExceptHandlerExceptHandler,
-};
+use crate::other::except_handler::{ExceptHandlerKind, FormatExceptHandler};
 use crate::prelude::*;
 use crate::statement::clause::{clause_body, clause_header, ClauseHeader, ElseClause};
 use crate::statement::suite::SuiteKind;
-use crate::statement::{FormatRefWithRule, Stmt};
+use crate::statement::Stmt;
 
 #[derive(Default)]
 pub struct FormatStmtTry;
-
-#[derive(Copy, Clone, Default)]
-pub struct FormatExceptHandler {
-    except_handler_kind: ExceptHandlerKind,
-    last_suite_in_statement: bool,
-}
-
-impl FormatRuleWithOptions<ExceptHandler, PyFormatContext<'_>> for FormatExceptHandler {
-    type Options = FormatExceptHandler;
-
-    fn with_options(mut self, options: Self::Options) -> Self {
-        self.except_handler_kind = options.except_handler_kind;
-        self.last_suite_in_statement = options.last_suite_in_statement;
-        self
-    }
-}
-
-impl FormatRule<ExceptHandler, PyFormatContext<'_>> for FormatExceptHandler {
-    fn fmt(&self, item: &ExceptHandler, f: &mut PyFormatter) -> FormatResult<()> {
-        match item {
-            ExceptHandler::ExceptHandler(except_handler) => except_handler
-                .format()
-                .with_options(FormatExceptHandlerExceptHandler {
-                    except_handler_kind: self.except_handler_kind,
-                    last_suite_in_statement: self.last_suite_in_statement,
-                })
-                .fmt(f),
-        }
-    }
-}
-
-impl<'ast> AsFormat<PyFormatContext<'ast>> for ExceptHandler {
-    type Format<'a> = FormatRefWithRule<
-        'a,
-        ExceptHandler,
-        FormatExceptHandler,
-        PyFormatContext<'ast>,
-    > where Self: 'a;
-
-    fn format(&self) -> Self::Format<'_> {
-        FormatRefWithRule::new(self, FormatExceptHandler::default())
-    }
-}
 
 impl FormatNodeRule<StmtTry> for FormatStmtTry {
     fn fmt_fields(&self, item: &StmtTry, f: &mut PyFormatter) -> FormatResult<()> {
@@ -77,22 +32,22 @@ impl FormatNodeRule<StmtTry> for FormatStmtTry {
             format_case(item, CaseKind::Try, None, dangling_comments, false, f)?;
         let mut previous_node = body.last();
 
-        for handler in handlers {
-            let handler_comments = comments_info.leading(handler);
-            let ExceptHandler::ExceptHandler(except_handler) = handler;
+        for except_handler in handlers {
+            let handler_comments = comments_info.leading(except_handler);
             let except_handler_kind = if *is_star {
                 ExceptHandlerKind::Starred
             } else {
                 ExceptHandlerKind::Regular
             };
-            let last_suite_in_statement =
-                handler == handlers.last().unwrap() && orelse.is_empty() && finalbody.is_empty();
+            let last_suite_in_statement = except_handler == handlers.last().unwrap()
+                && orelse.is_empty()
+                && finalbody.is_empty();
 
             write!(
                 f,
                 [
                     leading_alternate_branch_comments(handler_comments, previous_node),
-                    &handler.format().with_options(FormatExceptHandler {
+                    &except_handler.format().with_options(FormatExceptHandler {
                         except_handler_kind,
                         last_suite_in_statement
                     })

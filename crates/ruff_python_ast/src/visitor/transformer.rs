@@ -565,14 +565,11 @@ pub fn walk_except_handler<V: Transformer + ?Sized>(
     visitor: &V,
     except_handler: &mut ExceptHandler,
 ) {
-    match except_handler {
-        ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler { type_, body, .. }) => {
-            if let Some(expr) = type_ {
-                visitor.visit_expr(expr);
-            }
-            visitor.visit_body(body);
-        }
+    let ast::ExceptHandler { type_, body, .. } = except_handler;
+    if let Some(expr) = type_ {
+        visitor.visit_expr(expr);
     }
+    visitor.visit_body(body);
 }
 
 pub fn walk_arguments<V: Transformer + ?Sized>(visitor: &V, arguments: &mut Arguments) {

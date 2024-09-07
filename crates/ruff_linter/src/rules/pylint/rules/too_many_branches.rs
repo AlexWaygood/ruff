@@ -1,4 +1,4 @@
-use ruff_python_ast::{self as ast, ExceptHandler, Stmt};
+use ruff_python_ast::{self as ast, Stmt};
 
 use ruff_diagnostics::{Diagnostic, Violation};
 use ruff_macros::{derive_message_formats, violation};
@@ -215,15 +215,7 @@ fn num_branches(stmts: &[Stmt]) -> usize {
                     })
                     + handlers
                         .iter()
-                        .map(|handler| {
-                            1 + {
-                                let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                                    body,
-                                    ..
-                                }) = handler;
-                                num_branches(body)
-                            }
-                        })
+                        .map(|handler| 1 + num_branches(&handler.body))
                         .sum::<usize>()
             }
             _ => 0,

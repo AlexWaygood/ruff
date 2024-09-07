@@ -53,11 +53,11 @@ impl AlwaysFixableViolation for VerboseRaise {
 pub(crate) fn verbose_raise(checker: &mut Checker, handlers: &[ExceptHandler]) {
     for handler in handlers {
         // If the handler assigned a name to the exception...
-        if let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
+        if let ast::ExceptHandler {
             name: Some(exception_name),
             body,
             ..
-        }) = handler
+        } = handler
         {
             let raises = {
                 let mut visitor = RaiseStatementVisitor::default();

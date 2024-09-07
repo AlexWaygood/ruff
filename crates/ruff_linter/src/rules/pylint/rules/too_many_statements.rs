@@ -1,4 +1,4 @@
-use ruff_python_ast::{self as ast, ExceptHandler, Stmt};
+use ruff_python_ast::{self as ast, Stmt};
 
 use ruff_diagnostics::{Diagnostic, Violation};
 use ruff_macros::{derive_message_formats, violation};
@@ -115,10 +115,7 @@ fn num_statements(stmts: &[Stmt]) -> usize {
                 }
                 for handler in handlers {
                     count += 1;
-                    let ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
-                        body, ..
-                    }) = handler;
-                    count += num_statements(body);
+                    count += num_statements(&handler.body);
                 }
             }
             Stmt::FunctionDef(ast::StmtFunctionDef { body, .. })
