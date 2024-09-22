@@ -52,7 +52,7 @@ use crate::types::diagnostic::{TypeCheckDiagnostic, TypeCheckDiagnostics};
 use crate::types::{
     bindings_ty, builtins_symbol_ty, declarations_ty, global_symbol_ty, symbol_ty,
     typing_extensions_symbol_ty, BytesLiteralType, ClassType, FunctionType, StringLiteralType,
-    TupleType, Type, TypeArrayDisplay, UnionType,
+    TupleType, Type, TypeArrayDisplay, UnionType, Truthiness,
 };
 use crate::Db;
 
@@ -2211,7 +2211,21 @@ impl<'db> TypeInferenceBuilder<'db> {
 
         match (op, self.infer_expression(operand)) {
             (UnaryOp::USub, Type::IntLiteral(value)) => Type::IntLiteral(-value),
-            (UnaryOp::Not, Type::BooleanLiteral(value)) => Type::BooleanLiteral(!value),
+            (UnaryOp::Not, ty) => ty
+                .boolean_eval(self.db)
+                .unwrap_or_else(|unboolable_ty| {
+                    self.add_diagnostic(
+                        unary.into(),
+                        "bad-operator",
+                        format_args!(
+                            "Cannot call `bool()` on an instance of {}",
+                            unboolable_ty.display(self.db)
+                        ),
+                    );
+                    Truthiness::EitherTrueOrFalse
+                })
+                .negate()
+                .into_type(self.db),
             _ => Type::Unknown, // TODO other unary op types
         }
     }
@@ -3155,12 +3169,58 @@ mod tests {
             y = not w
             z = not x
 
+            def test(flag: bool):
+                z = not (True if flag else False)
             "#,
         )?;
         assert_public_ty(&db, "src/a.py", "w", "Literal[True]");
         assert_public_ty(&db, "src/a.py", "x", "Literal[False]");
         assert_public_ty(&db, "src/a.py", "y", "Literal[False]");
         assert_public_ty(&db, "src/a.py", "z", "Literal[True]");
+        assert_scope_ty(&db, "src/a.py", &["test"], "z", "bool");
+        assert_file_diagnostics(&db, "src/a.py", &[]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn not_integer_literal() -> anyhow::Result<()> {
+        let mut db = setup_db();
+
+        db.write_file(
+            "src/a.py",
+            r#"
+            x = not 0
+            y = not 42
+
+            def test(flag: bool):
+                z = not (0 if flag else 42)
+            "#,
+        )?;
+        assert_public_ty(&db, "src/a.py", "x", "Literal[True]");
+        assert_public_ty(&db, "src/a.py", "y", "Literal[False]");
+        assert_scope_ty(&db, "src/a.py", &["test"], "z", "bool");
+
+        Ok(())
+    }
+
+    #[test]
+    fn not_string_literal() -> anyhow::Result<()> {
+        let mut db = setup_db();
+
+        db.write_file(
+            "src/a.py",
+            r#"
+            x = not ""
+            y = not "there once was a ship that put to sea, and the name of the ship was the billy-of-tea"
+
+            def test(flag: bool):
+                z = not (x if flag else y)
+            "#,
+        )?;
+        assert_public_ty(&db, "src/a.py", "x", "Literal[True]");
+        assert_public_ty(&db, "src/a.py", "y", "Literal[False]");
+        assert_scope_ty(&db, "src/a.py", &["test"], "z", "bool");
 
         Ok(())
     }

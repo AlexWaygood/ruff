@@ -618,6 +618,59 @@ impl<'db> Type<'db> {
             })
     }
 
+    /// Determine whether calling `bool()` on an instance of this type
+    /// should result in an inferred type of `Literal[True]`, `Literal[False]` or `bool`.
+    ///
+    /// Returns an error if it's not valid to call `bool()` on the type at all.
+    fn boolean_eval(&self, db: &'db dyn Db) -> Result<Truthiness, Type<'db>> {
+        match self {
+            Type::Function(_) | Type::RevealTypeFunction(_) | Type::Module(_) => {
+                Ok(Truthiness::True)
+            }
+            Type::None => Ok(Truthiness::False),
+            Type::BooleanLiteral(value) => Ok(Truthiness::from(*value)),
+            Type::IntLiteral(value) => Ok(Truthiness::from(*value != 0)),
+            Type::BytesLiteral(value) => Ok(Truthiness::from(!value.value(db).is_empty())),
+            Type::StringLiteral(value) => Ok(Truthiness::from(!value.value(db).is_empty())),
+            Type::Tuple(tuple) => Ok(Truthiness::from(!tuple.elements(db).is_empty())),
+            Type::Union(union) => {
+                let mut elements_iter = union.elements(db).iter();
+                let mut truthiness = elements_iter
+                    .next()
+                    .expect("All unions should have >=1 element")
+                    .boolean_eval(db)?;
+                for element in elements_iter {
+                    let element_truthiness = element.boolean_eval(db)?;
+                    truthiness = truthiness.union(element_truthiness);
+                }
+                Ok(truthiness)
+            }
+            Type::Unknown | Type::Any | Type::LiteralString => Ok(Truthiness::EitherTrueOrFalse),
+            Type::Never | Type::Unbound => Err(*self),
+            Type::Instance(class) if class.is_stdlib_symbol(db, "builtins", "bool") => {
+                Ok(Truthiness::EitherTrueOrFalse)
+            }
+            Type::Instance(_) | Type::Class(_) => {
+                let meta_type = self.to_meta_type(db);
+
+                for method_name in ["__bool__", "__len__"] {
+                    let method = meta_type.member(db, method_name);
+                    if !method.is_unbound() {
+                        return method
+                            .call(db, &[*self])
+                            .return_ty(db)
+                            .ok_or(*self)?
+                            .boolean_eval(db);
+                    }
+                }
+
+                Ok(Truthiness::True)
+            }
+            // TODO: we can do better for these:
+            Type::Intersection(_) => Ok(Truthiness::EitherTrueOrFalse),
+        }
+    }
+
     #[must_use]
     pub fn to_instance(&self, db: &'db dyn Db) -> Type<'db> {
         match self {
@@ -678,6 +731,49 @@ impl<'db> Type<'db> {
 impl<'db> From<&Type<'db>> for Type<'db> {
     fn from(value: &Type<'db>) -> Self {
         *value
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum Truthiness {
+    True,
+    False,
+    EitherTrueOrFalse,
+}
+
+impl Truthiness {
+    fn union(self, other: Truthiness) -> Self {
+        match (self, other) {
+            (Truthiness::True, Truthiness::True) => Truthiness::True,
+            (Truthiness::False, Truthiness::False) => Truthiness::False,
+            _ => Truthiness::EitherTrueOrFalse,
+        }
+    }
+
+    fn negate(self) -> Self {
+        match self {
+            Self::True => Self::False,
+            Self::False => Self::True,
+            Self::EitherTrueOrFalse => Self::EitherTrueOrFalse,
+        }
+    }
+
+    fn into_type(self, db: &dyn Db) -> Type {
+        match self {
+            Self::True => Type::BooleanLiteral(true),
+            Self::False => Type::BooleanLiteral(false),
+            Self::EitherTrueOrFalse => builtins_symbol_ty(db, "bool").to_instance(db),
+        }
+    }
+}
+
+impl From<bool> for Truthiness {
+    fn from(value: bool) -> Self {
+        if value {
+            Truthiness::True
+        } else {
+            Truthiness::False
+        }
     }
 }
 
