@@ -44,9 +44,9 @@ use crate::semantic_index::definition::{
     Definition, DefinitionKind, DefinitionNodeKey, ExceptHandlerDefinitionKind,
 };
 use crate::semantic_index::expression::Expression;
-use crate::semantic_index::semantic_index;
-use crate::semantic_index::symbol::{NodeWithScopeKind, NodeWithScopeRef, ScopeId};
+use crate::semantic_index::symbol::{NodeWithScopeKind, NodeWithScopeRef, ScopeId, Symbol};
 use crate::semantic_index::SemanticIndex;
+use crate::semantic_index::{global_scope, semantic_index, symbol_table};
 use crate::stdlib::builtins_module_scope;
 use crate::types::diagnostic::{TypeCheckDiagnostic, TypeCheckDiagnostics};
 use crate::types::{
@@ -1415,8 +1415,8 @@ impl<'db> TypeInferenceBuilder<'db> {
         } = alias;
 
         let module_ty = if let Some(module_name) = ModuleName::new(name) {
-            if let Some(module) = self.module_ty_from_name(module_name) {
-                module
+            if let Some(module_file) = self.module_file_from_name(module_name) {
+                Type::Module(module_file)
             } else {
                 self.unresolved_module_diagnostic(alias, 0, Some(name));
                 Type::Unknown
@@ -1551,19 +1551,19 @@ impl<'db> TypeInferenceBuilder<'db> {
                 .ok_or(ModuleNameResolutionError::InvalidSyntax)
         };
 
-        let module_ty = match module_name {
+        let module_file = match module_name {
             Ok(name) => {
-                if let Some(ty) = self.module_ty_from_name(name) {
-                    ty
+                if let Some(file) = self.module_file_from_name(name) {
+                    Some(file)
                 } else {
                     self.unresolved_module_diagnostic(import_from, *level, module);
-                    Type::Unknown
+                    None
                 }
             }
             Err(ModuleNameResolutionError::InvalidSyntax) => {
                 tracing::debug!("Failed to resolve import due to invalid syntax");
                 // Invalid syntax diagnostics are emitted elsewhere.
-                Type::Unknown
+                None
             }
             Err(ModuleNameResolutionError::TooManyDots) => {
                 tracing::debug!(
@@ -1571,7 +1571,7 @@ impl<'db> TypeInferenceBuilder<'db> {
                     format_import_from_module(*level, module),
                 );
                 self.unresolved_module_diagnostic(import_from, *level, module);
-                Type::Unknown
+                None
             }
             Err(ModuleNameResolutionError::UnknownCurrentModule) => {
                 tracing::debug!(
@@ -1580,9 +1580,11 @@ impl<'db> TypeInferenceBuilder<'db> {
                     self.file.path(self.db)
                 );
                 self.unresolved_module_diagnostic(import_from, *level, module);
-                Type::Unknown
+                None
             }
         };
+
+        let module_ty = module_file.map_or(Type::Unknown, Type::Module);
 
         let ast::Alias {
             range: _,
@@ -1590,29 +1592,79 @@ impl<'db> TypeInferenceBuilder<'db> {
             asname: _,
         } = alias;
 
-        let member_ty = module_ty.member(self.db, &ast::name::Name::new(&name.id));
+        let db = self.db;
 
-        // TODO: What if it's a union where one of the elements is `Unbound`?
-        if member_ty.is_unbound() {
-            self.add_diagnostic(
-                AnyNodeRef::Alias(alias),
-                "unresolved-import",
-                format_args!(
-                    "Module `{}{}` has no member `{name}`",
-                    ".".repeat(*level as usize),
-                    module.unwrap_or_default()
-                ),
-            );
+        let mut add_imported_definition = |name: &str| {
+            let member_ty = module_ty.member(db, name);
+
+            // TODO: What if it's a union where one of the elements is `Unbound`?
+            if member_ty.is_unbound() {
+                self.add_diagnostic(
+                    AnyNodeRef::Alias(alias),
+                    "unresolved-import",
+                    format_args!(
+                        "Module `{}{}` has no member `{name}`",
+                        ".".repeat(*level as usize),
+                        module.unwrap_or_default()
+                    ),
+                );
+            }
+
+            // If a symbol is unbound in the module the symbol was originally defined in,
+            // when we're trying to import the symbol from that module into "our" module,
+            // the runtime error will occur immediately (rather than when the symbol is *used*,
+            // as would be the case for a symbol with type `Unbound`), so it's appropriate to
+            // think of the type of the imported symbol as `Unknown` rather than `Unbound`
+            let ty = member_ty.replace_unbound_with(db, Type::Unknown);
+
+            self.add_declaration_with_binding(alias.into(), definition, ty, ty);
+        };
+
+        if name == "*" {
+            // Not much we can do here if we couldn't resolve the module...
+            let Some(module_file) = module_file else {
+                tracing::debug!(
+                    "Unable to process definitions from `*` import as the module could not be resolved"
+                );
+
+                // This feels silly, but without this we seem to panic with
+                // "No symbol found for key" on line 202...
+                self.add_declaration(alias.into(), definition, Type::Unknown);
+
+                return;
+            };
+            
+            let module_global_symbols = symbol_table(db, global_scope(db, module_file));
+
+            // Add all public globals of the module as definitions.
+            //
+            // Per <https://docs.python.org/3/reference/simple_stmts.html#the-import-statement>:
+            //
+            // > If the list of identifiers is replaced by a star ('*'),
+            // > all public names defined in the module are bound in the local
+            // > namespace for the scope where the import statement occurs.
+            // >
+            // > The public names defined by a module are determined by
+            // > checking the module’s namespace for a variable named `__all__`;
+            // > if defined, it must be a sequence of strings which are names
+            // > defined or imported by that module. The names given in
+            // > `__all__` are all considered public and are required to exist.
+            // > If `__all__` is not defined, the set of public names includes
+            // > all names found in the module’s namespace which do not begin
+            // > with an underscore character ('_').
+            //
+            // TODO: we currently assume semantics without `__all__`,
+            // even if the module defines `__all__`.
+            for symbol_name in module_global_symbols
+                .symbols()
+                .map(Symbol::name)
+                .filter(|name| !name.starts_with('_'))
+            {
+                add_imported_definition(symbol_name);
+            }
+        } else {
+            add_imported_definition(name);
         }
-
-        // If a symbol is unbound in the module the symbol was originally defined in,
-        // when we're trying to import the symbol from that module into "our" module,
-        // the runtime error will occur immediately (rather than when the symbol is *used*,
-        // as would be the case for a symbol with type `Unbound`), so it's appropriate to
-        // think of the type of the imported symbol as `Unknown` rather than `Unbound`
-        let ty = member_ty.replace_unbound_with(self.db, Type::Unknown);
-
-        self.add_declaration_with_binding(alias.into(), definition, ty, ty);
     }
 
     fn infer_return_statement(&mut self, ret: &ast::StmtReturn) {
@@ -1626,8 +1678,8 @@ impl<'db> TypeInferenceBuilder<'db> {
         }
     }
 
-    fn module_ty_from_name(&self, module_name: ModuleName) -> Option<Type<'db>> {
-        resolve_module(self.db, module_name).map(|module| Type::Module(module.file()))
+    fn module_file_from_name(&self, module_name: ModuleName) -> Option<File> {
+        resolve_module(self.db, module_name).map(|module| module.file())
     }
 
     fn infer_decorator(&mut self, decorator: &ast::Decorator) -> Type<'db> {
