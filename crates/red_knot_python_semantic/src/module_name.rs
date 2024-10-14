@@ -1,9 +1,14 @@
 use std::fmt;
+use std::num::NonZeroU32;
 use std::ops::Deref;
 
 use compact_str::{CompactString, ToCompactString};
 
+use ruff_db::files::File;
 use ruff_python_stdlib::identifiers::is_identifier;
+
+use crate::module_resolver::file_to_module;
+use crate::Db;
 
 /// A module name, e.g. `foo.bar`.
 ///
@@ -213,4 +218,55 @@ impl std::fmt::Display for ModuleName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
+}
+
+/// Given a `from .foo import bar` relative import, resolve the relative module
+/// we're importing `bar` from into an absolute [`ModuleName`]
+/// using the name of the module we're currently analyzing.
+///
+/// - `level` is the number of dots at the beginning of the relative module name:
+///   - `from .foo.bar import baz` => `level == 1`
+///   - `from ...foo.bar import baz` => `level == 3`
+/// - `tail` is the relative module name stripped of all leading dots:
+///   - `from .foo import bar` => `tail == "foo"`
+///   - `from ..foo.bar import baz` => `tail == "foo.bar"`
+pub(crate) fn relative_module_name(
+    db: &dyn Db,
+    file: File,
+    tail: Option<&str>,
+    level: NonZeroU32,
+) -> Result<ModuleName, ModuleNameResolutionError> {
+    let module = file_to_module(db, file).ok_or(ModuleNameResolutionError::UnknownCurrentModule)?;
+    let mut level = level.get();
+    if module.kind().is_package() {
+        level -= 1;
+    }
+    let mut module_name = module.name().to_owned();
+    for _ in 0..level {
+        module_name = module_name
+            .parent()
+            .ok_or(ModuleNameResolutionError::TooManyDots)?;
+    }
+    if let Some(tail) = tail {
+        let tail = ModuleName::new(tail).ok_or(ModuleNameResolutionError::InvalidSyntax)?;
+        module_name.extend(&tail);
+    }
+    Ok(module_name)
+}
+
+/// Various ways in which resolving a [`ModuleName`]
+/// from an [`ast::StmtImport`] or [`ast::StmtImportFrom`] node might fail
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum ModuleNameResolutionError {
+    /// The import statement has invalid syntax
+    InvalidSyntax,
+
+    /// We couldn't resolve the file we're currently analyzing back to a module
+    /// (Only necessary for relative import statements)
+    UnknownCurrentModule,
+
+    /// The relative import statement seems to take us outside of the module search path
+    /// (e.g. our current module is `foo.bar`, and the relative import statement in `foo.bar`
+    /// is `from ....baz import spam`)
+    TooManyDots,
 }

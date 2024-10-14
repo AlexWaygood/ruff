@@ -1,3 +1,4 @@
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
@@ -11,6 +12,7 @@ use ruff_python_ast::visitor::{walk_expr, walk_pattern, walk_stmt, Visitor};
 use ruff_python_ast::AnyParameterRef;
 
 use crate::ast_node_ref::AstNodeRef;
+use crate::module_name::relative_module_name;
 use crate::semantic_index::ast_ids::node_key::ExpressionNodeKey;
 use crate::semantic_index::ast_ids::AstIdsBuilder;
 use crate::semantic_index::definition::{
@@ -24,13 +26,15 @@ use crate::semantic_index::symbol::{
 };
 use crate::semantic_index::use_def::{FlowSnapshot, UseDefMapBuilder};
 use crate::semantic_index::SemanticIndex;
-use crate::Db;
+use crate::{resolve_module, Db, ModuleName};
 
 use super::constraint::{Constraint, PatternConstraint};
 use super::definition::{
     DefinitionCategory, ExceptHandlerDefinitionNodeRef, MatchPatternDefinitionNodeRef,
     WithItemDefinitionNodeRef,
 };
+use super::symbol::Symbol;
+use super::{global_scope, symbol_table};
 
 pub(super) struct SemanticIndexBuilder<'db> {
     // Builder state
@@ -542,24 +546,65 @@ where
                 }
             }
             ast::Stmt::ImportFrom(node) => {
-                for (alias_index, alias) in node.names.iter().enumerate() {
-                    let symbol_name = if let Some(asname) = &alias.asname {
-                        &asname.id
-                    } else {
-                        &alias.name.id
+                let ast::StmtImportFrom {
+                    module,
+                    names,
+                    level,
+                    range: _,
+                } = node;
+                let module = module.as_deref();
+                let star_index = names.iter().position(|alias| &alias.name == "*");
+                if let Some(star_index) = star_index {
+                    let module_name = {
+                        if let Some(level) = NonZeroU32::new(*level) {
+                            relative_module_name(self.db, self.file, module, level).ok()
+                        } else {
+                            module.and_then(ModuleName::new)
+                        }
                     };
+                    let module =
+                        module_name.and_then(|module_name| resolve_module(self.db, module_name));
+                    if let Some(module) = module {
+                        let module_global_scope = global_scope(self.db, module.file());
+                        let module_global_symbols = symbol_table(self.db, module_global_scope);
+                        for symbol_name in module_global_symbols
+                            .symbols()
+                            .map(Symbol::name)
+                            .filter(|name| !name.starts_with('_'))
+                        {
+                            let symbol = self.add_symbol(symbol_name.clone());
+                            self.add_definition(
+                                symbol,
+                                ImportFromDefinitionNodeRef {
+                                    node,
+                                    alias_index: star_index,
+                                },
+                            );
+                        }
+                    }
+                } else {
+                    for (alias_index, ast::Alias { name, asname, .. }) in names.iter().enumerate() {
+                        let symbol_name = if let Some(asname) = asname {
+                            &asname.id
+                        } else {
+                            &name.id
+                        };
 
-                    // Look for imports `from __future__ import annotations`, ignore `as ...`
-                    // We intentionally don't enforce the rules about location of `__future__`
-                    // imports here, we assume the user's intent was to apply the `__future__`
-                    // import, so we still check using it (and will also emit a diagnostic about a
-                    // miss-placed `__future__` import.)
-                    self.has_future_annotations |= alias.name.id == "annotations"
-                        && node.module.as_deref() == Some("__future__");
+                        // Look for imports `from __future__ import annotations`, ignore `as ...`
+                        // We intentionally don't enforce the rules about location of `__future__`
+                        // imports here, we assume the user's intent was to apply the `__future__`
+                        // import, so we still check using it (and will also emit a diagnostic about a
+                        // miss-placed `__future__` import.)
+                        self.has_future_annotations |=
+                            name == "annotations" && module == Some("__future__");
 
-                    let symbol = self.add_symbol(symbol_name.clone());
+                        let symbol = self.add_symbol(symbol_name.clone());
 
-                    self.add_definition(symbol, ImportFromDefinitionNodeRef { node, alias_index });
+                        self.add_definition(
+                            symbol,
+                            ImportFromDefinitionNodeRef { node, alias_index },
+                        );
+                    }
                 }
             }
             ast::Stmt::Assign(node) => {

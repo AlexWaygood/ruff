@@ -60,6 +60,7 @@ impl<'db> Definition<'db> {
 pub(crate) enum DefinitionNodeRef<'a> {
     Import(&'a ast::Alias),
     ImportFrom(ImportFromDefinitionNodeRef<'a>),
+    ImportFromStar(ImportFromStarDefinitionNodeRef<'a>),
     For(ForStmtDefinitionNodeRef<'a>),
     Function(&'a ast::StmtFunctionDef),
     Class(&'a ast::StmtClassDef),
@@ -159,6 +160,13 @@ pub(crate) struct ImportFromDefinitionNodeRef<'a> {
 }
 
 #[derive(Copy, Clone, Debug)]
+pub(crate) struct ImportFromStarDefinitionNodeRef<'a> {
+    pub(crate) node: &'a ast::StmtImportFrom,
+    pub(crate) alias_index: usize,
+    pub(crate) definition_index: usize,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub(crate) struct AssignmentDefinitionNodeRef<'a> {
     pub(crate) assignment: &'a ast::StmtAssign,
     pub(crate) target: &'a ast::ExprName,
@@ -215,6 +223,14 @@ impl DefinitionNodeRef<'_> {
                     alias_index,
                 })
             }
+            DefinitionNodeRef::ImportFromStar(ImportFromStarDefinitionNodeRef {
+                node,
+                alias_index,
+                definition_index: _,
+            }) => DefinitionKind::ImportFrom(ImportFromDefinitionKind {
+                node: AstNodeRef::new(parsed, node),
+                alias_index,
+            }),
             DefinitionNodeRef::Function(function) => {
                 DefinitionKind::Function(AstNodeRef::new(parsed, function))
             }
@@ -291,10 +307,18 @@ impl DefinitionNodeRef<'_> {
 
     pub(super) fn key(self) -> DefinitionNodeKey {
         match self {
-            Self::Import(node) => node.into(),
+            Self::Import(node) => DefinitionNodeKey::NonStarImport(NodeKey::from_node(node)),
             Self::ImportFrom(ImportFromDefinitionNodeRef { node, alias_index }) => {
-                (&node.names[alias_index]).into()
+                DefinitionNodeKey::NonStarImport(NodeKey::from_node(&node.names[alias_index]))
             }
+            Self::ImportFromStar(ImportFromStarDefinitionNodeRef {
+                node,
+                alias_index,
+                definition_index,
+            }) => DefinitionNodeKey::StarImport {
+                alias: NodeKey::from_node(&node.names[alias_index]),
+                index: definition_index,
+            },
             Self::Function(node) => node.into(),
             Self::Class(node) => node.into(),
             Self::NamedExpression(node) => node.into(),
@@ -556,76 +580,73 @@ impl ExceptHandlerDefinitionKind {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub(crate) struct DefinitionNodeKey(NodeKey);
-
-impl From<&ast::Alias> for DefinitionNodeKey {
-    fn from(node: &ast::Alias) -> Self {
-        Self(NodeKey::from_node(node))
-    }
+pub(crate) enum DefinitionNodeKey {
+    StarImport { alias: NodeKey, index: usize },
+    NonStarImport(NodeKey),
 }
 
 impl From<&ast::StmtFunctionDef> for DefinitionNodeKey {
     fn from(node: &ast::StmtFunctionDef) -> Self {
-        Self(NodeKey::from_node(node))
+        Self::NonStarImport(NodeKey::from_node(node))
     }
 }
 
 impl From<&ast::StmtClassDef> for DefinitionNodeKey {
     fn from(node: &ast::StmtClassDef) -> Self {
-        Self(NodeKey::from_node(node))
+        Self::NonStarImport(NodeKey::from_node(node))
     }
 }
 
 impl From<&ast::ExprName> for DefinitionNodeKey {
     fn from(node: &ast::ExprName) -> Self {
-        Self(NodeKey::from_node(node))
+        Self::NonStarImport(NodeKey::from_node(node))
     }
 }
 
 impl From<&ast::ExprNamed> for DefinitionNodeKey {
     fn from(node: &ast::ExprNamed) -> Self {
-        Self(NodeKey::from_node(node))
+        Self::NonStarImport(NodeKey::from_node(node))
     }
 }
 
 impl From<&ast::StmtAnnAssign> for DefinitionNodeKey {
     fn from(node: &ast::StmtAnnAssign) -> Self {
-        Self(NodeKey::from_node(node))
+        Self::NonStarImport(NodeKey::from_node(node))
     }
 }
 
 impl From<&ast::StmtAugAssign> for DefinitionNodeKey {
     fn from(node: &ast::StmtAugAssign) -> Self {
-        Self(NodeKey::from_node(node))
+        Self::NonStarImport(NodeKey::from_node(node))
     }
 }
 
 impl From<&ast::StmtFor> for DefinitionNodeKey {
     fn from(value: &ast::StmtFor) -> Self {
-        Self(NodeKey::from_node(value))
+        Self::NonStarImport(NodeKey::from_node(value))
     }
 }
 
 impl From<&ast::Parameter> for DefinitionNodeKey {
     fn from(node: &ast::Parameter) -> Self {
-        Self(NodeKey::from_node(node))
+        Self::NonStarImport(NodeKey::from_node(node))
     }
 }
 
 impl From<&ast::ParameterWithDefault> for DefinitionNodeKey {
     fn from(node: &ast::ParameterWithDefault) -> Self {
-        Self(NodeKey::from_node(node))
+        Self::NonStarImport(NodeKey::from_node(node))
     }
 }
 
 impl From<&ast::Identifier> for DefinitionNodeKey {
     fn from(identifier: &ast::Identifier) -> Self {
-        Self(NodeKey::from_node(identifier))
+        Self::NonStarImport(NodeKey::from_node(identifier))
     }
 }
 
 impl From<&ast::ExceptHandlerExceptHandler> for DefinitionNodeKey {
     fn from(handler: &ast::ExceptHandlerExceptHandler) -> Self {
-        Self(NodeKey::from_node(handler))
+        Self::NonStarImport(NodeKey::from_node(handler))
     }
 }

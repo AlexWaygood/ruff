@@ -22,10 +22,9 @@ struct Case {
 
 const TOMLLIB_312_URL: &str = "https://raw.githubusercontent.com/python/cpython/8e8a4baf652f6e1cee7acde9d78c4b6154539748/Lib/tomllib";
 
-// The failed import from 'collections.abc' is due to lack of support for 'import *'.
 static EXPECTED_DIAGNOSTICS: &[&str] = &[
     "/src/tomllib/__init__.py:10:30: Name `__name__` used when not defined",
-    "/src/tomllib/_parser.py:7:29: Module `collections.abc` has no member `Iterable`",
+    "/src/tomllib/_parser.py:232:43: Method `__getitem__` of type `@Todo | Unbound` is not callable on object of type `Unknown | Literal[Buffer]`",
     "Line 69 is too long (89 characters)",
     "Use double quotes for strings",
     "Use double quotes for strings",

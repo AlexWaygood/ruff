@@ -37,7 +37,7 @@ use rustc_hash::FxHashMap;
 use salsa;
 use salsa::plumbing::AsId;
 
-use crate::module_name::ModuleName;
+use crate::module_name::{relative_module_name, ModuleName, ModuleNameResolutionError};
 use crate::module_resolver::{file_to_module, resolve_module};
 use crate::semantic_index::ast_ids::{HasScopedAstId, HasScopedUseId, ScopedExpressionId};
 use crate::semantic_index::definition::{
@@ -1480,40 +1480,6 @@ impl<'db> TypeInferenceBuilder<'db> {
         );
     }
 
-    /// Given a `from .foo import bar` relative import, resolve the relative module
-    /// we're importing `bar` from into an absolute [`ModuleName`]
-    /// using the name of the module we're currently analyzing.
-    ///
-    /// - `level` is the number of dots at the beginning of the relative module name:
-    ///   - `from .foo.bar import baz` => `level == 1`
-    ///   - `from ...foo.bar import baz` => `level == 3`
-    /// - `tail` is the relative module name stripped of all leading dots:
-    ///   - `from .foo import bar` => `tail == "foo"`
-    ///   - `from ..foo.bar import baz` => `tail == "foo.bar"`
-    fn relative_module_name(
-        &self,
-        tail: Option<&str>,
-        level: NonZeroU32,
-    ) -> Result<ModuleName, ModuleNameResolutionError> {
-        let module = file_to_module(self.db, self.file)
-            .ok_or(ModuleNameResolutionError::UnknownCurrentModule)?;
-        let mut level = level.get();
-        if module.kind().is_package() {
-            level -= 1;
-        }
-        let mut module_name = module.name().to_owned();
-        for _ in 0..level {
-            module_name = module_name
-                .parent()
-                .ok_or(ModuleNameResolutionError::TooManyDots)?;
-        }
-        if let Some(tail) = tail {
-            let tail = ModuleName::new(tail).ok_or(ModuleNameResolutionError::InvalidSyntax)?;
-            module_name.extend(&tail);
-        }
-        Ok(module_name)
-    }
-
     fn infer_import_from_definition(
         &mut self,
         import_from: &'db ast::StmtImportFrom,
@@ -1539,7 +1505,7 @@ impl<'db> TypeInferenceBuilder<'db> {
                 format_import_from_module(level.get(), module),
                 self.file.path(self.db),
             );
-            self.relative_module_name(module, level)
+            relative_module_name(self.db, self.file, module, level)
         } else {
             tracing::trace!(
                 "Resolving imported object `{}` from module `{}`",
@@ -1626,14 +1592,9 @@ impl<'db> TypeInferenceBuilder<'db> {
                 tracing::debug!(
                     "Unable to process definitions from `*` import as the module could not be resolved"
                 );
-
-                // This feels silly, but without this we seem to panic with
-                // "No symbol found for key" on line 202...
-                self.add_declaration(alias.into(), definition, Type::Unknown);
-
                 return;
             };
-            
+
             let module_global_symbols = symbol_table(db, global_scope(db, module_file));
 
             // Add all public globals of the module as definitions.
@@ -3188,23 +3149,6 @@ fn format_import_from_module(level: u32, module: Option<&str>) -> String {
         ".".repeat(level as usize),
         module.unwrap_or_default()
     )
-}
-
-/// Various ways in which resolving a [`ModuleName`]
-/// from an [`ast::StmtImport`] or [`ast::StmtImportFrom`] node might fail
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum ModuleNameResolutionError {
-    /// The import statement has invalid syntax
-    InvalidSyntax,
-
-    /// We couldn't resolve the file we're currently analyzing back to a module
-    /// (Only necessary for relative import statements)
-    UnknownCurrentModule,
-
-    /// The relative import statement seems to take us outside of the module search path
-    /// (e.g. our current module is `foo.bar`, and the relative import statement in `foo.bar`
-    /// is `from ....baz import spam`)
-    TooManyDots,
 }
 
 /// Struct collecting string parts when inferring a formatted string. Infers a string literal if the
