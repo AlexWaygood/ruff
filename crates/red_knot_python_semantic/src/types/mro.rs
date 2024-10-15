@@ -118,13 +118,13 @@ impl<'db> ClassMroSet<'db> {
         }
     }
 
-    /// Create an [`MroPossibilities`] instance that reflects the fact
+    /// Create an [`ClassMroSet`] instance that reflects the fact
     /// that the given class can have only one possible MRO at runtime.
     fn single(mro: impl Into<Mro<'db>>) -> Self {
         Self::SingleSuccess(mro.into())
     }
 
-    /// Create an [`MroPossibilities`] instance that reflects the fact
+    /// Create an [`ClassMroSet`] instance that reflects the fact
     /// that the given class could potentially have multiple possible MROs at
     /// runtime (and/or that the class creation could possibly fail
     /// altogether).
@@ -491,7 +491,7 @@ impl<'db> ClassBase<'db> {
         Display { base: self, db }
     }
 
-    /// Return the various [`MroPossibilities`] for this base.
+    /// Return the various [`ClassMroSet`] for this base.
     fn mro_possibilities(self, db: &'db dyn Db) -> Cow<ClassMroSet<'db>> {
         match self {
             ClassBase::Class(class) => Cow::Borrowed(class.mro_possibilities(db)),
