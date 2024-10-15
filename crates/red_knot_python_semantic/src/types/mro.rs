@@ -1,4 +1,4 @@
-use super::{ClassType, KnownClass, Type};
+use super::{definition_expression_ty, ClassType, KnownClass, Type};
 use crate::Db;
 use itertools::Itertools;
 use rustc_hash::FxHashSet;
@@ -47,14 +47,14 @@ pub(super) enum ClassMroSet<'db> {
     /// It can be statically determined that the `__mro__` possibilities for this class
     /// (possibly one, possibly many) always fail. Here are the various possible
     /// bases that all lead to class creation failing:
-    CertainFailure(FxHashSet<BasesList<'db>>),
+    CertainFailure(MroFailure<'db>),
 
     /// There are multiple possible `__mro__`s for this class. Some of these
     /// possibilities result in the class being successfully created; some of them
     /// result in class creation failure.
     PossibleSuccess {
         possible_mros: FxHashSet<Mro<'db>>,
-        failure_cases: FxHashSet<BasesList<'db>>,
+        failure_cases: FxHashSet<MroFailure<'db>>,
     },
 }
 
@@ -63,12 +63,24 @@ impl<'db> ClassMroSet<'db> {
     ///
     /// See [`ClassType::mro_possibilities`] for more details.
     pub(super) fn of_class(db: &'db dyn Db, class: ClassType<'db>) -> Self {
-        let bases = class.bases(db);
-
-        // Start with some fast paths for some common occurrences:
-        if !bases.iter().any(Type::is_union) {
-            if let Some(short_circuit) = mro_of_class_fast_path(db, class, &bases) {
-                return short_circuit;
+        let object = KnownClass::Object.to_class(db).expect_class();
+        match class.node(db).bases() {
+            [] if class == object => return Self::single([class]),
+            [] => return Self::single([class, object]),
+            [single_base] => {
+                let base_ty = definition_expression_ty(db, class.definition(db), single_base);
+                if let Type::Union(union_ty) = base_ty {
+                    todo!()
+                } else {
+                    match ClassBase::from(base_ty).mro_possibilities(db) {
+                        ClassMroSet::SingleSuccess(mro) => mro.prepend_class(class),
+                        ClassMroSet::CertainFailure(_) => ClassMroSet::SingleSuccess(Mro::from([
+                            ClassBase::Class(class),
+                            ClassBase::Unknown,
+                            ClassBase::Class(object),
+                        ])),
+                    }
+                }
             }
         }
 
@@ -157,6 +169,19 @@ impl<'db> ClassMroSet<'db> {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum MroFailureKind {
+    UnresolvableInheritancHierarchy,
+    CyclicMro,
+    DuplicateBaseClass,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+struct MroFailure<'db> {
+    bases: BasesList<'db>,
+    kind: MroFailureKind,
 }
 
 /// Fast path for calculating a class's MRO.
@@ -576,6 +601,22 @@ impl<'db> Mro<'db> {
     /// [`super::infer::TypeInferenceBuilder::infer_region_scope`].)
     fn from_error(db: &'db dyn Db, class: ClassBase<'db>) -> Self {
         Self::from([class, ClassBase::Unknown, ClassBase::builtins_object(db)])
+    }
+
+    fn prepend_class(&self, class: ClassType<'db>) -> ClassMroSet {
+        let class_as_base = ClassBase::Class(class);
+        if self.0.contains(&class_as_base) {
+            ClassMroSet::CertainFailure(MroFailure {
+                bases: Box::new([*self.first().expect("An MRO should never be empty")]),
+                kind: MroFailureKind::CyclicMro,
+            })
+        } else {
+            ClassMroSet::SingleSuccess(
+                std::iter::once(ClassBase::Class(class))
+                    .chain(self.iter().copied())
+                    .collect(),
+            )
+        }
     }
 }
 

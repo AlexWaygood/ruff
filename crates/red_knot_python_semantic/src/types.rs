@@ -1388,42 +1388,6 @@ impl<'db> ClassType<'db> {
         class_stmt_node
     }
 
-    /// Return an array of the types of this class's bases.
-    ///
-    /// The returned array should exactly match the result of `t.__bases__`
-    /// at runtime in Python, where `t` is the runtime Python class
-    /// represented by `self` in this method. Note that this means that
-    /// it will not necessarily match the arguments passed as bases in the
-    /// class definition: `class C: pass` creates a class `C` where
-    /// `C.__bases__ == (object,)`, even though there were no bases passed
-    /// in the class definition.
-    ///
-    /// # Panics:
-    /// If `definition` is not a `DefinitionKind::Class`.
-    pub fn bases(&self, db: &'db dyn Db) -> Box<[Type<'db>]> {
-        let base_nodes = self.node(db).bases();
-        let object = KnownClass::Object.to_class(db);
-
-        if Type::Class(*self) == object {
-            // Uniquely among Python classes, `object` has no bases:
-            //
-            // ```pycon
-            // >>> object.__bases__
-            // ()
-            // ```
-            Box::default()
-        } else if base_nodes.is_empty() {
-            // All Python classes that have an empty bases list in their AST
-            // implicitly inherit from `object`:
-            Box::new([object])
-        } else {
-            base_nodes
-                .iter()
-                .map(move |base_expr| definition_expression_ty(db, self.definition(db), base_expr))
-                .collect()
-        }
-    }
-
     /// Returns the class member of this class named `name`.
     ///
     /// The member resolves to a member of the class itself or any of its bases.
