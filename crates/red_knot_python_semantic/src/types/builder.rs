@@ -346,7 +346,7 @@ impl<'db> InnerIntersectionBuilder<'db> {
 
     fn simplify_unbound(&mut self) {
         if self.positive.contains(&Type::Unbound) {
-            self.positive.retain(Type::is_unbound);
+            self.positive.retain(|ty| ty.is_unbound());
             self.negative.clear();
         }
     }

@@ -230,21 +230,14 @@ fn declarations_ty<'db>(
     }
 }
 
-/// Unique ID for a type.
+/// A type describes a set of possible values at runtime.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type<'db> {
-    /// The dynamic type: a statically-unknown set of values
+    /// The dynamic type: a statically unknown set of values
     Any,
-    /// The empty set of values
-    Never,
     /// Unknown type (either no annotation, or some kind of type error).
-    /// Equivalent to Any, or possibly to object in strict mode
+    /// Equivalent to `Any`, or possibly to object in strict mode
     Unknown,
-    /// Name does not exist or is not bound to any value (this represents an error, but with some
-    /// leniency options it could be silently resolved to Unknown in some cases)
-    Unbound,
-    /// The None object -- TODO remove this in favor of Instance(types.NoneType)
-    None,
     /// Temporary type for symbols that can't be inferred yet because of missing implementations.
     /// Behaves equivalently to `Any`.
     ///
@@ -254,6 +247,13 @@ pub enum Type<'db> {
     /// output to be unknown. An output should only be `Todo` if fixing all `Todo` inputs to be not
     /// `Todo` would change the output type.
     Todo,
+    /// Name does not exist or is not bound to any value (this represents an error, but with some
+    /// leniency options it could be silently resolved to `Unknown` in some cases)
+    Unbound,
+    /// The empty set of values
+    Never,
+    /// The `None` constant -- TODO remove this in favor of `Instance(_typeshed.NoneType)`
+    None,
     /// A specific function object
     FunctionLiteral(FunctionType<'db>),
     /// A specific module object
@@ -284,11 +284,11 @@ pub enum Type<'db> {
 }
 
 impl<'db> Type<'db> {
-    pub const fn is_unbound(&self) -> bool {
+    pub const fn is_unbound(self) -> bool {
         matches!(self, Type::Unbound)
     }
 
-    pub const fn is_never(&self) -> bool {
+    pub const fn is_never(self) -> bool {
         matches!(self, Type::Never)
     }
 
@@ -304,7 +304,7 @@ impl<'db> Type<'db> {
             .expect("Expected a Type::ClassLiteral variant")
     }
 
-    pub const fn is_class_literal(&self) -> bool {
+    pub const fn is_class_literal(self) -> bool {
         matches!(self, Type::ClassLiteral(..))
     }
 
@@ -332,7 +332,7 @@ impl<'db> Type<'db> {
             .expect("Expected a Type::Union variant")
     }
 
-    pub const fn is_union(&self) -> bool {
+    pub const fn is_union(self) -> bool {
         matches!(self, Type::Union(..))
     }
 
@@ -360,7 +360,7 @@ impl<'db> Type<'db> {
             .expect("Expected a Type::FunctionLiteral variant")
     }
 
-    pub const fn is_function_literal(&self) -> bool {
+    pub const fn is_function_literal(self) -> bool {
         matches!(self, Type::FunctionLiteral(..))
     }
 
@@ -376,15 +376,15 @@ impl<'db> Type<'db> {
             .expect("Expected a Type::IntLiteral variant")
     }
 
-    pub const fn is_boolean_literal(&self) -> bool {
+    pub const fn is_boolean_literal(self) -> bool {
         matches!(self, Type::BooleanLiteral(..))
     }
 
-    pub const fn is_literal_string(&self) -> bool {
+    pub const fn is_literal_string(self) -> bool {
         matches!(self, Type::LiteralString)
     }
 
-    pub fn may_be_unbound(&self, db: &'db dyn Db) -> bool {
+    pub fn may_be_unbound(self, db: &'db dyn Db) -> bool {
         match self {
             Type::Unbound => true,
             Type::Union(union) => union.elements(db).contains(&Type::Unbound),
@@ -395,17 +395,17 @@ impl<'db> Type<'db> {
     }
 
     #[must_use]
-    pub fn replace_unbound_with(&self, db: &'db dyn Db, replacement: Type<'db>) -> Type<'db> {
+    pub fn replace_unbound_with(self, db: &'db dyn Db, replacement: Type<'db>) -> Type<'db> {
         match self {
             Type::Unbound => replacement,
             Type::Union(union) => {
                 union.map(db, |element| element.replace_unbound_with(db, replacement))
             }
-            _ => *self,
+            _ => self,
         }
     }
 
-    pub fn is_stdlib_symbol(&self, db: &'db dyn Db, module_name: &str, name: &str) -> bool {
+    pub fn is_stdlib_symbol(self, db: &'db dyn Db, module_name: &str, name: &str) -> bool {
         match self {
             Type::ClassLiteral(class) => class.is_stdlib_symbol(db, module_name, name),
             Type::FunctionLiteral(function) => function.is_stdlib_symbol(db, module_name, name),
@@ -749,7 +749,7 @@ impl<'db> Type<'db> {
     /// us to explicitly consider whether to handle an error or propagate
     /// it up the call stack.
     #[must_use]
-    pub fn member(&self, db: &'db dyn Db, name: &str) -> Type<'db> {
+    pub fn member(self, db: &'db dyn Db, name: &str) -> Type<'db> {
         match self {
             Type::Any => Type::Any,
             Type::Never => {
@@ -766,7 +766,7 @@ impl<'db> Type<'db> {
                 // TODO: attribute lookup on function type
                 Type::Todo
             }
-            Type::ModuleLiteral(file) => global_symbol_ty(db, *file, name),
+            Type::ModuleLiteral(file) => global_symbol_ty(db, file, name),
             Type::ClassLiteral(class) => class.class_member(db, name),
             Type::Instance(_) => {
                 // TODO MRO? get_own_instance_member, get_instance_member
@@ -809,7 +809,7 @@ impl<'db> Type<'db> {
     ///
     /// This is used to determine the value that would be returned
     /// when `bool(x)` is called on an object `x`.
-    fn bool(&self, db: &'db dyn Db) -> Truthiness {
+    fn bool(self, db: &'db dyn Db) -> Truthiness {
         match self {
             Type::Any | Type::Todo | Type::Never | Type::Unknown | Type::Unbound => {
                 Truthiness::Ambiguous
@@ -846,8 +846,8 @@ impl<'db> Type<'db> {
                 // TODO
                 Truthiness::Ambiguous
             }
-            Type::IntLiteral(num) => Truthiness::from(*num != 0),
-            Type::BooleanLiteral(bool) => Truthiness::from(*bool),
+            Type::IntLiteral(num) => Truthiness::from(num != 0),
+            Type::BooleanLiteral(bool) => Truthiness::from(bool),
             Type::StringLiteral(str) => Truthiness::from(!str.value(db).is_empty()),
             Type::LiteralString => Truthiness::Ambiguous,
             Type::BytesLiteral(bytes) => Truthiness::from(!bytes.value(db).is_empty()),
@@ -984,14 +984,14 @@ impl<'db> Type<'db> {
     }
 
     #[must_use]
-    pub fn to_instance(&self, db: &'db dyn Db) -> Type<'db> {
+    pub fn to_instance(self, db: &'db dyn Db) -> Type<'db> {
         match self {
             Type::Any => Type::Any,
             Type::Todo => Type::Todo,
             Type::Unknown => Type::Unknown,
             Type::Unbound => Type::Unknown,
             Type::Never => Type::Never,
-            Type::ClassLiteral(class) => Type::Instance(*class),
+            Type::ClassLiteral(class) => Type::Instance(class),
             Type::Union(union) => union.map(db, |element| element.to_instance(db)),
             // TODO: we can probably do better here: --Alex
             Type::Intersection(_) => Type::Todo,
@@ -1013,11 +1013,11 @@ impl<'db> Type<'db> {
     /// Given a type that is assumed to represent an instance of a class,
     /// return a type that represents that class itself.
     #[must_use]
-    pub fn to_meta_type(&self, db: &'db dyn Db) -> Type<'db> {
+    pub fn to_meta_type(self, db: &'db dyn Db) -> Type<'db> {
         match self {
             Type::Unbound => Type::Unbound,
             Type::Never => Type::Never,
-            Type::Instance(class) => Type::ClassLiteral(*class),
+            Type::Instance(class) => Type::ClassLiteral(class),
             Type::Union(union) => union.map(db, |ty| ty.to_meta_type(db)),
             Type::BooleanLiteral(_) => KnownClass::Bool.to_class(db),
             Type::BytesLiteral(_) => KnownClass::Bytes.to_class(db),
@@ -1046,10 +1046,10 @@ impl<'db> Type<'db> {
     /// When not available, this should fall back to the value of `[Type::repr]`.
     /// Note: this method is used in the builtins `format`, `print`, `str.format` and `f-strings`.
     #[must_use]
-    pub fn str(&self, db: &'db dyn Db) -> Type<'db> {
+    pub fn str(self, db: &'db dyn Db) -> Type<'db> {
         match self {
             Type::IntLiteral(_) | Type::BooleanLiteral(_) => self.repr(db),
-            Type::StringLiteral(_) | Type::LiteralString => *self,
+            Type::StringLiteral(_) | Type::LiteralString => self,
             // TODO: handle more complex types
             _ => KnownClass::Str.to_instance(db),
         }
@@ -1058,7 +1058,7 @@ impl<'db> Type<'db> {
     /// Return the string representation of this type as it would be provided by the  `__repr__`
     /// method at runtime.
     #[must_use]
-    pub fn repr(&self, db: &'db dyn Db) -> Type<'db> {
+    pub fn repr(self, db: &'db dyn Db) -> Type<'db> {
         match self {
             Type::IntLiteral(number) => Type::StringLiteral(StringLiteralType::new(db, {
                 number.to_string().into_boxed_str()
@@ -1113,7 +1113,7 @@ pub enum KnownClass {
 }
 
 impl<'db> KnownClass {
-    pub const fn as_str(&self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Bool => "bool",
             Self::Object => "object",
@@ -1133,11 +1133,11 @@ impl<'db> KnownClass {
         }
     }
 
-    pub fn to_instance(&self, db: &'db dyn Db) -> Type<'db> {
+    pub fn to_instance(self, db: &'db dyn Db) -> Type<'db> {
         self.to_class(db).to_instance(db)
     }
 
-    pub fn to_class(&self, db: &'db dyn Db) -> Type<'db> {
+    pub fn to_class(self, db: &'db dyn Db) -> Type<'db> {
         match self {
             Self::Bool
             | Self::Object
@@ -1561,7 +1561,7 @@ impl<'db> FunctionType<'db> {
     }
 
     /// inferred return type for this function
-    pub fn return_type(&self, db: &'db dyn Db) -> Type<'db> {
+    pub fn return_type(self, db: &'db dyn Db) -> Type<'db> {
         let definition = self.definition(db);
         let DefinitionKind::Function(function_stmt_node) = definition.kind(db) else {
             panic!("Function type definition must have `DefinitionKind::Function`")
@@ -1632,7 +1632,7 @@ impl<'db> ClassType<'db> {
     ///
     /// # Panics:
     /// If `definition` is not a `DefinitionKind::Class`.
-    pub fn bases(&self, db: &'db dyn Db) -> impl Iterator<Item = Type<'db>> {
+    pub fn bases(self, db: &'db dyn Db) -> impl Iterator<Item = Type<'db>> {
         let definition = self.definition(db);
         let DefinitionKind::Class(class_stmt_node) = definition.kind(db) else {
             panic!("Class type definition must have DefinitionKind::Class");
@@ -1710,10 +1710,10 @@ impl<'db> UnionType<'db> {
 
     /// Create a union from a list of elements
     /// (which may be eagerly simplified into a different variant of [`Type`] altogether).
-    pub fn from_elements<T: Into<Type<'db>>>(
-        db: &'db dyn Db,
-        elements: impl IntoIterator<Item = T>,
-    ) -> Type<'db> {
+    pub fn from_elements<T>(db: &'db dyn Db, elements: impl IntoIterator<Item = T>) -> Type<'db>
+    where
+        T: Into<Type<'db>>,
+    {
         elements
             .into_iter()
             .fold(UnionBuilder::new(db), |builder, element| {
@@ -1724,12 +1724,8 @@ impl<'db> UnionType<'db> {
 
     /// Apply a transformation function to all elements of the union,
     /// and create a new union from the resulting set of types.
-    pub fn map(
-        &self,
-        db: &'db dyn Db,
-        transform_fn: impl Fn(&Type<'db>) -> Type<'db>,
-    ) -> Type<'db> {
-        Self::from_elements(db, self.elements(db).iter().map(transform_fn))
+    pub fn map(self, db: &'db dyn Db, transform_fn: impl Fn(Type<'db>) -> Type<'db>) -> Type<'db> {
+        Self::from_elements(db, self.elements(db).iter().copied().map(transform_fn))
     }
 }
 
@@ -1755,7 +1751,7 @@ pub struct StringLiteralType<'db> {
 }
 
 impl<'db> StringLiteralType<'db> {
-    pub fn len(&self, db: &'db dyn Db) -> usize {
+    pub fn len(self, db: &'db dyn Db) -> usize {
         self.value(db).len()
     }
 }
@@ -1773,11 +1769,11 @@ pub struct TupleType<'db> {
 }
 
 impl<'db> TupleType<'db> {
-    pub fn get(&self, db: &'db dyn Db, index: usize) -> Option<Type<'db>> {
+    pub fn get(self, db: &'db dyn Db, index: usize) -> Option<Type<'db>> {
         self.elements(db).get(index).copied()
     }
 
-    pub fn len(&self, db: &'db dyn Db) -> usize {
+    pub fn len(self, db: &'db dyn Db) -> usize {
         self.elements(db).len()
     }
 }
