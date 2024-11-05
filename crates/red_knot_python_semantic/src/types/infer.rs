@@ -63,6 +63,7 @@ use crate::util::subscript::{PyIndex, PySlice};
 use crate::Db;
 
 use super::mro::MroErrorKind;
+use super::ClassLiteralType;
 
 /// Infer all types for a [`ScopeId`], including all definitions and expressions in that scope.
 /// Use when checking a scope, or needing to provide a type for an arbitrary expression in the
@@ -457,7 +458,8 @@ impl<'db> TypeInferenceBuilder<'db> {
             .types
             .declarations
             .values()
-            .filter_map(|ty| ty.into_class_literal_type());
+            .filter_map(|ty| ty.into_class_literal_type())
+            .map(ClassLiteralType::into_class);
 
         let invalid_mros = class_definitions.filter_map(|class| {
             class
@@ -947,7 +949,11 @@ impl<'db> TypeInferenceBuilder<'db> {
         self.infer_definition(class);
     }
 
-    fn infer_class_definition(&mut self, class: &ast::StmtClassDef, definition: Definition<'db>) {
+    fn infer_class_definition(
+        &mut self,
+        class_node: &ast::StmtClassDef,
+        definition: Definition<'db>,
+    ) {
         let ast::StmtClassDef {
             range: _,
             name,
@@ -955,7 +961,7 @@ impl<'db> TypeInferenceBuilder<'db> {
             decorator_list,
             arguments: _,
             body: _,
-        } = class;
+        } = class_node;
 
         for decorator in decorator_list {
             self.infer_decorator(decorator);
@@ -963,26 +969,22 @@ impl<'db> TypeInferenceBuilder<'db> {
 
         let body_scope = self
             .index
-            .node_scope(NodeWithScopeRef::Class(class))
+            .node_scope(NodeWithScopeRef::Class(class_node))
             .to_scope_id(self.db, self.file);
 
         let maybe_known_class = file_to_module(self.db, self.file)
             .as_ref()
             .and_then(|module| KnownClass::maybe_from_module(module, name.as_str()));
 
-        let class_ty = Type::ClassLiteral(Class::new(
-            self.db,
-            &*name.id,
-            body_scope,
-            maybe_known_class,
-        ));
+        let class = Class::new(self.db, &*name.id, body_scope, maybe_known_class);
+        let class_ty = Type::ClassLiteral(ClassLiteralType(class));
 
-        self.add_declaration_with_binding(class.into(), definition, class_ty, class_ty);
+        self.add_declaration_with_binding(class_node.into(), definition, class_ty, class_ty);
 
         // if there are type parameters, then the keywords and bases are within that scope
         // and we don't need to run inference here
         if type_params.is_none() {
-            for keyword in class.keywords() {
+            for keyword in class_node.keywords() {
                 self.infer_expression(&keyword.value);
             }
 
@@ -991,7 +993,7 @@ impl<'db> TypeInferenceBuilder<'db> {
             if self.are_all_types_deferred() {
                 self.types.has_deferred = true;
             } else {
-                for base in class.bases() {
+                for base in class_node.bases() {
                     self.infer_expression(base);
                 }
             }
@@ -1279,12 +1281,12 @@ impl<'db> TypeInferenceBuilder<'db> {
             // anything else is invalid and should lead to a diagnostic being reported --Alex
             match node_ty {
                 Type::Any | Type::Unknown => node_ty,
-                Type::ClassLiteral(class_ty) => class_ty.to_instance(),
+                Type::ClassLiteral(ClassLiteralType(class)) => class.to_instance(),
                 Type::Tuple(tuple) => UnionType::from_elements(
                     self.db,
                     tuple.elements(self.db).iter().map(|ty| {
                         ty.into_class_literal_type()
-                            .map_or(Type::Todo, Class::to_instance)
+                            .map_or(Type::Todo, |ClassLiteralType(class)| class.to_instance())
                     }),
                 ),
                 _ => Type::Todo,
@@ -3645,7 +3647,7 @@ impl<'db> TypeInferenceBuilder<'db> {
                         }
                     }
 
-                    if matches!(value_ty, Type::ClassLiteral(class) if class.is_known(self.db, KnownClass::Type))
+                    if matches!(value_ty, Type::ClassLiteral(ClassLiteralType(class)) if class.is_known(self.db, KnownClass::Type))
                     {
                         return KnownClass::GenericAlias.to_instance(self.db);
                     }
@@ -3826,7 +3828,9 @@ impl<'db> TypeInferenceBuilder<'db> {
 
                 if value_ty
                     .into_class_literal_type()
-                    .is_some_and(|class| class.is_known(self.db, KnownClass::Tuple))
+                    .is_some_and(|ClassLiteralType(class)| {
+                        class.is_known(self.db, KnownClass::Tuple)
+                    })
                 {
                     self.infer_tuple_type_expression(slice)
                 } else {
@@ -4506,9 +4510,7 @@ mod tests {
         let mod_file = system_path_to_file(&db, "src/mod.py").unwrap();
         let ty = global_symbol(&db, mod_file, "C").expect_type();
         let class_id = ty.expect_class_literal();
-        let member_ty = class_id
-            .class_member(&db, &Name::new_static("f"))
-            .expect_type();
+        let member_ty = class_id.member(&db, &Name::new_static("f")).expect_type();
         let func = member_ty.expect_function_literal();
 
         assert_eq!(func.name(&db), "f");
@@ -4718,7 +4720,7 @@ mod tests {
 
         let a = system_path_to_file(&db, "src/a.py").expect("file to exist");
         let c_ty = global_symbol(&db, a, "C").expect_type();
-        let c_class = c_ty.expect_class_literal();
+        let c_class = c_ty.expect_class_literal().into_class();
         let mut c_mro = c_class.iter_mro(&db);
         let b_ty = c_mro.nth(1).unwrap();
         let b_class = b_ty.expect_class();
@@ -4874,7 +4876,12 @@ mod tests {
         db.write_file("/src/a.pyi", "class C(object): pass")?;
         let file = system_path_to_file(&db, "/src/a.pyi").unwrap();
         let ty = global_symbol(&db, file, "C").expect_type();
-        let base = ty.expect_class_literal().iter_mro(&db).nth(1).unwrap();
+        let base = ty
+            .expect_class_literal()
+            .into_class()
+            .iter_mro(&db)
+            .nth(1)
+            .unwrap();
         assert_eq!(base.display(&db).to_string(), "<class 'object'>");
         Ok(())
     }

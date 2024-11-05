@@ -8,6 +8,8 @@ use std::sync::Arc;
 use crate::types::Type;
 use crate::Db;
 
+use super::ClassLiteralType;
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct TypeCheckDiagnostic {
     // TODO: Don't use string keys for rules
@@ -209,7 +211,7 @@ impl<'db> TypeCheckDiagnosticsBuilder<'db> {
         assigned_ty: Type<'db>,
     ) {
         match declared_ty {
-            Type::ClassLiteral(class) => {
+            Type::ClassLiteral(ClassLiteralType(class)) => {
                 self.add(node, "invalid-assignment", format_args!(
                         "Implicit shadowing of class `{}`; annotate to make it explicit if this is intentional",
                         class.name(self.db)));

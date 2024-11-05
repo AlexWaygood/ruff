@@ -5,7 +5,7 @@ use indexmap::IndexSet;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
-use super::{Class, KnownClass, Type};
+use super::{Class, ClassLiteralType, KnownClass, Type};
 use crate::Db;
 
 /// The inferred method resolution order of a given class.
@@ -351,7 +351,9 @@ impl<'db> ClassBase<'db> {
         KnownClass::Object
             .to_class(db)
             .into_class_literal_type()
-            .map_or(Self::Unknown, Self::Class)
+            .map_or(Self::Unknown, |ClassLiteralType(class)| {
+                ClassBase::Class(class)
+            })
     }
 
     /// Attempt to resolve `ty` into a `ClassBase`.
@@ -362,7 +364,7 @@ impl<'db> ClassBase<'db> {
             Type::Any => Some(Self::Any),
             Type::Unknown => Some(Self::Unknown),
             Type::Todo => Some(Self::Todo),
-            Type::ClassLiteral(class) => Some(Self::Class(class)),
+            Type::ClassLiteral(ClassLiteralType(class)) => Some(Self::Class(class)),
             Type::Union(_) => None, // TODO -- forces consideration of multiple possible MROs?
             Type::Intersection(_) => None, // TODO -- probably incorrect?
             Type::Instance(_) => None, // TODO -- handle `__mro_entries__`?
@@ -408,7 +410,7 @@ impl<'db> From<ClassBase<'db>> for Type<'db> {
             ClassBase::Any => Type::Any,
             ClassBase::Todo => Type::Todo,
             ClassBase::Unknown => Type::Unknown,
-            ClassBase::Class(class) => Type::ClassLiteral(class),
+            ClassBase::Class(class) => Type::ClassLiteral(ClassLiteralType(class)),
         }
     }
 }
@@ -480,7 +482,11 @@ fn class_is_cyclically_defined(db: &dyn Db, class: Class) -> bool {
             // there could easily be a situation where two bases have the same class in their MROs;
             // that isn't enough to constitute the class being cyclically defined.
             let classes_to_watch_len = classes_to_watch.len();
-            if is_cyclically_defined_recursive(db, explicit_base_class, classes_to_watch) {
+            if is_cyclically_defined_recursive(
+                db,
+                explicit_base_class.into_class(),
+                classes_to_watch,
+            ) {
                 return true;
             }
             classes_to_watch.truncate(classes_to_watch_len);
@@ -493,5 +499,7 @@ fn class_is_cyclically_defined(db: &dyn Db, class: Class) -> bool {
         .iter()
         .copied()
         .filter_map(Type::into_class_literal_type)
-        .any(|base_class| is_cyclically_defined_recursive(db, base_class, &mut IndexSet::default()))
+        .any(|base_class| {
+            is_cyclically_defined_recursive(db, base_class.into_class(), &mut IndexSet::default())
+        })
 }

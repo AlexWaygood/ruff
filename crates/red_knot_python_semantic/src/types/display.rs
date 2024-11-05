@@ -10,6 +10,8 @@ use crate::types::{InstanceType, IntersectionType, KnownClass, Type, UnionType};
 use crate::Db;
 use rustc_hash::FxHashMap;
 
+use super::ClassLiteralType;
+
 impl<'db> Type<'db> {
     pub fn display(&self, db: &'db dyn Db) -> DisplayType {
         DisplayType { ty: self, db }
@@ -76,7 +78,7 @@ impl Display for DisplayRepresentation<'_> {
                 write!(f, "<module '{:?}'>", file.path(self.db))
             }
             // TODO functions and classes should display using a fully qualified name
-            Type::ClassLiteral(class) => f.write_str(class.name(self.db)),
+            Type::ClassLiteral(ClassLiteralType(class)) => f.write_str(class.name(self.db)),
             Type::Instance(InstanceType { class, known }) => f.write_str(match known {
                 Some(super::KnownInstance::Literal) => "Literal",
                 _ => class.name(self.db),

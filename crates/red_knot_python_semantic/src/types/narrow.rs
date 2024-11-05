@@ -16,6 +16,8 @@ use rustc_hash::FxHashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
+use super::ClassLiteralType;
+
 /// Return the type constraint that `test` (if true) would place on `definition`, if any.
 ///
 /// For example, if we have this code:
@@ -88,7 +90,7 @@ fn generate_isinstance_constraint<'db>(
     classinfo: &Type<'db>,
 ) -> Option<Type<'db>> {
     match classinfo {
-        Type::ClassLiteral(class) => Some(class.to_instance()),
+        Type::ClassLiteral(ClassLiteralType(class)) => Some(class.to_instance()),
         Type::Tuple(tuple) => {
             let mut builder = UnionBuilder::new(db);
             for element in tuple.elements(db) {
