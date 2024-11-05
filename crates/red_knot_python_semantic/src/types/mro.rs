@@ -5,7 +5,7 @@ use indexmap::IndexSet;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
-use super::{ClassType, KnownClass, Type};
+use super::{Class, KnownClass, Type};
 use crate::Db;
 
 /// The inferred method resolution order of a given class.
@@ -25,7 +25,7 @@ impl<'db> Mro<'db> {
     ///
     /// (We emit a diagnostic warning about the runtime `TypeError` in
     /// [`super::infer::TypeInferenceBuilder::infer_region_scope`].)
-    pub(super) fn of_class(db: &'db dyn Db, class: ClassType<'db>) -> Result<Self, MroError<'db>> {
+    pub(super) fn of_class(db: &'db dyn Db, class: Class<'db>) -> Result<Self, MroError<'db>> {
         Self::of_class_impl(db, class).map_err(|error_kind| {
             let fallback_mro = Self::from([
                 ClassBase::Class(class),
@@ -39,7 +39,7 @@ impl<'db> Mro<'db> {
         })
     }
 
-    fn of_class_impl(db: &'db dyn Db, class: ClassType<'db>) -> Result<Self, MroErrorKind<'db>> {
+    fn of_class_impl(db: &'db dyn Db, class: Class<'db>) -> Result<Self, MroErrorKind<'db>> {
         let class_bases = class.explicit_bases(db);
 
         match class_bases {
@@ -194,7 +194,7 @@ pub(super) struct MroIterator<'db> {
     db: &'db dyn Db,
 
     /// The class whose MRO we're iterating over
-    class: ClassType<'db>,
+    class: Class<'db>,
 
     /// Whether or not we've already yielded the first element of the MRO
     first_element_yielded: bool,
@@ -208,7 +208,7 @@ pub(super) struct MroIterator<'db> {
 }
 
 impl<'db> MroIterator<'db> {
-    pub(super) fn new(db: &'db dyn Db, class: ClassType<'db>) -> Self {
+    pub(super) fn new(db: &'db dyn Db, class: Class<'db>) -> Self {
         Self {
             db,
             class,
@@ -295,7 +295,7 @@ pub(super) enum MroErrorKind<'db> {
     /// of the duplicate bases. The indices are the indices of nodes
     /// in the bases list of the class's [`StmtClassDef`](ruff_python_ast::StmtClassDef) node.
     /// Each index is the index of a node representing a duplicate base.
-    DuplicateBases(Box<[(usize, ClassType<'db>)]>),
+    DuplicateBases(Box<[(usize, Class<'db>)]>),
 
     /// The MRO is otherwise unresolvable through the C3-merge algorithm.
     ///
@@ -313,7 +313,7 @@ pub(super) enum ClassBase<'db> {
     Any,
     Unknown,
     Todo,
-    Class(ClassType<'db>),
+    Class(Class<'db>),
 }
 
 impl<'db> ClassBase<'db> {
@@ -339,7 +339,7 @@ impl<'db> ClassBase<'db> {
 
     #[cfg(test)]
     #[track_caller]
-    pub(super) fn expect_class(self) -> ClassType<'db> {
+    pub(super) fn expect_class(self) -> Class<'db> {
         match self {
             ClassBase::Class(class) => class,
             _ => panic!("Expected a `ClassBase::Class()` variant"),
@@ -379,7 +379,7 @@ impl<'db> ClassBase<'db> {
         }
     }
 
-    fn into_class_literal_type(self) -> Option<ClassType<'db>> {
+    fn into_class_literal_type(self) -> Option<Class<'db>> {
         match self {
             Self::Class(class) => Some(class),
             _ => None,
@@ -460,11 +460,11 @@ fn c3_merge(mut sequences: Vec<VecDeque<ClassBase>>) -> Option<Mro> {
 ///
 /// A class definition like this will fail at runtime,
 /// but we must be resilient to it or we could panic.
-fn class_is_cyclically_defined(db: &dyn Db, class: ClassType) -> bool {
+fn class_is_cyclically_defined(db: &dyn Db, class: Class) -> bool {
     fn is_cyclically_defined_recursive<'db>(
         db: &'db dyn Db,
-        class: ClassType<'db>,
-        classes_to_watch: &mut IndexSet<ClassType<'db>>,
+        class: Class<'db>,
+        classes_to_watch: &mut IndexSet<Class<'db>>,
     ) -> bool {
         if !classes_to_watch.insert(class) {
             return true;

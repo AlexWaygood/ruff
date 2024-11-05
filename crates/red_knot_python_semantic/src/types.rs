@@ -328,7 +328,7 @@ pub enum Type<'db> {
     /// A specific module object
     ModuleLiteral(File),
     /// A specific class object
-    ClassLiteral(ClassType<'db>),
+    ClassLiteral(Class<'db>),
     /// The set of Python objects with the given class in their __class__'s method resolution order
     Instance(InstanceType<'db>),
     /// The set of objects in any of the types in the union
@@ -363,7 +363,7 @@ impl<'db> Type<'db> {
         matches!(self, Type::Todo)
     }
 
-    pub const fn into_class_literal_type(self) -> Option<ClassType<'db>> {
+    pub const fn into_class_literal_type(self) -> Option<Class<'db>> {
         match self {
             Type::ClassLiteral(class_type) => Some(class_type),
             _ => None,
@@ -371,7 +371,7 @@ impl<'db> Type<'db> {
     }
 
     #[track_caller]
-    pub fn expect_class_literal(self) -> ClassType<'db> {
+    pub fn expect_class_literal(self) -> Class<'db> {
         self.into_class_literal_type()
             .expect("Expected a Type::ClassLiteral variant")
     }
@@ -1929,7 +1929,7 @@ pub enum KnownFunction {
 }
 
 #[salsa::interned]
-pub struct ClassType<'db> {
+pub struct Class<'db> {
     /// Name of the class at definition
     #[return_ref]
     pub name: ast::name::Name,
@@ -1940,7 +1940,7 @@ pub struct ClassType<'db> {
 }
 
 #[salsa::tracked]
-impl<'db> ClassType<'db> {
+impl<'db> Class<'db> {
     pub fn to_instance(self) -> Type<'db> {
         Type::Instance(InstanceType::anonymous(self))
     }
@@ -2041,7 +2041,7 @@ impl<'db> ClassType<'db> {
     }
 
     /// Return `true` if `other` is present in this class's MRO.
-    pub fn is_subclass_of(self, db: &'db dyn Db, other: ClassType) -> bool {
+    pub fn is_subclass_of(self, db: &'db dyn Db, other: Class) -> bool {
         // `is_subclass_of` is checking the subtype relation, in which gradual types do not
         // participate, so we should not return `True` if we find `Any/Unknown` in the MRO.
         self.iter_mro(db).contains(&ClassBase::Class(other))
@@ -2091,16 +2091,16 @@ impl<'db> ClassType<'db> {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct InstanceType<'db> {
-    class: ClassType<'db>,
+    class: Class<'db>,
     known: Option<KnownInstance>,
 }
 
 impl<'db> InstanceType<'db> {
-    pub fn anonymous(class: ClassType<'db>) -> Self {
+    pub fn anonymous(class: Class<'db>) -> Self {
         Self { class, known: None }
     }
 
-    pub fn known(class: ClassType<'db>, known: KnownInstance) -> Self {
+    pub fn known(class: Class<'db>, known: KnownInstance) -> Self {
         Self {
             class,
             known: Some(known),

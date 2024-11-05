@@ -54,9 +54,9 @@ use crate::types::diagnostic::{
 use crate::types::unpacker::{UnpackResult, Unpacker};
 use crate::types::{
     bindings_ty, builtins_symbol, declarations_ty, global_symbol, symbol, typing_extensions_symbol,
-    Boundness, BytesLiteralType, ClassType, FunctionType, InstanceType, IterationOutcome,
-    KnownClass, KnownFunction, KnownInstance, SliceLiteralType, StringLiteralType, Symbol,
-    Truthiness, TupleType, Type, TypeArrayDisplay, UnionBuilder, UnionType,
+    Boundness, BytesLiteralType, Class, FunctionType, InstanceType, IterationOutcome, KnownClass,
+    KnownFunction, KnownInstance, SliceLiteralType, StringLiteralType, Symbol, Truthiness,
+    TupleType, Type, TypeArrayDisplay, UnionBuilder, UnionType,
 };
 use crate::unpack::Unpack;
 use crate::util::subscript::{PyIndex, PySlice};
@@ -970,7 +970,7 @@ impl<'db> TypeInferenceBuilder<'db> {
             .as_ref()
             .and_then(|module| KnownClass::maybe_from_module(module, name.as_str()));
 
-        let class_ty = Type::ClassLiteral(ClassType::new(
+        let class_ty = Type::ClassLiteral(Class::new(
             self.db,
             &*name.id,
             body_scope,
@@ -1284,7 +1284,7 @@ impl<'db> TypeInferenceBuilder<'db> {
                     self.db,
                     tuple.elements(self.db).iter().map(|ty| {
                         ty.into_class_literal_type()
-                            .map_or(Type::Todo, ClassType::to_instance)
+                            .map_or(Type::Todo, Class::to_instance)
                     }),
                 ),
                 _ => Type::Todo,
@@ -4268,8 +4268,8 @@ impl StringPartsCollector {
 /// see `<https://docs.python.org/3/reference/datamodel.html#object.__lt__>`
 fn perform_rich_comparison<'db>(
     db: &'db dyn Db,
-    left_class: ClassType<'db>,
-    right_class: ClassType<'db>,
+    left_class: Class<'db>,
+    right_class: Class<'db>,
     op: RichCompareOperator,
 ) -> Result<Type<'db>, CompareUnsupportedError<'db>> {
     // The following resource has details about the rich comparison algorithm:
@@ -4279,13 +4279,13 @@ fn perform_rich_comparison<'db>(
     // (e.g. int.__lt__ with string instance should be errored, currently bool)
 
     let call_dunder =
-        |op: RichCompareOperator, left_class: ClassType<'db>, right_class: ClassType<'db>| {
-            match left_class.class_member(db, op.dunder()) {
-                Symbol::Type(class_member_dunder, Boundness::Bound) => class_member_dunder
-                    .call(db, &[left_class.to_instance(), right_class.to_instance()])
-                    .return_ty(db),
-                _ => None,
-            }
+        |op: RichCompareOperator, left_class: Class<'db>, right_class: Class<'db>| match left_class
+            .class_member(db, op.dunder())
+        {
+            Symbol::Type(class_member_dunder, Boundness::Bound) => class_member_dunder
+                .call(db, &[left_class.to_instance(), right_class.to_instance()])
+                .return_ty(db),
+            _ => None,
         };
 
     // The reflected dunder has priority if the right-hand side is a strict subclass of the left-hand side.
@@ -4319,8 +4319,8 @@ fn perform_rich_comparison<'db>(
 /// and `<https://docs.python.org/3/reference/expressions.html#membership-test-details>`
 fn perform_membership_test_comparison<'db>(
     db: &'db dyn Db,
-    left_class: ClassType<'db>,
-    right_class: ClassType<'db>,
+    left_class: Class<'db>,
+    right_class: Class<'db>,
     op: MembershipTestCompareOperator,
 ) -> Result<Type<'db>, CompareUnsupportedError<'db>> {
     let (left_instance, right_instance) = (left_class.to_instance(), right_class.to_instance());
