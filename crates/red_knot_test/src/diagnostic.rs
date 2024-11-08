@@ -154,9 +154,9 @@ mod tests {
 
     #[test]
     fn sort_and_group() {
-        let mut db = Db::setup(SystemPathBuf::from("/src"));
-        db.write_file("/src/test.py", "one\ntwo\n").unwrap();
-        let file = system_path_to_file(&db, "/src/test.py").unwrap();
+        let mut db = Db::setup(SystemPathBuf::from("/root"));
+        db.write_file("/root/test.py", "one\ntwo\n").unwrap();
+        let file = system_path_to_file(&db, "/root/test.py").unwrap();
         let lines = line_index(&db, file);
 
         let ranges = [

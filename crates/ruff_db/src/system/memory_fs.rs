@@ -1017,7 +1017,7 @@ mod tests {
 
     #[test]
     fn walk_directory() -> std::io::Result<()> {
-        let root = SystemPath::new("/src");
+        let root = SystemPath::new("/root");
         let system = MemoryFileSystem::with_current_directory(root);
 
         system.write_files([
@@ -1076,7 +1076,7 @@ mod tests {
 
     #[test]
     fn walk_directory_hidden() -> std::io::Result<()> {
-        let root = SystemPath::new("/src");
+        let root = SystemPath::new("/root");
         let system = MemoryFileSystem::with_current_directory(root);
 
         system.write_files([
@@ -1122,7 +1122,7 @@ mod tests {
 
     #[test]
     fn walk_directory_file() -> std::io::Result<()> {
-        let root = SystemPath::new("/src");
+        let root = SystemPath::new("/root");
         let system = MemoryFileSystem::with_current_directory(root);
 
         system.write_file(root.join("foo.py"), "print('foo')")?;

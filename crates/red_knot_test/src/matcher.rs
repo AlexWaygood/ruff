@@ -380,9 +380,9 @@ mod tests {
     ) -> Result<(), FailuresByLine> {
         colored::control::set_override(false);
 
-        let mut db = crate::db::Db::setup(SystemPathBuf::from("/src"));
-        db.write_file("/src/test.py", source).unwrap();
-        let file = system_path_to_file(&db, "/src/test.py").unwrap();
+        let mut db = crate::db::Db::setup(SystemPathBuf::from("/root"));
+        db.write_file("/root/test.py", source).unwrap();
+        let file = system_path_to_file(&db, "/root/test.py").unwrap();
 
         super::match_file(
             &db,

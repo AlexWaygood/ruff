@@ -1275,7 +1275,7 @@ mod tests {
         let file_system_root = SystemPath::from_std_path(&file_system_root).unwrap();
         db.use_system(OsSystem::new(file_system_root));
 
-        let workspace_root = file_system_root.join("src");
+        let workspace_root = file_system_root.join("workspace");
         let site_packages = file_system_root.join("site-packages");
         let custom_typeshed = file_system_root.join("typeshed");
 
@@ -1767,16 +1767,17 @@ not_a_directory
     fn no_duplicate_search_paths_added() {
         let TestCase { db, .. } = TestCaseBuilder::new()
             .with_first_party_files(&[("foo.py", "")])
-            .with_site_packages_files(&[("_foo.pth", "/src")])
+            .with_site_packages_files(&[("_foo.pth", "/workspace")])
             .build();
 
         let search_paths: Vec<&SearchPath> = search_paths(&db).collect();
 
         assert!(search_paths.contains(
-            &&SearchPath::first_party(db.system(), SystemPathBuf::from("/src")).unwrap()
+            &&SearchPath::first_party(db.system(), SystemPathBuf::from("/workspace")).unwrap()
         ));
-        assert!(!search_paths
-            .contains(&&SearchPath::editable(db.system(), SystemPathBuf::from("/src")).unwrap()));
+        assert!(!search_paths.contains(
+            &&SearchPath::editable(db.system(), SystemPathBuf::from("/workspace")).unwrap()
+        ));
     }
 
     #[test]
@@ -1790,7 +1791,7 @@ not_a_directory
         let system_site_packages_location = system_site_packages.join("a.py");
 
         db.memory_file_system()
-            .create_directory_all("/src")
+            .create_directory_all("/workspace")
             .unwrap();
         db.write_files([
             (&site_packages_pth, "/x/y"),
@@ -1805,7 +1806,7 @@ not_a_directory
                 target_version: PythonVersion::default(),
                 search_paths: SearchPathSettings {
                     extra_paths: vec![],
-                    root: SystemPathBuf::from("/src"),
+                    root: SystemPathBuf::from("/workspace"),
                     custom_typeshed: None,
                     site_packages: SitePackages::Known(vec![
                         venv_site_packages,

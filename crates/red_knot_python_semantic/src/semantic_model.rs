@@ -181,7 +181,7 @@ mod tests {
             &db,
             &ProgramSettings {
                 target_version: PythonVersion::default(),
-                search_paths: SearchPathSettings::new(SystemPathBuf::from("/src")),
+                search_paths: SearchPathSettings::new(SystemPathBuf::from("/root")),
             },
         )?;
 
@@ -190,9 +190,9 @@ mod tests {
 
     #[test]
     fn function_ty() -> anyhow::Result<()> {
-        let db = setup_db([("/src/foo.py", "def test(): pass")])?;
+        let db = setup_db([("/root/foo.py", "def test(): pass")])?;
 
-        let foo = system_path_to_file(&db, "/src/foo.py").unwrap();
+        let foo = system_path_to_file(&db, "/root/foo.py").unwrap();
 
         let ast = parsed_module(&db, foo);
 
@@ -207,9 +207,9 @@ mod tests {
 
     #[test]
     fn class_ty() -> anyhow::Result<()> {
-        let db = setup_db([("/src/foo.py", "class Test: pass")])?;
+        let db = setup_db([("/root/foo.py", "class Test: pass")])?;
 
-        let foo = system_path_to_file(&db, "/src/foo.py").unwrap();
+        let foo = system_path_to_file(&db, "/root/foo.py").unwrap();
 
         let ast = parsed_module(&db, foo);
 
@@ -225,11 +225,11 @@ mod tests {
     #[test]
     fn alias_ty() -> anyhow::Result<()> {
         let db = setup_db([
-            ("/src/foo.py", "class Test: pass"),
-            ("/src/bar.py", "from foo import Test"),
+            ("/root/foo.py", "class Test: pass"),
+            ("/root/bar.py", "from foo import Test"),
         ])?;
 
-        let bar = system_path_to_file(&db, "/src/bar.py").unwrap();
+        let bar = system_path_to_file(&db, "/root/bar.py").unwrap();
 
         let ast = parsed_module(&db, bar);
 

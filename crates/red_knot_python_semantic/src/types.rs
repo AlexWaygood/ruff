@@ -2706,7 +2706,7 @@ mod tests {
     fn setup_db() -> TestDb {
         let db = TestDb::new();
 
-        let root = SystemPathBuf::from("/src");
+        let root = SystemPathBuf::from("/root");
         db.memory_file_system().create_directory_all(&root).unwrap();
 
         Program::from_settings(
@@ -2912,7 +2912,7 @@ mod tests {
     fn is_subtype_of_class_literals() {
         let mut db = setup_db();
         db.write_dedented(
-            "/src/module.py",
+            "/root/module.py",
             "
             class Base: ...
             class Derived(Base): ...
@@ -2921,7 +2921,7 @@ mod tests {
         ",
         )
         .unwrap();
-        let module = ruff_db::files::system_path_to_file(&db, "/src/module.py").unwrap();
+        let module = ruff_db::files::system_path_to_file(&db, "/root/module.py").unwrap();
 
         // `literal_base` represents `Literal[Base]`.
         let literal_base = super::global_symbol(&db, module, "Base").expect_type();
@@ -2957,7 +2957,7 @@ mod tests {
     fn is_subtype_of_intersection_of_class_instances() {
         let mut db = setup_db();
         db.write_dedented(
-            "/src/module.py",
+            "/root/module.py",
             "
             class A: ...
             a = A()
@@ -2966,7 +2966,7 @@ mod tests {
         ",
         )
         .unwrap();
-        let module = ruff_db::files::system_path_to_file(&db, "/src/module.py").unwrap();
+        let module = ruff_db::files::system_path_to_file(&db, "/root/module.py").unwrap();
 
         let a_ty = super::global_symbol(&db, module, "a").expect_type();
         let b_ty = super::global_symbol(&db, module, "b").expect_type();
@@ -3059,7 +3059,7 @@ mod tests {
     fn is_disjoint_from_union_of_class_types() {
         let mut db = setup_db();
         db.write_dedented(
-            "/src/module.py",
+            "/root/module.py",
             "
             class A: ...
             class B: ...
@@ -3067,7 +3067,7 @@ mod tests {
         ",
         )
         .unwrap();
-        let module = ruff_db::files::system_path_to_file(&db, "/src/module.py").unwrap();
+        let module = ruff_db::files::system_path_to_file(&db, "/root/module.py").unwrap();
 
         let type_a = super::global_symbol(&db, module, "A").expect_type();
         let type_u = super::global_symbol(&db, module, "U").expect_type();
@@ -3082,14 +3082,14 @@ mod tests {
     fn is_disjoint_type_type() {
         let mut db = setup_db();
         db.write_dedented(
-            "/src/module.py",
+            "/root/module.py",
             "
             class A: ...
             class B: ...
         ",
         )
         .unwrap();
-        let module = ruff_db::files::system_path_to_file(&db, "/src/module.py").unwrap();
+        let module = ruff_db::files::system_path_to_file(&db, "/root/module.py").unwrap();
 
         let literal_a = super::global_symbol(&db, module, "A").expect_type();
         let literal_b = super::global_symbol(&db, module, "B").expect_type();
@@ -3232,14 +3232,14 @@ mod tests {
         let mut db = setup_db();
 
         db.write_dedented(
-            "src/foo.py",
+            "root/foo.py",
             r#"
             def foo() -> int:
                 return 5
         "#,
         )?;
         db.write_dedented(
-            "src/bar.py",
+            "root/bar.py",
             r#"
             from foo import foo
 
@@ -3247,7 +3247,7 @@ mod tests {
             "#,
         )?;
 
-        let bar = system_path_to_file(&db, "src/bar.py")?;
+        let bar = system_path_to_file(&db, "root/bar.py")?;
         let a = global_symbol(&db, bar, "a");
 
         assert_eq!(a.expect_type(), KnownClass::Int.to_instance(&db));
@@ -3255,7 +3255,7 @@ mod tests {
         // Add a docstring to foo to trigger a re-run.
         // The bar-call site of foo should not be re-run because of that
         db.write_dedented(
-            "src/foo.py",
+            "root/foo.py",
             r#"
             def foo() -> int:
                 "Computes a value"

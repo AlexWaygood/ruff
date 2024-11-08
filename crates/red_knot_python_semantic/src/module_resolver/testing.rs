@@ -106,7 +106,7 @@ pub(crate) struct TestCaseBuilder<T> {
 }
 
 impl<T> TestCaseBuilder<T> {
-    /// Specify files to be created in the `src` mock directory
+    /// Specify files to be created in the `workspace` mock directory
     pub(crate) fn with_first_party_files(mut self, files: &[FileSpec]) -> Self {
         self.first_party_files.extend(files.iter().copied());
         self
@@ -220,7 +220,7 @@ impl TestCaseBuilder<MockedTypeshed> {
 
         let site_packages =
             Self::write_mock_directory(&mut db, "/site-packages", site_packages_files);
-        let root = Self::write_mock_directory(&mut db, "/src", first_party_files);
+        let root = Self::write_mock_directory(&mut db, "/workspace", first_party_files);
         let typeshed = Self::build_typeshed_mock(&mut db, &typeshed_option);
 
         Program::from_settings(
@@ -277,7 +277,7 @@ impl TestCaseBuilder<VendoredTypeshed> {
 
         let site_packages =
             Self::write_mock_directory(&mut db, "/site-packages", site_packages_files);
-        let root = Self::write_mock_directory(&mut db, "/src", first_party_files);
+        let root = Self::write_mock_directory(&mut db, "/workspace", first_party_files);
 
         Program::from_settings(
             &db,

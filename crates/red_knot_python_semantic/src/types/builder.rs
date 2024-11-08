@@ -392,7 +392,7 @@ mod tests {
     fn setup_db() -> TestDb {
         let db = TestDb::new();
 
-        let root = SystemPathBuf::from("/src");
+        let root = SystemPathBuf::from("/root");
         db.memory_file_system().create_directory_all(&root).unwrap();
 
         Program::from_settings(
@@ -1010,7 +1010,7 @@ mod tests {
     fn build_intersection_of_two_unions_simplify() {
         let mut db = setup_db();
         db.write_dedented(
-            "/src/module.py",
+            "/root/module.py",
             "
             class A: ...
             class B: ...
@@ -1020,7 +1020,7 @@ mod tests {
         )
         .unwrap();
 
-        let file = system_path_to_file(&db, "src/module.py").expect("file to exist");
+        let file = system_path_to_file(&db, "root/module.py").expect("file to exist");
 
         let a = global_symbol(&db, file, "a").expect_type();
         let b = global_symbol(&db, file, "b").expect_type();
@@ -1039,7 +1039,7 @@ mod tests {
     fn build_union_of_two_intersections_simplify() {
         let mut db = setup_db();
         db.write_dedented(
-            "/src/module.py",
+            "/root/module.py",
             "
             class A: ...
             class B: ...
@@ -1049,7 +1049,7 @@ mod tests {
         )
         .unwrap();
 
-        let file = system_path_to_file(&db, "src/module.py").expect("file to exist");
+        let file = system_path_to_file(&db, "root/module.py").expect("file to exist");
 
         let a = global_symbol(&db, file, "a").expect_type();
         let b = global_symbol(&db, file, "b").expect_type();

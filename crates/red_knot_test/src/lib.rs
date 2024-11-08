@@ -28,7 +28,7 @@ pub fn run(path: &Path, title: &str) {
         }
     };
 
-    let mut db = db::Db::setup(SystemPathBuf::from("/src"));
+    let mut db = db::Db::setup(SystemPathBuf::from("/root"));
 
     let mut any_failures = false;
     for test in suite.tests() {

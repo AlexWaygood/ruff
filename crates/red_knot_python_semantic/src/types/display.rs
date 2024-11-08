@@ -340,16 +340,14 @@ mod tests {
     fn setup_db() -> TestDb {
         let db = TestDb::new();
 
-        let src_root = SystemPathBuf::from("/src");
-        db.memory_file_system()
-            .create_directory_all(&src_root)
-            .unwrap();
+        let root = SystemPathBuf::from("/root");
+        db.memory_file_system().create_directory_all(&root).unwrap();
 
         Program::from_settings(
             &db,
             &ProgramSettings {
                 target_version: PythonVersion::default(),
-                search_paths: SearchPathSettings::new(src_root),
+                search_paths: SearchPathSettings::new(root),
             },
         )
         .expect("Valid search path settings");
@@ -362,7 +360,7 @@ mod tests {
         let mut db = setup_db();
 
         db.write_dedented(
-            "src/main.py",
+            "root/main.py",
             "
             def foo(x: int) -> int:
                 return x + 1
@@ -374,7 +372,7 @@ mod tests {
             class B: ...
             ",
         )?;
-        let mod_file = system_path_to_file(&db, "src/main.py").expect("file to exist");
+        let mod_file = system_path_to_file(&db, "root/main.py").expect("file to exist");
 
         let union_elements = &[
             Type::Unknown,
