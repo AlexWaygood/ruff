@@ -47,7 +47,7 @@ pub struct SearchPathConfiguration {
     pub extra_paths: Option<Vec<SystemPathBuf>>,
 
     /// The root of the workspace, used for finding first-party modules.
-    pub src_root: Option<SystemPathBuf>,
+    pub root: Option<SystemPathBuf>,
 
     /// Optional path to a "custom typeshed" directory on disk for us to use for standard-library types.
     /// If this is not provided, we will fallback to our vendored typeshed stubs for the stdlib,
@@ -64,9 +64,7 @@ impl SearchPathConfiguration {
 
         SearchPathSettings {
             extra_paths: self.extra_paths.unwrap_or_default(),
-            src_root: self
-                .src_root
-                .unwrap_or_else(|| workspace_root.to_path_buf()),
+            root: self.root.unwrap_or_else(|| workspace_root.to_path_buf()),
             custom_typeshed: self.custom_typeshed,
             site_packages,
         }
@@ -76,8 +74,8 @@ impl SearchPathConfiguration {
         if let Some(extra_paths) = with.extra_paths {
             self.extra_paths.get_or_insert(extra_paths);
         }
-        if let Some(src_root) = with.src_root {
-            self.src_root.get_or_insert(src_root);
+        if let Some(root) = with.root {
+            self.root.get_or_insert(root);
         }
         if let Some(custom_typeshed) = with.custom_typeshed {
             self.custom_typeshed.get_or_insert(custom_typeshed);

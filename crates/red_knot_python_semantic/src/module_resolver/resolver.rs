@@ -159,7 +159,7 @@ impl SearchPaths {
 
         let SearchPathSettings {
             extra_paths,
-            src_root,
+            root,
             custom_typeshed,
             site_packages: site_packages_paths,
         } = settings;
@@ -177,8 +177,8 @@ impl SearchPaths {
             static_paths.push(SearchPath::extra(system, path)?);
         }
 
-        tracing::debug!("Adding first-party search path '{src_root}'");
-        static_paths.push(SearchPath::first_party(system, src_root.to_path_buf())?);
+        tracing::debug!("Adding first-party search path '{root}'");
+        static_paths.push(SearchPath::first_party(system, root.to_path_buf())?);
 
         let (typeshed_versions, stdlib_path) = if let Some(custom_typeshed) = custom_typeshed {
             let custom_typeshed = canonicalize(custom_typeshed, system);
@@ -723,8 +723,8 @@ mod tests {
 
     #[test]
     fn first_party_module() {
-        let TestCase { db, src, .. } = TestCaseBuilder::new()
-            .with_src_files(&[("foo.py", "print('Hello, world!')")])
+        let TestCase { db, root, .. } = TestCaseBuilder::new()
+            .with_first_party_files(&[("foo.py", "print('Hello, world!')")])
             .build();
 
         let foo_module_name = ModuleName::new_static("foo").unwrap();
@@ -736,10 +736,10 @@ mod tests {
         );
 
         assert_eq!("foo", foo_module.name());
-        assert_eq!(&src, foo_module.search_path());
+        assert_eq!(&root, foo_module.search_path());
         assert_eq!(ModuleKind::Module, foo_module.kind());
 
-        let expected_foo_path = src.join("foo.py");
+        let expected_foo_path = root.join("foo.py");
         assert_eq!(&expected_foo_path, foo_module.file().path(&db));
         assert_eq!(
             Some(foo_module),
@@ -751,7 +751,7 @@ mod tests {
     fn builtins_vendored() {
         let TestCase { db, stdlib, .. } = TestCaseBuilder::new()
             .with_vendored_typeshed()
-            .with_src_files(&[("builtins.py", "FOOOO = 42")])
+            .with_first_party_files(&[("builtins.py", "FOOOO = 42")])
             .build();
 
         let builtins_module_name = ModuleName::new_static("builtins").unwrap();
@@ -770,7 +770,7 @@ mod tests {
         const SRC: &[FileSpec] = &[("builtins.py", "FOOOO = 42")];
 
         let TestCase { db, stdlib, .. } = TestCaseBuilder::new()
-            .with_src_files(SRC)
+            .with_first_party_files(SRC)
             .with_custom_typeshed(TYPESHED)
             .with_target_version(PythonVersion::PY38)
             .build();
@@ -995,8 +995,8 @@ mod tests {
             versions: "functools: 3.8-",
         };
 
-        let TestCase { db, src, .. } = TestCaseBuilder::new()
-            .with_src_files(SRC)
+        let TestCase { db, root, .. } = TestCaseBuilder::new()
+            .with_first_party_files(SRC)
             .with_custom_typeshed(TYPESHED)
             .with_target_version(PythonVersion::PY38)
             .build();
@@ -1008,13 +1008,16 @@ mod tests {
             Some(&functools_module),
             resolve_module(&db, &functools_module_name).as_ref()
         );
-        assert_eq!(&src, functools_module.search_path());
+        assert_eq!(&root, functools_module.search_path());
         assert_eq!(ModuleKind::Module, functools_module.kind());
-        assert_eq!(&src.join("functools.py"), functools_module.file().path(&db));
+        assert_eq!(
+            &root.join("functools.py"),
+            functools_module.file().path(&db)
+        );
 
         assert_eq!(
             Some(functools_module),
-            path_to_module(&db, &FilePath::System(src.join("functools.py")))
+            path_to_module(&db, &FilePath::System(root.join("functools.py")))
         );
     }
 
@@ -1038,15 +1041,15 @@ mod tests {
 
     #[test]
     fn resolve_package() {
-        let TestCase { src, db, .. } = TestCaseBuilder::new()
-            .with_src_files(&[("foo/__init__.py", "print('Hello, world!'")])
+        let TestCase { root, db, .. } = TestCaseBuilder::new()
+            .with_first_party_files(&[("foo/__init__.py", "print('Hello, world!'")])
             .build();
 
-        let foo_path = src.join("foo/__init__.py");
+        let foo_path = root.join("foo/__init__.py");
         let foo_module = resolve_module(&db, &ModuleName::new_static("foo").unwrap()).unwrap();
 
         assert_eq!("foo", foo_module.name());
-        assert_eq!(&src, foo_module.search_path());
+        assert_eq!(&root, foo_module.search_path());
         assert_eq!(&foo_path, foo_module.file().path(&db));
 
         assert_eq!(
@@ -1057,7 +1060,7 @@ mod tests {
         // Resolving by directory doesn't resolve to the init file.
         assert_eq!(
             None,
-            path_to_module(&db, &FilePath::System(src.join("foo")))
+            path_to_module(&db, &FilePath::System(root.join("foo")))
         );
     }
 
@@ -1068,12 +1071,12 @@ mod tests {
             ("foo.py", "print('Hello, world!')"),
         ];
 
-        let TestCase { db, src, .. } = TestCaseBuilder::new().with_src_files(SRC).build();
+        let TestCase { db, root, .. } = TestCaseBuilder::new().with_first_party_files(SRC).build();
 
         let foo_module = resolve_module(&db, &ModuleName::new_static("foo").unwrap()).unwrap();
-        let foo_init_path = src.join("foo/__init__.py");
+        let foo_init_path = root.join("foo/__init__.py");
 
-        assert_eq!(&src, foo_module.search_path());
+        assert_eq!(&root, foo_module.search_path());
         assert_eq!(&foo_init_path, foo_module.file().path(&db));
         assert_eq!(ModuleKind::Package, foo_module.kind());
 
@@ -1083,7 +1086,7 @@ mod tests {
         );
         assert_eq!(
             None,
-            path_to_module(&db, &FilePath::System(src.join("foo.py")))
+            path_to_module(&db, &FilePath::System(root.join("foo.py")))
         );
     }
 
@@ -1092,14 +1095,14 @@ mod tests {
         //const SRC: &[FileSpec] = &[("foo.py", "x = 1")];
         const SRC: &[FileSpec] = &[("foo.py", "x = 1"), ("foo/bar.py", "x = 2")];
 
-        let TestCase { db, src, .. } = TestCaseBuilder::new().with_src_files(SRC).build();
+        let TestCase { db, root, .. } = TestCaseBuilder::new().with_first_party_files(SRC).build();
 
         let foo_module_name = ModuleName::new_static("foo").unwrap();
         let foo_bar_module_name = ModuleName::new_static("foo.bar").unwrap();
 
         // `foo.py` takes priority over the `foo` namespace package
         let foo_module = resolve_module(&db, &foo_module_name).unwrap();
-        assert_eq!(foo_module.file().path(&db), &src.join("foo.py"));
+        assert_eq!(foo_module.file().path(&db), &root.join("foo.py"));
 
         // `foo.bar` isn't recognised as a module
         let foo_bar_module = resolve_module(&db, &foo_bar_module_name);
@@ -1110,18 +1113,18 @@ mod tests {
     fn typing_stub_over_module() {
         const SRC: &[FileSpec] = &[("foo.py", "print('Hello, world!')"), ("foo.pyi", "x: int")];
 
-        let TestCase { db, src, .. } = TestCaseBuilder::new().with_src_files(SRC).build();
+        let TestCase { db, root, .. } = TestCaseBuilder::new().with_first_party_files(SRC).build();
 
         let foo = resolve_module(&db, &ModuleName::new_static("foo").unwrap()).unwrap();
-        let foo_stub = src.join("foo.pyi");
+        let foo_stub = root.join("foo.pyi");
 
-        assert_eq!(&src, foo.search_path());
+        assert_eq!(&root, foo.search_path());
         assert_eq!(&foo_stub, foo.file().path(&db));
 
         assert_eq!(Some(foo), path_to_module(&db, &FilePath::System(foo_stub)));
         assert_eq!(
             None,
-            path_to_module(&db, &FilePath::System(src.join("foo.py")))
+            path_to_module(&db, &FilePath::System(root.join("foo.py")))
         );
     }
 
@@ -1133,13 +1136,13 @@ mod tests {
             ("foo/bar/baz.py", "print('Hello, world!)'"),
         ];
 
-        let TestCase { db, src, .. } = TestCaseBuilder::new().with_src_files(SRC).build();
+        let TestCase { db, root, .. } = TestCaseBuilder::new().with_first_party_files(SRC).build();
 
         let baz_module =
             resolve_module(&db, &ModuleName::new_static("foo.bar.baz").unwrap()).unwrap();
-        let baz_path = src.join("foo/bar/baz.py");
+        let baz_path = root.join("foo/bar/baz.py");
 
-        assert_eq!(&src, baz_module.search_path());
+        assert_eq!(&root, baz_module.search_path());
         assert_eq!(&baz_path, baz_module.file().path(&db));
 
         assert_eq!(
@@ -1164,16 +1167,16 @@ mod tests {
         // ```
         let TestCase {
             db,
-            src,
+            root,
             site_packages,
             ..
         } = TestCaseBuilder::new()
-            .with_src_files(&[("parent/child/one.py", "print('Hello, world!')")])
+            .with_first_party_files(&[("parent/child/one.py", "print('Hello, world!')")])
             .with_site_packages_files(&[("parent/child/two.py", "print('Hello, world!')")])
             .build();
 
         let one_module_name = ModuleName::new_static("parent.child.one").unwrap();
-        let one_module_path = FilePath::System(src.join("parent/child/one.py"));
+        let one_module_path = FilePath::System(root.join("parent/child/one.py"));
         assert_eq!(
             resolve_module(&db, &one_module_name),
             path_to_module(&db, &one_module_path)
@@ -1208,12 +1211,12 @@ mod tests {
 
         const SITE_PACKAGES: &[FileSpec] = &[("parent/child/two.py", "print('Hello, world!')")];
 
-        let TestCase { db, src, .. } = TestCaseBuilder::new()
-            .with_src_files(SRC)
+        let TestCase { db, root, .. } = TestCaseBuilder::new()
+            .with_first_party_files(SRC)
             .with_site_packages_files(SITE_PACKAGES)
             .build();
 
-        let one_module_path = FilePath::System(src.join("parent/child/one.py"));
+        let one_module_path = FilePath::System(root.join("parent/child/one.py"));
         let one_module_name =
             resolve_module(&db, &ModuleName::new_static("parent.child.one").unwrap());
         assert_eq!(one_module_name, path_to_module(&db, &one_module_path));
@@ -1228,22 +1231,22 @@ mod tests {
     fn module_search_path_priority() {
         let TestCase {
             db,
-            src,
+            root,
             site_packages,
             ..
         } = TestCaseBuilder::new()
-            .with_src_files(&[("foo.py", "")])
+            .with_first_party_files(&[("foo.py", "")])
             .with_site_packages_files(&[("foo.py", "")])
             .build();
 
         let foo_module = resolve_module(&db, &ModuleName::new_static("foo").unwrap()).unwrap();
-        let foo_src_path = src.join("foo.py");
+        let foo_root_path = root.join("foo.py");
 
-        assert_eq!(&src, foo_module.search_path());
-        assert_eq!(&foo_src_path, foo_module.file().path(&db));
+        assert_eq!(&root, foo_module.search_path());
+        assert_eq!(&foo_root_path, foo_module.file().path(&db));
         assert_eq!(
             Some(foo_module),
-            path_to_module(&db, &FilePath::System(foo_src_path))
+            path_to_module(&db, &FilePath::System(foo_root_path))
         );
 
         assert_eq!(
@@ -1265,21 +1268,21 @@ mod tests {
         let mut db = TestDb::new();
 
         let temp_dir = tempfile::tempdir()?;
-        let root = temp_dir
+        let file_system_root = temp_dir
             .path()
             .canonicalize()
             .context("Failed to canonicalize temp dir")?;
-        let root = SystemPath::from_std_path(&root).unwrap();
-        db.use_system(OsSystem::new(root));
+        let file_system_root = SystemPath::from_std_path(&file_system_root).unwrap();
+        db.use_system(OsSystem::new(file_system_root));
 
-        let src = root.join("src");
-        let site_packages = root.join("site-packages");
-        let custom_typeshed = root.join("typeshed");
+        let workspace_root = file_system_root.join("src");
+        let site_packages = file_system_root.join("site-packages");
+        let custom_typeshed = file_system_root.join("typeshed");
 
-        let foo = src.join("foo.py");
-        let bar = src.join("bar.py");
+        let foo = workspace_root.join("foo.py");
+        let bar = workspace_root.join("bar.py");
 
-        std::fs::create_dir_all(src.as_std_path())?;
+        std::fs::create_dir_all(workspace_root.as_std_path())?;
         std::fs::create_dir_all(site_packages.as_std_path())?;
         std::fs::create_dir_all(custom_typeshed.join("stdlib").as_std_path())?;
         std::fs::File::create(custom_typeshed.join("stdlib/VERSIONS").as_std_path())?;
@@ -1293,7 +1296,7 @@ mod tests {
                 target_version: PythonVersion::PY38,
                 search_paths: SearchPathSettings {
                     extra_paths: vec![],
-                    src_root: src.clone(),
+                    root: workspace_root.clone(),
                     custom_typeshed: Some(custom_typeshed),
                     site_packages: SitePackages::Known(vec![site_packages]),
                 },
@@ -1306,12 +1309,12 @@ mod tests {
 
         assert_ne!(foo_module, bar_module);
 
-        assert_eq!(&src, foo_module.search_path());
+        assert_eq!(&workspace_root, foo_module.search_path());
         assert_eq!(&foo, foo_module.file().path(&db));
 
         // `foo` and `bar` shouldn't resolve to the same file
 
-        assert_eq!(&src, bar_module.search_path());
+        assert_eq!(&workspace_root, bar_module.search_path());
         assert_eq!(&bar, bar_module.file().path(&db));
         assert_eq!(&foo, foo_module.file().path(&db));
 
@@ -1331,15 +1334,15 @@ mod tests {
 
     #[test]
     fn deleting_an_unrelated_file_doesnt_change_module_resolution() {
-        let TestCase { mut db, src, .. } = TestCaseBuilder::new()
-            .with_src_files(&[("foo.py", "x = 1"), ("bar.py", "x = 2")])
+        let TestCase { mut db, root, .. } = TestCaseBuilder::new()
+            .with_first_party_files(&[("foo.py", "x = 1"), ("bar.py", "x = 2")])
             .with_target_version(PythonVersion::PY38)
             .build();
 
         let foo_module_name = ModuleName::new_static("foo").unwrap();
         let foo_module = resolve_module(&db, &foo_module_name).unwrap();
 
-        let bar_path = src.join("bar.py");
+        let bar_path = root.join("bar.py");
         let bar = system_path_to_file(&db, &bar_path).expect("bar.py to exist");
 
         db.clear_salsa_events();
@@ -1364,8 +1367,8 @@ mod tests {
     #[test]
     fn adding_file_on_which_module_resolution_depends_invalidates_previously_failing_query_that_now_succeeds(
     ) -> anyhow::Result<()> {
-        let TestCase { mut db, src, .. } = TestCaseBuilder::new().build();
-        let foo_path = src.join("foo.py");
+        let TestCase { mut db, root, .. } = TestCaseBuilder::new().build();
+        let foo_path = root.join("foo.py");
 
         let foo_module_name = ModuleName::new_static("foo").unwrap();
         assert_eq!(resolve_module(&db, &foo_module_name), None);
@@ -1386,11 +1389,12 @@ mod tests {
     ) -> anyhow::Result<()> {
         const SRC: &[FileSpec] = &[("foo.py", "x = 1"), ("foo/__init__.py", "x = 2")];
 
-        let TestCase { mut db, src, .. } = TestCaseBuilder::new().with_src_files(SRC).build();
+        let TestCase { mut db, root, .. } =
+            TestCaseBuilder::new().with_first_party_files(SRC).build();
 
         let foo_module_name = ModuleName::new_static("foo").unwrap();
         let foo_module = resolve_module(&db, &foo_module_name).expect("foo module to exist");
-        let foo_init_path = src.join("foo/__init__.py");
+        let foo_init_path = root.join("foo/__init__.py");
 
         assert_eq!(&foo_init_path, foo_module.file().path(&db));
 
@@ -1402,7 +1406,7 @@ mod tests {
         File::sync_path(&mut db, foo_init_path.parent().unwrap());
 
         let foo_module = resolve_module(&db, &foo_module_name).expect("Foo module to resolve");
-        assert_eq!(&src.join("foo.py"), foo_module.file().path(&db));
+        assert_eq!(&root.join("foo.py"), foo_module.file().path(&db));
 
         Ok(())
     }
@@ -1465,7 +1469,7 @@ mod tests {
         let TestCase {
             mut db,
             stdlib,
-            src,
+            root,
             ..
         } = TestCaseBuilder::new()
             .with_custom_typeshed(TYPESHED)
@@ -1482,13 +1486,14 @@ mod tests {
 
         // Adding a first-party file invalidates the query,
         // since first-party files take higher priority in module resolution:
-        let src_functools_path = src.join("functools.py");
-        db.write_file(&src_functools_path, "FOO: int").unwrap();
+        let first_party_functools_path = root.join("functools.py");
+        db.write_file(&first_party_functools_path, "FOO: int")
+            .unwrap();
         let functools_module = resolve_module(&db, &functools_module_name).unwrap();
-        assert_eq!(functools_module.search_path(), &src);
+        assert_eq!(functools_module.search_path(), &root);
         assert_eq!(
             Ok(functools_module.file()),
-            system_path_to_file(&db, &src_functools_path)
+            system_path_to_file(&db, &first_party_functools_path)
         );
     }
 
@@ -1504,30 +1509,30 @@ mod tests {
         let TestCase {
             mut db,
             stdlib,
-            src,
+            root,
             ..
         } = TestCaseBuilder::new()
-            .with_src_files(SRC)
+            .with_first_party_files(SRC)
             .with_custom_typeshed(TYPESHED)
             .with_target_version(PythonVersion::PY38)
             .build();
 
         let functools_module_name = ModuleName::new_static("functools").unwrap();
-        let src_functools_path = src.join("functools.py");
+        let first_party_functools_path = root.join("functools.py");
 
         let functools_module = resolve_module(&db, &functools_module_name).unwrap();
-        assert_eq!(functools_module.search_path(), &src);
+        assert_eq!(functools_module.search_path(), &root);
         assert_eq!(
             Ok(functools_module.file()),
-            system_path_to_file(&db, &src_functools_path)
+            system_path_to_file(&db, &first_party_functools_path)
         );
 
         // If we now delete the first-party file,
         // it should resolve to the stdlib:
         db.memory_file_system()
-            .remove_file(&src_functools_path)
+            .remove_file(&first_party_functools_path)
             .unwrap();
-        File::sync_path(&mut db, &src_functools_path);
+        File::sync_path(&mut db, &first_party_functools_path);
         let functools_module = resolve_module(&db, &functools_module_name).unwrap();
         assert_eq!(functools_module.search_path(), &stdlib);
         assert_eq!(
@@ -1741,25 +1746,27 @@ not_a_directory
 
         let foo_module_name = ModuleName::new_static("foo").unwrap();
         let foo_module = resolve_module(&db, &foo_module_name).unwrap();
-        let src_path = SystemPathBuf::from("/x/src");
+        let root_path = SystemPathBuf::from("/x/src");
         assert_eq!(
             foo_module.file().path(&db),
-            &FilePath::System(src_path.join("foo.py"))
+            &FilePath::System(root_path.join("foo.py"))
         );
 
         db.memory_file_system()
-            .remove_file(src_path.join("foo.py"))
+            .remove_file(root_path.join("foo.py"))
             .unwrap();
-        db.memory_file_system().remove_directory(&src_path).unwrap();
-        File::sync_path(&mut db, &src_path.join("foo.py"));
-        File::sync_path(&mut db, &src_path);
+        db.memory_file_system()
+            .remove_directory(&root_path)
+            .unwrap();
+        File::sync_path(&mut db, &root_path.join("foo.py"));
+        File::sync_path(&mut db, &root_path);
         assert_eq!(resolve_module(&db, &foo_module_name), None);
     }
 
     #[test]
     fn no_duplicate_search_paths_added() {
         let TestCase { db, .. } = TestCaseBuilder::new()
-            .with_src_files(&[("foo.py", "")])
+            .with_first_party_files(&[("foo.py", "")])
             .with_site_packages_files(&[("_foo.pth", "/src")])
             .build();
 
@@ -1798,7 +1805,7 @@ not_a_directory
                 target_version: PythonVersion::default(),
                 search_paths: SearchPathSettings {
                     extra_paths: vec![],
-                    src_root: SystemPathBuf::from("/src"),
+                    root: SystemPathBuf::from("/src"),
                     custom_typeshed: None,
                     site_packages: SitePackages::Known(vec![
                         venv_site_packages,

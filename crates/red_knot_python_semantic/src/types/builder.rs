@@ -392,16 +392,14 @@ mod tests {
     fn setup_db() -> TestDb {
         let db = TestDb::new();
 
-        let src_root = SystemPathBuf::from("/src");
-        db.memory_file_system()
-            .create_directory_all(&src_root)
-            .unwrap();
+        let root = SystemPathBuf::from("/src");
+        db.memory_file_system().create_directory_all(&root).unwrap();
 
         Program::from_settings(
             &db,
             &ProgramSettings {
                 target_version: PythonVersion::default(),
-                search_paths: SearchPathSettings::new(src_root),
+                search_paths: SearchPathSettings::new(root),
             },
         )
         .expect("Valid search path settings");

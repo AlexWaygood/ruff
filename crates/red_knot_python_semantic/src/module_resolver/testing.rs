@@ -12,7 +12,7 @@ use crate::{ProgramSettings, SitePackages};
 /// instead, use the [`TestCaseBuilder`].
 pub(crate) struct TestCase<T> {
     pub(crate) db: TestDb,
-    pub(crate) src: SystemPathBuf,
+    pub(crate) root: SystemPathBuf,
     pub(crate) stdlib: T,
     // Most test cases only ever need a single `site-packages` directory,
     // so this is a single directory instead of a `Vec` of directories,
@@ -53,7 +53,7 @@ pub(crate) struct UnspecifiedTypeshed;
 ///
 /// ```rs
 /// let test_case = TestCaseBuilder::new()
-///     .with_src_files(...)
+///     .with_first_party_files(...)
 ///     .build();
 ///
 /// let test_case2 = TestCaseBuilder::new()
@@ -66,7 +66,7 @@ pub(crate) struct UnspecifiedTypeshed;
 ///
 /// ```rs
 /// let test_case = TestCaseBuilder::new()
-///     .with_src_files(...)
+///     .with_first_party_files(...)
 ///     .with_target_version(...)
 ///     .build();
 /// ```
@@ -107,7 +107,7 @@ pub(crate) struct TestCaseBuilder<T> {
 
 impl<T> TestCaseBuilder<T> {
     /// Specify files to be created in the `src` mock directory
-    pub(crate) fn with_src_files(mut self, files: &[FileSpec]) -> Self {
+    pub(crate) fn with_first_party_files(mut self, files: &[FileSpec]) -> Self {
         self.first_party_files.extend(files.iter().copied());
         self
     }
@@ -191,7 +191,7 @@ impl TestCaseBuilder<UnspecifiedTypeshed> {
     pub(crate) fn build(self) -> TestCase<()> {
         let TestCase {
             db,
-            src,
+            root,
             stdlib: _,
             site_packages,
             target_version,
@@ -199,7 +199,7 @@ impl TestCaseBuilder<UnspecifiedTypeshed> {
 
         TestCase {
             db,
-            src,
+            root,
             stdlib: (),
             site_packages,
             target_version,
@@ -220,7 +220,7 @@ impl TestCaseBuilder<MockedTypeshed> {
 
         let site_packages =
             Self::write_mock_directory(&mut db, "/site-packages", site_packages_files);
-        let src = Self::write_mock_directory(&mut db, "/src", first_party_files);
+        let root = Self::write_mock_directory(&mut db, "/src", first_party_files);
         let typeshed = Self::build_typeshed_mock(&mut db, &typeshed_option);
 
         Program::from_settings(
@@ -229,7 +229,7 @@ impl TestCaseBuilder<MockedTypeshed> {
                 target_version,
                 search_paths: SearchPathSettings {
                     extra_paths: vec![],
-                    src_root: src.clone(),
+                    root: root.clone(),
                     custom_typeshed: Some(typeshed.clone()),
                     site_packages: SitePackages::Known(vec![site_packages.clone()]),
                 },
@@ -239,7 +239,7 @@ impl TestCaseBuilder<MockedTypeshed> {
 
         TestCase {
             db,
-            src,
+            root,
             stdlib: typeshed.join("stdlib"),
             site_packages,
             target_version,
@@ -277,7 +277,7 @@ impl TestCaseBuilder<VendoredTypeshed> {
 
         let site_packages =
             Self::write_mock_directory(&mut db, "/site-packages", site_packages_files);
-        let src = Self::write_mock_directory(&mut db, "/src", first_party_files);
+        let root = Self::write_mock_directory(&mut db, "/src", first_party_files);
 
         Program::from_settings(
             &db,
@@ -285,7 +285,7 @@ impl TestCaseBuilder<VendoredTypeshed> {
                 target_version,
                 search_paths: SearchPathSettings {
                     site_packages: SitePackages::Known(vec![site_packages.clone()]),
-                    ..SearchPathSettings::new(src.clone())
+                    ..SearchPathSettings::new(root.clone())
                 },
             },
         )
@@ -293,7 +293,7 @@ impl TestCaseBuilder<VendoredTypeshed> {
 
         TestCase {
             db,
-            src,
+            root,
             stdlib: VendoredPathBuf::from("stdlib"),
             site_packages,
             target_version,

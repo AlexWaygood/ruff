@@ -656,7 +656,7 @@ mod tests {
     #[test]
     fn with_extension_methods() {
         let TestCase {
-            db, src, stdlib, ..
+            db, root, stdlib, ..
         } = TestCaseBuilder::new()
             .with_custom_typeshed(MockedTypeshed::default())
             .build();
@@ -678,23 +678,23 @@ mod tests {
         );
 
         assert_eq!(
-            &SearchPath::first_party(db.system(), src.clone())
+            &SearchPath::first_party(db.system(), root.clone())
                 .unwrap()
                 .join("foo/bar")
                 .with_py_extension()
                 .unwrap(),
-            &src.join("foo/bar.py")
+            &root.join("foo/bar.py")
         );
     }
 
     #[test]
     fn module_name_1_part() {
-        let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src).unwrap();
+        let TestCase { db, root, .. } = TestCaseBuilder::new().build();
+        let root_search_path = SearchPath::first_party(db.system(), root).unwrap();
         let foo_module_name = ModuleName::new_static("foo").unwrap();
 
         assert_eq!(
-            src_search_path
+            root_search_path
                 .to_module_path()
                 .join("foo")
                 .to_module_name()
@@ -703,12 +703,12 @@ mod tests {
         );
 
         assert_eq!(
-            src_search_path.join("foo.pyi").to_module_name().as_ref(),
+            root_search_path.join("foo.pyi").to_module_name().as_ref(),
             Some(&foo_module_name)
         );
 
         assert_eq!(
-            src_search_path
+            root_search_path
                 .join("foo/__init__.pyi")
                 .to_module_name()
                 .as_ref(),
@@ -718,17 +718,17 @@ mod tests {
 
     #[test]
     fn module_name_2_parts() {
-        let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src).unwrap();
+        let TestCase { db, root, .. } = TestCaseBuilder::new().build();
+        let root_search_path = SearchPath::first_party(db.system(), root).unwrap();
         let foo_bar_module_name = ModuleName::new_static("foo.bar").unwrap();
 
         assert_eq!(
-            src_search_path.join("foo/bar").to_module_name().as_ref(),
+            root_search_path.join("foo/bar").to_module_name().as_ref(),
             Some(&foo_bar_module_name)
         );
 
         assert_eq!(
-            src_search_path
+            root_search_path
                 .join("foo/bar.pyi")
                 .to_module_name()
                 .as_ref(),
@@ -736,7 +736,7 @@ mod tests {
         );
 
         assert_eq!(
-            src_search_path
+            root_search_path
                 .join("foo/bar/__init__.pyi")
                 .to_module_name()
                 .as_ref(),
@@ -746,12 +746,12 @@ mod tests {
 
     #[test]
     fn module_name_3_parts() {
-        let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src).unwrap();
+        let TestCase { db, root, .. } = TestCaseBuilder::new().build();
+        let root_search_path = SearchPath::first_party(db.system(), root).unwrap();
         let foo_bar_baz_module_name = ModuleName::new_static("foo.bar.baz").unwrap();
 
         assert_eq!(
-            src_search_path
+            root_search_path
                 .join("foo/bar/baz")
                 .to_module_name()
                 .as_ref(),
@@ -759,7 +759,7 @@ mod tests {
         );
 
         assert_eq!(
-            src_search_path
+            root_search_path
                 .join("foo/bar/baz.pyi")
                 .to_module_name()
                 .as_ref(),
@@ -767,7 +767,7 @@ mod tests {
         );
 
         assert_eq!(
-            src_search_path
+            root_search_path
                 .join("foo/bar/baz/__init__.pyi")
                 .to_module_name()
                 .as_ref(),
@@ -802,8 +802,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "Extension must be `py` or `pyi`; got `rs`")]
     fn non_stdlib_path_invalid_join_rs() {
-        let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        SearchPath::first_party(db.system(), src)
+        let TestCase { db, root, .. } = TestCaseBuilder::new().build();
+        SearchPath::first_party(db.system(), root)
             .unwrap()
             .to_module_path()
             .push("bar.rs");
@@ -812,8 +812,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "already has an extension")]
     fn too_many_extensions() {
-        let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        SearchPath::first_party(db.system(), src)
+        let TestCase { db, root, .. } = TestCaseBuilder::new().build();
+        SearchPath::first_party(db.system(), root)
             .unwrap()
             .join("foo.py")
             .push("bar.py");
@@ -840,23 +840,29 @@ mod tests {
 
     #[test]
     fn relativize_non_stdlib_path_errors() {
-        let TestCase { db, src, .. } = TestCaseBuilder::new().build();
+        let TestCase { db, root, .. } = TestCaseBuilder::new().build();
 
-        let root = SearchPath::extra(db.system(), src.clone()).unwrap();
+        let root_search_path = SearchPath::extra(db.system(), root.clone()).unwrap();
         // Must have a `.py` extension, a `.pyi` extension, or no extension:
-        let bad_absolute_path = src.join("x.rs");
-        assert_eq!(root.relativize_system_path(&bad_absolute_path), None);
+        let bad_absolute_path = root.join("x.rs");
+        assert_eq!(
+            root_search_path.relativize_system_path(&bad_absolute_path),
+            None
+        );
         // Must be a path that is a child of `root`:
         let second_bad_absolute_path = SystemPath::new("bar/src/x.pyi");
-        assert_eq!(root.relativize_system_path(second_bad_absolute_path), None);
+        assert_eq!(
+            root_search_path.relativize_system_path(second_bad_absolute_path),
+            None
+        );
     }
 
     #[test]
     fn relativize_path() {
-        let TestCase { db, src, .. } = TestCaseBuilder::new().build();
-        let src_search_path = SearchPath::first_party(db.system(), src.clone()).unwrap();
-        let eggs_package = src.join("eggs/__init__.pyi");
-        let module_path = src_search_path
+        let TestCase { db, root, .. } = TestCaseBuilder::new().build();
+        let root_search_path = SearchPath::first_party(db.system(), root.clone()).unwrap();
+        let eggs_package = root.join("eggs/__init__.pyi");
+        let module_path = root_search_path
             .relativize_system_path(&eggs_package)
             .unwrap();
         assert_eq!(

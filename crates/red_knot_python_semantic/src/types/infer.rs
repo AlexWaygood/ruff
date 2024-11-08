@@ -4587,16 +4587,14 @@ mod tests {
     fn setup_db() -> TestDb {
         let db = TestDb::new();
 
-        let src_root = SystemPathBuf::from("/src");
-        db.memory_file_system()
-            .create_directory_all(&src_root)
-            .unwrap();
+        let root = SystemPathBuf::from("/src");
+        db.memory_file_system().create_directory_all(&root).unwrap();
 
         Program::from_settings(
             &db,
             &ProgramSettings {
                 target_version: PythonVersion::default(),
-                search_paths: SearchPathSettings::new(src_root),
+                search_paths: SearchPathSettings::new(root),
             },
         )
         .expect("Valid search path settings");
@@ -4609,7 +4607,7 @@ mod tests {
         files: impl IntoIterator<Item = (&'a str, &'a str)>,
     ) -> anyhow::Result<TestDb> {
         let mut db = TestDb::new();
-        let src_root = SystemPathBuf::from("/src");
+        let root = SystemPathBuf::from("/src");
 
         db.write_files(files)
             .context("Failed to write test files")?;
@@ -4620,7 +4618,7 @@ mod tests {
                 target_version: PythonVersion::default(),
                 search_paths: SearchPathSettings {
                     custom_typeshed: Some(SystemPathBuf::from(typeshed)),
-                    ..SearchPathSettings::new(src_root)
+                    ..SearchPathSettings::new(root)
                 },
             },
         )
