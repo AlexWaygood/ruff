@@ -1,6 +1,5 @@
 ---
 source: crates/ruff_linter/src/rules/ruff/mod.rs
-snapshot_kind: text
 ---
 RUF052.py:77:9: RUF052 [*] Local dummy variable `_var` is accessed
    |
@@ -67,66 +66,64 @@ RUF052.py:84:5: RUF052 [*] Local dummy variable `_list` is accessed
 87 87 | x = "global"
 88 88 | 
 
-RUF052.py:91:5: RUF052 [*] Local dummy variable `_x` is accessed
+RUF052.py:91:5: RUF052 Local dummy variable `_x` is accessed
    |
 89 | def fun():
 90 |     global x
-91 |     _x = "shadows global" # [RUF052]
+91 |     _x = "shadows global" # [RUF052] (but unfixable)
    |     ^^ RUF052
 92 |     return _x
    |
    = help: Prefer using trailing underscores to avoid shadowing a variable
 
-ℹ Safe fix
-88 88 | 
-89 89 | def fun():
-90 90 |     global x
-91    |-    _x = "shadows global" # [RUF052]
-92    |-    return _x
-   91 |+    x_ = "shadows global" # [RUF052]
-   92 |+    return x_
-93 93 | 
-94 94 | def foo():
-95 95 |   x = "outer"
-
-RUF052.py:98:5: RUF052 [*] Local dummy variable `_x` is accessed
+RUF052.py:98:5: RUF052 Local dummy variable `_x` is accessed
     |
  96 |   def bar():
  97 |     nonlocal x
- 98 |     _x = "shadows nonlocal" # [RUF052]
+ 98 |     _x = "shadows nonlocal" # [RUF052] (but unfixable)
     |     ^^ RUF052
  99 |     return _x
 100 |   bar()
     |
     = help: Prefer using trailing underscores to avoid shadowing a variable
 
-ℹ Safe fix
-95  95  |   x = "outer"
-96  96  |   def bar():
-97  97  |     nonlocal x
-98      |-    _x = "shadows nonlocal" # [RUF052]
-99      |-    return _x
-    98  |+    x_ = "shadows nonlocal" # [RUF052]
-    99  |+    return x_
-100 100 |   bar()
-101 101 |   return x
-102 102 | 
-
-RUF052.py:105:5: RUF052 [*] Local dummy variable `_x` is accessed
+RUF052.py:105:5: RUF052 Local dummy variable `_x` is accessed
     |
 103 | def fun():
 104 |     x = "local"
-105 |     _x = "shadows local" # [RUF052]
+105 |     _x = "shadows local" # [RUF052] (but unfixable)
     |     ^^ RUF052
 106 |     return _x
     |
     = help: Prefer using trailing underscores to avoid shadowing a variable
 
-ℹ Safe fix
-102 102 | 
-103 103 | def fun():
-104 104 |     x = "local"
-105     |-    _x = "shadows local" # [RUF052]
-106     |-    return _x
-    105 |+    x_ = "shadows local" # [RUF052]
-    106 |+    return x_
+RUF052.py:111:5: RUF052 Local dummy variable `_x` is accessed
+    |
+109 |     x = "local"
+110 |     x_ = "also local"
+111 |     _x = "shadows local"  # [RUF052] (but unfixable)
+    |     ^^ RUF052
+112 |     return _x
+    |
+    = help: Prefer using trailing underscores to avoid shadowing a variable
+
+RUF052.py:117:5: RUF052 Local dummy variable `_x` is accessed
+    |
+115 |     global x_
+116 |     x = "local"
+117 |     _x = "shadows local"  # [RUF052] (but unfixable)
+    |     ^^ RUF052
+118 |     return _x
+    |
+    = help: Prefer using trailing underscores to avoid shadowing a variable
+
+RUF052.py:124:9: RUF052 Local dummy variable `_x` is accessed
+    |
+122 |     def fun5():
+123 |         x = "local"
+124 |         _x = "shadows local"  # RUF052 (but unfixable)
+    |         ^^ RUF052
+125 |         print(x_)
+126 |         return _x
+    |
+    = help: Prefer using trailing underscores to avoid shadowing a variable
