@@ -1,5 +1,6 @@
 use crate::types::{
-    todo_type, Class, ClassLiteralType, KnownClass, KnownInstanceType, TodoType, Type,
+    todo_type, Class, ClassLiteralType, KnownClass, KnownInstanceType, SubclassOfType, TodoType,
+    Type,
 };
 use crate::Db;
 use itertools::Either;
@@ -40,12 +41,7 @@ impl<'db> ClassBase<'db> {
 
     /// Return a `ClassBase` representing the class `builtins.object`
     pub(super) fn object(db: &'db dyn Db) -> Self {
-        KnownClass::Object
-            .to_class_literal(db)
-            .into_class_literal()
-            .map_or(Self::Unknown, |ClassLiteralType { class }| {
-                Self::Class(class)
-            })
+        Self::try_from_ty(db, KnownClass::Object.to_class_literal(db)).unwrap_or(Self::Unknown)
     }
 
     /// Attempt to resolve `ty` into a `ClassBase`.
@@ -60,6 +56,10 @@ impl<'db> ClassBase<'db> {
             Type::Union(_) => None, // TODO -- forces consideration of multiple possible MROs?
             Type::Intersection(_) => None, // TODO -- probably incorrect?
             Type::Instance(_) => None, // TODO -- handle `__mro_entries__`?
+            Type::SubclassOf(SubclassOfType { base }) => match base {
+                ClassBase::Any | ClassBase::Todo(_) | ClassBase::Unknown => Some(base),
+                ClassBase::Class(_) => None,
+            },
             Type::Never
             | Type::BooleanLiteral(_)
             | Type::FunctionLiteral(_)
@@ -69,8 +69,7 @@ impl<'db> ClassBase<'db> {
             | Type::LiteralString
             | Type::Tuple(_)
             | Type::SliceLiteral(_)
-            | Type::ModuleLiteral(_)
-            | Type::SubclassOf(_) => None,
+            | Type::ModuleLiteral(_) => None,
             Type::KnownInstance(known_instance) => match known_instance {
                 KnownInstanceType::TypeVar(_)
                 | KnownInstanceType::TypeAliasType(_)
@@ -133,10 +132,7 @@ impl<'db> ClassBase<'db> {
     }
 
     /// Iterate over the MRO of this base
-    pub(super) fn mro(
-        self,
-        db: &'db dyn Db,
-    ) -> Either<impl Iterator<Item = ClassBase<'db>>, impl Iterator<Item = ClassBase<'db>>> {
+    pub(super) fn mro(self, db: &'db dyn Db) -> impl Iterator<Item = ClassBase<'db>> {
         match self {
             ClassBase::Any => Either::Left([ClassBase::Any, ClassBase::object(db)].into_iter()),
             ClassBase::Unknown => {
@@ -161,7 +157,7 @@ impl<'db> From<ClassBase<'db>> for Type<'db> {
         match value {
             ClassBase::Any => Type::Any,
             ClassBase::Todo(todo) => Type::Todo(todo),
-            ClassBase::Unknown => Type::Unknown,
+            ClassBase::Unknown => Type::subclass_of_base(ClassBase::Unknown),
             ClassBase::Class(class) => Type::class_literal(class),
         }
     }
