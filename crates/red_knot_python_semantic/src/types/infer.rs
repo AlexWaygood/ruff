@@ -2130,15 +2130,15 @@ impl<'db> TypeInferenceBuilder<'db> {
             asname,
         } = alias;
 
-        // The name of the module being imported
         let Some(full_module_name) = ModuleName::new(name) else {
+            // no need to add a diagnostic as invalid syntax is reported elsewhere
             tracing::debug!("Failed to resolve import due to invalid syntax");
             self.add_unknown_declaration_with_binding(alias.into(), definition);
             return;
         };
 
         // Resolve the module being imported.
-        let Some(full_module_ty) = self.module_ty_from_name(&full_module_name) else {
+        let Some(full_module) = resolve_module(self.db(), &full_module_name) else {
             report_unresolved_module(&self.context, alias, 0, Some(name));
             self.add_unknown_declaration_with_binding(alias.into(), definition);
             return;
@@ -2147,22 +2147,32 @@ impl<'db> TypeInferenceBuilder<'db> {
         let binding_ty = if asname.is_some() {
             // If we are renaming the imported module via an `as` clause, then we bind the resolved
             // module's type to that name, even if that module is nested.
-            full_module_ty
-        } else if full_module_name.contains('.') {
-            // If there's no `as` clause and the imported module is nested, we're not going to bind
-            // the resolved module itself into the current scope; we're going to bind the top-most
-            // parent package of that module.
-            let topmost_parent_name =
-                ModuleName::new(full_module_name.components().next().unwrap()).unwrap();
-            let Some(topmost_parent_ty) = self.module_ty_from_name(&topmost_parent_name) else {
-                self.add_unknown_declaration_with_binding(alias.into(), definition);
-                return;
-            };
-            topmost_parent_ty
+            Type::module_literal(self.db(), self.file(), full_module)
         } else {
-            // If there's no `as` clause and the imported module isn't nested, then the imported
-            // module _is_ what we bind into the current scope.
-            full_module_ty
+            let topmost_parent_name = full_module_name.first_component();
+
+            if topmost_parent_name == &full_module_name {
+                // If the full module name is equal to the first component,
+                // it indicates that it's not a dotted name
+                Type::module_literal(self.db(), self.file(), full_module)
+            } else {
+                // N.B. For submodule imports (`import a.b`, etc.) it *might*, at first glance,
+                // seem unnecessary to do two module-name allocations and two module resolutions
+                // (one for `a.b` and one for `a`). However, this is what happens at runtime,
+                // and so if either resolution fails, we have to emit a diagnostic here
+                // and infer `Unknown` for the binding.
+                let topmost_parent_name = ModuleName::new(topmost_parent_name).expect(
+                    "The first component of a `ModuleName` should always be a valid `ModuleName`",
+                );
+                match self.module_ty_from_name(&topmost_parent_name) {
+                    Some(ty) => ty,
+                    None => {
+                        self.add_unknown_declaration_with_binding(alias.into(), definition);
+                        report_unresolved_module(&self.context, alias, 0, Some(name));
+                        return;
+                    }
+                }
+            }
         };
 
         self.add_declaration_with_binding(alias.into(), definition, binding_ty, binding_ty);

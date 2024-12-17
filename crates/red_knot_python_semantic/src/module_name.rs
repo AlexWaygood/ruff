@@ -77,6 +77,23 @@ impl ModuleName {
         self.0.split('.')
     }
 
+    /// Returns the first component of the module name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use red_knot_python_semantic::ModuleName;
+    ///
+    /// assert_eq!(ModuleName::new_static("foo").unwrap().first_component(), "foo");
+    /// assert_eq!(ModuleName::new_static("bar.baz").unwrap().first_component(), "bar");
+    /// ```
+    #[must_use]
+    pub fn first_component(&self) -> &str {
+        self.components()
+            .next()
+            .expect("A valid `ModuleName` should always be non-empty")
+    }
+
     /// The name of this module's immediate parent, if it has a parent.
     ///
     /// # Examples
