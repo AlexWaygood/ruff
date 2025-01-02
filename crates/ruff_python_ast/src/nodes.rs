@@ -4033,7 +4033,6 @@ pub struct Identifier {
     pub id: Name,
     pub range: TextRange,
 }
-
 impl Identifier {
     #[inline]
     pub fn new(id: impl Into<Name>, range: TextRange) -> Self {

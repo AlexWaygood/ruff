@@ -351,22 +351,6 @@ impl<'db> CallOutcome<'db> {
     }
 }
 
-pub(super) enum CallDunderResult<'db> {
-    CallOutcome(CallOutcome<'db>),
-    PossiblyUnbound(CallOutcome<'db>),
-    MethodNotAvailable,
-}
-
-impl<'db> CallDunderResult<'db> {
-    pub(super) fn return_ty(&self, db: &'db dyn Db) -> Option<Type<'db>> {
-        match self {
-            Self::CallOutcome(outcome) => outcome.return_ty(db),
-            Self::PossiblyUnbound { .. } => None,
-            Self::MethodNotAvailable => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum NotCallableError<'db> {
     /// The type is not callable.

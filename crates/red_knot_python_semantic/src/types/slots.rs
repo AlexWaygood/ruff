@@ -1,12 +1,11 @@
 use ruff_python_ast as ast;
 
 use crate::db::Db;
-use crate::symbol::{Boundness, Symbol};
 use crate::types::class_base::ClassBase;
 use crate::types::diagnostic::report_base_with_incompatible_slots;
 use crate::types::{Class, ClassLiteralType, Type};
 
-use super::InferContext;
+use super::{InferContext, LookupError};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum SlotsKind {
@@ -24,28 +23,18 @@ enum SlotsKind {
 
 impl SlotsKind {
     fn from(db: &dyn Db, base: Class) -> Self {
-        let Symbol::Type(slots_ty, bound) = base.own_class_member(db, "__slots__") else {
-            return Self::NotSpecified;
-        };
-
-        if matches!(bound, Boundness::PossiblyUnbound) {
-            return Self::Dynamic;
-        };
-
-        match slots_ty {
-            // __slots__ = ("a", "b")
-            Type::Tuple(tuple) => {
+        match base.own_class_member(db, "__slots__") {
+            Err(LookupError::Unresolved) => Self::NotSpecified,
+            Err(LookupError::PossiblyUnresolved { .. }) => Self::Dynamic,
+            Ok(Type::Tuple(tuple)) => {
                 if tuple.elements(db).is_empty() {
                     Self::Empty
                 } else {
                     Self::NotEmpty
                 }
             }
-
-            // __slots__ = "abc"  # Same as `("abc",)`
-            Type::StringLiteral(_) => Self::NotEmpty,
-
-            _ => Self::Dynamic,
+            Ok(Type::StringLiteral(_)) => Self::NotEmpty,
+            Ok(_) => Self::Dynamic,
         }
     }
 }
