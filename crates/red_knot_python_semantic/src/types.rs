@@ -1630,6 +1630,7 @@ impl<'db> Type<'db> {
                     | KnownClass::GenericAlias
                     | KnownClass::ModuleType
                     | KnownClass::FunctionType
+                    | KnownClass::GeneratorType
                     | KnownClass::SpecialForm
                     | KnownClass::ChainMap
                     | KnownClass::Counter
@@ -2545,6 +2546,7 @@ pub enum KnownClass {
     GenericAlias,
     ModuleType,
     FunctionType,
+    GeneratorType,
     // Typeshed
     NoneType, // Part of `types` for Python >= 3.10
     // Typing
@@ -2588,6 +2590,7 @@ impl<'db> KnownClass {
             Self::GenericAlias => "GenericAlias",
             Self::ModuleType => "ModuleType",
             Self::FunctionType => "FunctionType",
+            Self::GeneratorType => "GeneratorType",
             Self::NoneType => "NoneType",
             Self::SpecialForm => "_SpecialForm",
             Self::TypeVar => "TypeVar",
@@ -2654,7 +2657,9 @@ impl<'db> KnownClass {
             | Self::BaseExceptionGroup
             | Self::Slice => KnownModule::Builtins,
             Self::VersionInfo => KnownModule::Sys,
-            Self::GenericAlias | Self::ModuleType | Self::FunctionType => KnownModule::Types,
+            Self::GenericAlias | Self::ModuleType | Self::FunctionType | Self::GeneratorType => {
+                KnownModule::Types
+            }
             Self::NoneType => KnownModule::Typeshed,
             Self::SpecialForm | Self::TypeVar | Self::TypeAliasType | Self::StdlibAlias => {
                 KnownModule::Typing
@@ -2702,6 +2707,7 @@ impl<'db> KnownClass {
             | Self::GenericAlias
             | Self::ModuleType
             | Self::FunctionType
+            | Self::GeneratorType
             | Self::SpecialForm
             | Self::ChainMap
             | Self::Counter
@@ -2739,6 +2745,7 @@ impl<'db> KnownClass {
             "NoneType" => Self::NoneType,
             "ModuleType" => Self::ModuleType,
             "FunctionType" => Self::FunctionType,
+            "GeneratorType" => Self::GeneratorType,
             "TypeAliasType" => Self::TypeAliasType,
             "ChainMap" => Self::ChainMap,
             "Counter" => Self::Counter,
@@ -2784,6 +2791,7 @@ impl<'db> KnownClass {
             | Self::VersionInfo
             | Self::BaseException
             | Self::BaseExceptionGroup
+            | Self::GeneratorType
             | Self::FunctionType => module == self.canonical_module(db),
             Self::NoneType => matches!(module, KnownModule::Typeshed | KnownModule::Types),
             Self::SpecialForm | Self::TypeVar | Self::TypeAliasType | Self::NoDefaultType => {

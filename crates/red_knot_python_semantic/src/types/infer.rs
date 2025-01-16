@@ -2898,8 +2898,8 @@ impl<'db> TypeInferenceBuilder<'db> {
 
         self.infer_first_comprehension_iter(generators);
 
-        // TODO generator type
-        todo_type!()
+        // TODO generics
+        KnownClass::GeneratorType.to_instance(self.db())
     }
 
     fn infer_list_comprehension_expression(&mut self, listcomp: &ast::ExprListComp) -> Type<'db> {
@@ -2911,8 +2911,8 @@ impl<'db> TypeInferenceBuilder<'db> {
 
         self.infer_first_comprehension_iter(generators);
 
-        // TODO list type
-        todo_type!()
+        // TODO generics
+        KnownClass::List.to_instance(self.db())
     }
 
     fn infer_dict_comprehension_expression(&mut self, dictcomp: &ast::ExprDictComp) -> Type<'db> {
@@ -2925,8 +2925,8 @@ impl<'db> TypeInferenceBuilder<'db> {
 
         self.infer_first_comprehension_iter(generators);
 
-        // TODO dict type
-        todo_type!()
+        // TODO generics
+        KnownClass::Dict.to_instance(self.db())
     }
 
     fn infer_set_comprehension_expression(&mut self, setcomp: &ast::ExprSetComp) -> Type<'db> {
@@ -2938,8 +2938,8 @@ impl<'db> TypeInferenceBuilder<'db> {
 
         self.infer_first_comprehension_iter(generators);
 
-        // TODO set type
-        todo_type!()
+        // TODO generics
+        KnownClass::Set.to_instance(self.db())
     }
 
     fn infer_generator_expression_scope(&mut self, generator: &ast::ExprGenerator) {
@@ -4838,13 +4838,6 @@ impl<'db> TypeInferenceBuilder<'db> {
             // expressions, but is meaningful in the context of a number of special forms.
             ast::Expr::EllipsisLiteral(_literal) => todo_type!(),
 
-            // Other literals do not have meaningful values in the annotation expression context.
-            // However, we will we want to handle these differently when working with special forms,
-            // since (e.g.) `123` is not valid in an annotation expression but `Literal[123]` is.
-            ast::Expr::BytesLiteral(_literal) => todo_type!(),
-            ast::Expr::NumberLiteral(_literal) => todo_type!(),
-            ast::Expr::BooleanLiteral(_literal) => todo_type!(),
-
             ast::Expr::Subscript(subscript) => {
                 let ast::ExprSubscript {
                     value,
@@ -4976,7 +4969,23 @@ impl<'db> TypeInferenceBuilder<'db> {
                 self.infer_slice_expression(slice);
                 Type::unknown()
             }
-            ast::Expr::IpyEscapeCommand(_) => todo!("Implement Ipy escape command support"),
+            ast::Expr::IpyEscapeCommand(_) => todo_type!("Ipy escape command support"),
+
+            // N.B. These three are valid in the specific context of a `typing(_extensions).Literal[]` slice,
+            // but `infer_type_expression()` is not called on the contents of a `Literal[]` slice
+            // because they are otherwise always invalid in the context of a type expression.
+            ast::Expr::BytesLiteral(literal) => {
+                self.infer_bytes_literal_expression(literal);
+                Type::unknown()
+            }
+            ast::Expr::NumberLiteral(literal) => {
+                self.infer_number_literal_expression(literal);
+                Type::unknown()
+            }
+            ast::Expr::BooleanLiteral(literal) => {
+                self.infer_boolean_literal_expression(literal);
+                Type::unknown()
+            }
         }
     }
 
