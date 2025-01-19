@@ -151,12 +151,30 @@ struct DisplayUnionType<'db> {
 
 impl Display for DisplayUnionType<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let elements = self.ty.elements(self.db);
+        let mut elements = self.ty.elements(self.db).to_vec();
+
+        if let Some(literal_true_pos) = elements
+            .iter()
+            .position(|ty| ty == &Type::BooleanLiteral(true))
+        {
+            if let Some(literal_false_pos) = elements
+                .iter()
+                .position(|ty| ty == &Type::BooleanLiteral(false))
+            {
+                let (min, max) = if literal_false_pos < literal_true_pos {
+                    (literal_false_pos, literal_true_pos)
+                } else {
+                    (literal_true_pos, literal_false_pos)
+                };
+                elements[min] = KnownClass::Bool.to_instance(self.db);
+                elements.swap_remove(max);
+            }
+        }
 
         // Group condensed-display types by kind.
         let mut grouped_condensed_kinds = FxHashMap::default();
 
-        for element in elements {
+        for element in &elements {
             if let Ok(kind) = CondensedDisplayTypeKind::try_from(*element) {
                 grouped_condensed_kinds
                     .entry(kind)
@@ -168,7 +186,7 @@ impl Display for DisplayUnionType<'_> {
         let mut join = f.join(" | ");
 
         for element in elements {
-            if let Ok(kind) = CondensedDisplayTypeKind::try_from(*element) {
+            if let Ok(kind) = CondensedDisplayTypeKind::try_from(element) {
                 let Some(condensed_kind) = grouped_condensed_kinds.remove(&kind) else {
                     continue;
                 };
@@ -249,25 +267,34 @@ struct DisplayIntersectionType<'db> {
 
 impl Display for DisplayIntersectionType<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let tys = self
-            .ty
-            .positive(self.db)
+        let mut positive = self.ty.positive(self.db).clone();
+        if let Some(literal_true_pos) = positive.get_index_of(&Type::BooleanLiteral(true)) {
+            if positive.swap_remove(&Type::BooleanLiteral(false)) {
+                positive.swap_remove_index(literal_true_pos);
+                positive.insert(KnownClass::Bool.to_instance(self.db));
+            }
+        }
+
+        let mut negative = self.ty.negative(self.db).clone();
+        if let Some(literal_true_pos) = negative.get_index_of(&Type::BooleanLiteral(true)) {
+            if negative.swap_remove(&Type::BooleanLiteral(false)) {
+                negative.swap_remove_index(literal_true_pos);
+                negative.insert(KnownClass::Bool.to_instance(self.db));
+            }
+        }
+
+        let tys = positive
             .iter()
             .map(|&ty| DisplayMaybeNegatedType {
                 ty,
                 db: self.db,
                 negated: false,
             })
-            .chain(
-                self.ty
-                    .negative(self.db)
-                    .iter()
-                    .map(|&ty| DisplayMaybeNegatedType {
-                        ty,
-                        db: self.db,
-                        negated: true,
-                    }),
-            );
+            .chain(negative.iter().map(|&ty| DisplayMaybeNegatedType {
+                ty,
+                db: self.db,
+                negated: true,
+            }));
         f.join(" & ").entries(tys).finish()
     }
 }
