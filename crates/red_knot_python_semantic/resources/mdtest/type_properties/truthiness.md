@@ -1,5 +1,7 @@
 # Truthiness
 
+## Calling `bool()` on a type that has statically knowable truthiness
+
 ```py
 from typing_extensions import Literal, LiteralString
 from knot_extensions import AlwaysFalsy, AlwaysTruthy
@@ -44,4 +46,52 @@ def _(
     reveal_type(bool(b))  # revealed: bool
     reveal_type(bool(c))  # revealed: bool
     reveal_type(bool(d))  # revealed: bool
+```
+
+## Equivalent types
+
+```py
+from knot_extensions import static_assert, is_equivalent_to, AlwaysTruthy, AlwaysFalsy, Not, Intersection
+from typing_extensions import Literal, LiteralString
+
+static_assert(is_equivalent_to(AlwaysTruthy | bool, AlwaysTruthy | Literal[False]))
+static_assert(is_equivalent_to(AlwaysFalsy | bool, AlwaysFalsy | Literal[True]))
+
+# TODO: these should pass
+# error: [static-assert-error]
+static_assert(is_equivalent_to(AlwaysTruthy | LiteralString, AlwaysTruthy | Literal[""]))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(AlwaysTruthy | LiteralString, Literal[""] | AlwaysTruthy))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(LiteralString | AlwaysTruthy, AlwaysTruthy | Literal[""]))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(LiteralString | AlwaysTruthy, Literal[""] | AlwaysTruthy))
+
+# TODO: these should pass
+# error: [static-assert-error]
+static_assert(is_equivalent_to(Not[AlwaysFalsy] | LiteralString, Not[AlwaysFalsy] | Literal[""]))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(Not[AlwaysFalsy] | LiteralString, Literal[""] | Not[AlwaysFalsy]))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(LiteralString | Not[AlwaysFalsy], Not[AlwaysFalsy] | Literal[""]))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(LiteralString | Not[AlwaysFalsy], Literal[""] | Not[AlwaysFalsy]))
+
+# TODO: these should pass
+# error: [static-assert-error]
+static_assert(is_equivalent_to(AlwaysTruthy | AlwaysFalsy | LiteralString, AlwaysTruthy | AlwaysFalsy))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(AlwaysTruthy | AlwaysFalsy | LiteralString, AlwaysFalsy | AlwaysTruthy))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(AlwaysFalsy | AlwaysTruthy | LiteralString, AlwaysTruthy | AlwaysFalsy))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(AlwaysFalsy | AlwaysTruthy | LiteralString, AlwaysFalsy | AlwaysTruthy))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(LiteralString | AlwaysFalsy | AlwaysTruthy, AlwaysTruthy | AlwaysFalsy))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(LiteralString | AlwaysFalsy | AlwaysTruthy, AlwaysFalsy | AlwaysTruthy))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(LiteralString | AlwaysTruthy | AlwaysFalsy, AlwaysTruthy | AlwaysFalsy))
+# error: [static-assert-error]
+static_assert(is_equivalent_to(LiteralString | AlwaysTruthy | AlwaysFalsy, AlwaysFalsy | AlwaysTruthy))
 ```
