@@ -55,27 +55,10 @@ impl<'db> UnionBuilder<'db> {
             }
             Type::Never => {}
             _ => {
-                let bool_pair = if let Type::BooleanLiteral(b) = ty {
-                    Some(Type::BooleanLiteral(!b))
-                } else {
-                    None
-                };
-
-                let mut to_add = ty;
                 let mut to_remove = SmallVec::<[usize; 2]>::new();
                 let ty_negated = ty.negate(self.db);
 
                 for (index, element) in self.elements.iter().enumerate() {
-                    if Some(*element) == bool_pair {
-                        to_add = KnownClass::Bool.to_instance(self.db);
-                        to_remove.push(index);
-                        // The type we are adding is a BooleanLiteral, which doesn't have any
-                        // subtypes. And we just found that the union already contained our
-                        // mirror-image BooleanLiteral, so it can't also contain bool or any
-                        // supertype of bool. Therefore, we are done.
-                        break;
-                    }
-
                     if ty.is_same_gradual_form(*element) || ty.is_subtype_of(self.db, *element) {
                         return self;
                     } else if element.is_subtype_of(self.db, ty) {
@@ -94,8 +77,8 @@ impl<'db> UnionBuilder<'db> {
                     }
                 }
                 match to_remove[..] {
-                    [] => self.elements.push(to_add),
-                    [index] => self.elements[index] = to_add,
+                    [] => self.elements.push(ty),
+                    [index] => self.elements[index] = ty,
                     _ => {
                         let mut current_index = 0;
                         let mut to_remove = to_remove.into_iter();
@@ -110,7 +93,7 @@ impl<'db> UnionBuilder<'db> {
                             current_index += 1;
                             retain
                         });
-                        self.elements.push(to_add);
+                        self.elements.push(ty);
                     }
                 }
             }
@@ -118,11 +101,100 @@ impl<'db> UnionBuilder<'db> {
         self
     }
 
-    pub(crate) fn build(self) -> Type<'db> {
+    fn simplify(mut self) -> Self {
+        if let Some(literal_true_pos) = self.elements.iter().position(|ty|matches!(ty, Type::BooleanLiteral(true))) {
+            if let Some(literal_false_pos) = self.elements.iter().position(|ty|matches!(ty, Type::BooleanLiteral(false))) {
+                let (min, max) = if literal_false_pos > literal_true_pos {
+                    (literal_true_pos, literal_false_pos)
+                } else {
+                    (literal_false_pos, literal_true_pos)
+                };
+                self.elements.swap_remove(max);
+                self.elements.swap_remove(min);
+                let db = self.db;
+                self = self.add(KnownClass::Bool.to_instance(db));
+            }
+        }
+
+        let mut to_remove = SmallVec::<[usize; 2]>::new();
+        let mut to_add = SmallVec::<[Type; 2]>::new();
+
+        if self
+            .elements
+            .iter()
+            .copied()
+            .any(|ty| ty == Type::AlwaysTruthy || ty == Type::AlwaysFalsy.negate(self.db))
+        {
+            if self.elements.contains(&Type::AlwaysFalsy) {
+                self.elements.retain(|ty| {
+                    !(ty.is_literal_string()
+                        || ty.into_instance().is_some_and(|instance| {
+                            instance.class.is_known(self.db, KnownClass::Bool)
+                        }))
+                });
+            } else {
+                for (index, ty) in self.elements.iter().enumerate() {
+                    match ty {
+                        Type::LiteralString => {
+                            to_add.push(Type::string_literal(self.db, ""));
+                        }
+                        Type::Instance(InstanceType { class })
+                            if class.is_known(self.db, KnownClass::Bool) =>
+                        {
+                            to_add.push(Type::BooleanLiteral(false));
+                        }
+                        _ => continue,
+                    }
+                    to_remove.push(index);
+                }
+            }
+        } else if self
+            .elements
+            .iter()
+            .copied()
+            .any(|ty| ty == Type::AlwaysFalsy || ty == Type::AlwaysTruthy.negate(self.db))
+        {
+            for (index, ty) in self.elements.iter().enumerate() {
+                match ty {
+                    Type::LiteralString => {
+                        to_add.push(
+                            IntersectionBuilder::new(self.db)
+                                .add_positive(Type::LiteralString)
+                                .add_negative(Type::string_literal(self.db, ""))
+                                .build(),
+                        );
+                    }
+                    Type::Instance(InstanceType { class })
+                        if class.is_known(self.db, KnownClass::Bool) =>
+                    {
+                        to_add.push(Type::BooleanLiteral(true));
+                    }
+                    _ => continue,
+                }
+                to_remove.push(index);
+            }
+        }
+        for index in to_remove.into_iter().rev() {
+            self.elements.swap_remove(index);
+        }
+        for ty in to_add {
+            self = self.add(ty);
+        }
+        self
+    }
+
+    pub(crate) fn build(mut self) -> Type<'db> {
         match self.elements.len() {
             0 => Type::Never,
             1 => self.elements[0],
-            _ => Type::Union(UnionType::new(self.db, self.elements.into_boxed_slice())),
+            _ => {
+                self = self.simplify();
+                match self.elements.len() {
+                    0 => Type::Never,
+                    1 => self.elements[0],
+                    _ => Type::Union(UnionType::new(self.db, self.elements.into_boxed_slice())),
+                }
+            }
         }
     }
 }

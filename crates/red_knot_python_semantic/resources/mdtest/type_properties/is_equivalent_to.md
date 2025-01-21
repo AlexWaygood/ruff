@@ -84,4 +84,49 @@ static_assert(
 )
 ```
 
+## `AlwaysTruthy` and `AlwaysFalsy` equivalences
+
+```py
+from typing_extensions import LiteralString, Literal
+from knot_extensions import AlwaysTruthy, AlwaysFalsy, Not, is_equivalent_to, static_assert, Intersection
+
+static_assert(is_equivalent_to(AlwaysTruthy | bool, AlwaysTruthy | Literal[False]))
+static_assert(is_equivalent_to(Not[AlwaysTruthy] | bool, Not[AlwaysTruthy] | Literal[True]))
+static_assert(is_equivalent_to(AlwaysFalsy | bool, AlwaysFalsy | Literal[True]))
+static_assert(is_equivalent_to(Not[AlwaysFalsy] | bool, Not[AlwaysFalsy] | Literal[False]))
+static_assert(is_equivalent_to(AlwaysTruthy | AlwaysFalsy | bool, AlwaysTruthy | AlwaysFalsy))
+
+static_assert(is_equivalent_to(AlwaysTruthy | LiteralString, AlwaysTruthy | Literal[""]))
+static_assert(
+    is_equivalent_to(Not[AlwaysTruthy] | LiteralString, Not[AlwaysTruthy] | Intersection[LiteralString, Not[Literal[""]]])
+)
+static_assert(is_equivalent_to(AlwaysFalsy | LiteralString, AlwaysFalsy | Intersection[LiteralString, Not[Literal[""]]]))
+static_assert(is_equivalent_to(Not[AlwaysFalsy] | LiteralString, Not[AlwaysFalsy] | Literal[""]))
+static_assert(is_equivalent_to(AlwaysTruthy | AlwaysFalsy | LiteralString, AlwaysTruthy | AlwaysFalsy))
+
+static_assert(is_equivalent_to(AlwaysTruthy | AlwaysFalsy | LiteralString | bool, AlwaysTruthy | AlwaysFalsy))
+static_assert(is_equivalent_to(AlwaysTruthy | bool | LiteralString, AlwaysTruthy | Literal[False] | Literal[""]))
+static_assert(
+    is_equivalent_to(
+        AlwaysFalsy | bool | LiteralString, AlwaysFalsy | Literal[True] | Intersection[LiteralString, Not[Literal[""]]]
+    )
+)
+static_assert(is_equivalent_to(Not[AlwaysFalsy] | bool | LiteralString, Not[AlwaysFalsy] | Literal[False] | Literal[""]))
+
+def _(
+    a: Literal[True, False] | Intersection[Not[Literal[True]], Not[str]],
+    b: Literal[False, True] | Intersection[Not[Literal[True]], Not[str]],
+    c: Intersection[Not[Literal[True]], Not[str]] | Literal[True, False],
+    d: Intersection[Not[Literal[True]], Not[str]] | Literal[False, True],
+    e: Literal[True] | Intersection[Not[Literal[True]], Not[str]] | Literal[False],
+    f: Literal[False] | Intersection[Not[Literal[True]], Not[str]] | Literal[True],
+):
+    reveal_type(a)
+    reveal_type(b)
+    reveal_type(c)
+    reveal_type(d)
+    reveal_type(e)
+    reveal_type(f)
+```
+
 [the equivalence relation]: https://typing.readthedocs.io/en/latest/spec/glossary.html#term-equivalent
