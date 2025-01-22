@@ -1,4 +1,4 @@
-use super::{ClassBase, ClassLiteralType, Db, KnownClass, Symbol, Type};
+use super::{ClassBase, ClassLiteralType, Db, DynamicType, KnownClass, Symbol, TodoType, Type};
 
 /// A type that represents `type[C]`, i.e. the class object `C` and class objects that are subclasses of `C`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::Update)]
@@ -46,6 +46,12 @@ impl<'db> SubclassOfType<'db> {
     pub(crate) const fn subclass_of_any() -> Type<'db> {
         Type::SubclassOf(SubclassOfType {
             subclass_of: ClassBase::any(),
+        })
+    }
+
+    pub(super) const fn subclass_of_todo(todo: TodoType) -> Type<'db> {
+        Type::SubclassOf(SubclassOfType {
+            subclass_of: ClassBase::Dynamic(DynamicType::Todo(todo)),
         })
     }
 

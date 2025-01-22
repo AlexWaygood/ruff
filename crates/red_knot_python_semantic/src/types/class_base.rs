@@ -4,6 +4,8 @@ use crate::types::{
 use crate::Db;
 use itertools::Either;
 
+use super::SubclassOfType;
+
 /// Enumeration of the possible kinds of types we allow in class bases.
 ///
 /// This is much more limited than the [`Type`] enum:
@@ -51,12 +53,7 @@ impl<'db> ClassBase<'db> {
 
     /// Return a `ClassBase` representing the class `builtins.object`
     pub(super) fn object(db: &'db dyn Db) -> Self {
-        KnownClass::Object
-            .to_class_literal(db)
-            .into_class_literal()
-            .map_or(Self::unknown(), |ClassLiteralType { class }| {
-                Self::Class(class)
-            })
+        Self::try_from_type(db, KnownClass::Object.to_class_literal(db)).unwrap_or(Self::unknown())
     }
 
     /// Attempt to resolve `ty` into a `ClassBase`.
@@ -159,10 +156,7 @@ impl<'db> ClassBase<'db> {
     }
 
     /// Iterate over the MRO of this base
-    pub(super) fn mro(
-        self,
-        db: &'db dyn Db,
-    ) -> Either<impl Iterator<Item = ClassBase<'db>>, impl Iterator<Item = ClassBase<'db>>> {
+    pub(super) fn mro(self, db: &'db dyn Db) -> impl Iterator<Item = ClassBase<'db>> {
         match self {
             ClassBase::Dynamic(_) => Either::Left([self, ClassBase::object(db)].into_iter()),
             ClassBase::Class(class) => Either::Right(class.iter_mro(db)),
@@ -179,7 +173,9 @@ impl<'db> From<Class<'db>> for ClassBase<'db> {
 impl<'db> From<ClassBase<'db>> for Type<'db> {
     fn from(value: ClassBase<'db>) -> Self {
         match value {
-            ClassBase::Dynamic(dynamic) => Type::Dynamic(dynamic),
+            ClassBase::Dynamic(DynamicType::Any) => SubclassOfType::subclass_of_any(),
+            ClassBase::Dynamic(DynamicType::Unknown) => SubclassOfType::subclass_of_unknown(),
+            ClassBase::Dynamic(DynamicType::Todo(todo)) => SubclassOfType::subclass_of_todo(todo),
             ClassBase::Class(class) => Type::class_literal(class),
         }
     }
