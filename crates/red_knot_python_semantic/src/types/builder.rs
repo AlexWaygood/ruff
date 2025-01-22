@@ -28,6 +28,7 @@
 
 use crate::types::{InstanceType, IntersectionType, KnownClass, Type, UnionType};
 use crate::{Db, FxOrderSet};
+use super::type_ordering::union_elements_ordering;
 use smallvec::SmallVec;
 
 pub(crate) struct UnionBuilder<'db> {
@@ -54,70 +55,38 @@ impl<'db> UnionBuilder<'db> {
                 }
             }
             Type::Never => {}
-            _ => {
-                let mut to_remove = SmallVec::<[usize; 2]>::new();
-                let ty_negated = ty.negate(self.db);
-
-                for (index, element) in self.elements.iter().enumerate() {
-                    if ty.is_same_gradual_form(*element) || ty.is_subtype_of(self.db, *element) {
-                        return self;
-                    } else if element.is_subtype_of(self.db, ty) {
-                        to_remove.push(index);
-                    } else if ty_negated.is_subtype_of(self.db, *element) {
-                        // We add `ty` to the union. We just checked that `~ty` is a subtype of an existing `element`.
-                        // This also means that `~ty | ty` is a subtype of `element | ty`, because both elements in the
-                        // first union are subtypes of the corresponding elements in the second union. But `~ty | ty` is
-                        // just `object`. Since `object` is a subtype of `element | ty`, we can only conclude that
-                        // `element | ty` must be `object` (object has no other supertypes). This means we can simplify
-                        // the whole union to just `object`, since all other potential elements would also be subtypes of
-                        // `object`.
-                        self.elements.clear();
-                        self.elements.push(KnownClass::Object.to_instance(self.db));
-                        return self;
-                    }
-                }
-                match to_remove[..] {
-                    [] => self.elements.push(ty),
-                    [index] => self.elements[index] = ty,
-                    _ => {
-                        let mut current_index = 0;
-                        let mut to_remove = to_remove.into_iter();
-                        let mut next_to_remove_index = to_remove.next();
-                        self.elements.retain(|_| {
-                            let retain = if Some(current_index) == next_to_remove_index {
-                                next_to_remove_index = to_remove.next();
-                                false
-                            } else {
-                                true
-                            };
-                            current_index += 1;
-                            retain
-                        });
-                        self.elements.push(ty);
-                    }
-                }
-            }
+            _ => self.elements.push(ty),
         }
         self
     }
 
     fn simplify(mut self) -> Self {
-        if let Some(literal_true_pos) = self.elements.iter().position(|ty|matches!(ty, Type::BooleanLiteral(true))) {
-            if let Some(literal_false_pos) = self.elements.iter().position(|ty|matches!(ty, Type::BooleanLiteral(false))) {
+        fn truthy_literal_strings(db: &dyn Db) -> Type {
+            IntersectionBuilder::new(db)
+                .add_positive(Type::LiteralString)
+                .add_negative(Type::string_literal(db, ""))
+                .build()
+        }
+
+        if let Some(literal_true_pos) = self
+            .elements
+            .iter()
+            .position(|ty| matches!(ty, Type::BooleanLiteral(true)))
+        {
+            if let Some(literal_false_pos) = self
+                .elements
+                .iter()
+                .position(|ty| matches!(ty, Type::BooleanLiteral(false)))
+            {
                 let (min, max) = if literal_false_pos > literal_true_pos {
                     (literal_true_pos, literal_false_pos)
                 } else {
                     (literal_false_pos, literal_true_pos)
                 };
                 self.elements.swap_remove(max);
-                self.elements.swap_remove(min);
-                let db = self.db;
-                self = self.add(KnownClass::Bool.to_instance(db));
+                self.elements[min] = KnownClass::Bool.to_instance(self.db);
             }
         }
-
-        let mut to_remove = SmallVec::<[usize; 2]>::new();
-        let mut to_add = SmallVec::<[Type; 2]>::new();
 
         if self
             .elements
@@ -126,27 +95,97 @@ impl<'db> UnionBuilder<'db> {
             .any(|ty| ty == Type::AlwaysTruthy || ty == Type::AlwaysFalsy.negate(self.db))
         {
             if self.elements.contains(&Type::AlwaysFalsy) {
-                self.elements.retain(|ty| {
-                    !(ty.is_literal_string()
-                        || ty.into_instance().is_some_and(|instance| {
-                            instance.class.is_known(self.db, KnownClass::Bool)
-                        }))
-                });
+                self.elements = self
+                    .elements
+                    .into_iter()
+                    .filter_map(|ty| match ty {
+                        Type::LiteralString => None,
+                        Type::Instance(InstanceType { class }) => {
+                            if class.is_known(self.db, KnownClass::Bool) {
+                                None
+                            } else {
+                                Some(ty)
+                            }
+                        }
+                        Type::Intersection(intersection) => {
+                            let positive = intersection.positive(self.db);
+                            if positive.iter().any(|ty| {
+                                ty.is_literal_string()
+                                    || ty.into_instance().is_some_and(|InstanceType { class }| {
+                                        class.is_known(self.db, KnownClass::Bool)
+                                    })
+                            }) {
+                                let mut new_intersection = IntersectionBuilder::new(self.db);
+                                for ty in positive {
+                                    match ty {
+                                        Type::LiteralString => continue,
+                                        Type::Instance(InstanceType { class })
+                                            if class.is_known(self.db, KnownClass::Bool) =>
+                                        {
+                                            continue;
+                                        }
+                                        _ => new_intersection = new_intersection.add_positive(*ty),
+                                    }
+                                }
+                                for ty in intersection.negative(self.db) {
+                                    new_intersection = new_intersection.add_negative(*ty);
+                                }
+                                Some(new_intersection.build())
+                            } else {
+                                Some(ty)
+                            }
+                        }
+                        _ => Some(ty),
+                    })
+                    .collect();
             } else {
-                for (index, ty) in self.elements.iter().enumerate() {
-                    match ty {
-                        Type::LiteralString => {
-                            to_add.push(Type::string_literal(self.db, ""));
+                self.elements = self
+                    .elements
+                    .into_iter()
+                    .map(|ty| match ty {
+                        Type::LiteralString => Type::string_literal(self.db, ""),
+                        Type::Instance(InstanceType { class }) => {
+                            if class.is_known(self.db, KnownClass::Bool) {
+                                Type::BooleanLiteral(false)
+                            } else {
+                                ty
+                            }
                         }
-                        Type::Instance(InstanceType { class })
-                            if class.is_known(self.db, KnownClass::Bool) =>
-                        {
-                            to_add.push(Type::BooleanLiteral(false));
+                        Type::Intersection(intersection) => {
+                            let positive = intersection.positive(self.db);
+                            if positive.iter().any(|ty| {
+                                ty.is_literal_string()
+                                    || ty.into_instance().is_some_and(|InstanceType { class }| {
+                                        class.is_known(self.db, KnownClass::Bool)
+                                    })
+                            }) {
+                                let mut new_intersection = IntersectionBuilder::new(self.db);
+                                for ty in positive {
+                                    match ty {
+                                        Type::LiteralString => {
+                                            new_intersection = new_intersection
+                                                .add_positive(Type::string_literal(self.db, ""));
+                                        }
+                                        Type::Instance(InstanceType { class })
+                                            if class.is_known(self.db, KnownClass::Bool) =>
+                                        {
+                                            new_intersection = new_intersection
+                                                .add_positive(Type::BooleanLiteral(false));
+                                        }
+                                        _ => new_intersection = new_intersection.add_positive(*ty),
+                                    }
+                                }
+                                for ty in intersection.negative(self.db) {
+                                    new_intersection = new_intersection.add_negative(*ty);
+                                }
+                                new_intersection.build()
+                            } else {
+                                ty
+                            }
                         }
-                        _ => continue,
-                    }
-                    to_remove.push(index);
-                }
+                        _ => ty,
+                    })
+                    .collect();
             }
         } else if self
             .elements
@@ -154,32 +193,120 @@ impl<'db> UnionBuilder<'db> {
             .copied()
             .any(|ty| ty == Type::AlwaysFalsy || ty == Type::AlwaysTruthy.negate(self.db))
         {
-            for (index, ty) in self.elements.iter().enumerate() {
-                match ty {
-                    Type::LiteralString => {
-                        to_add.push(
-                            IntersectionBuilder::new(self.db)
-                                .add_positive(Type::LiteralString)
-                                .add_negative(Type::string_literal(self.db, ""))
-                                .build(),
-                        );
+            self.elements = self
+                .elements
+                .into_iter()
+                .map(|ty| match ty {
+                    Type::LiteralString => truthy_literal_strings(self.db),
+                    Type::Instance(InstanceType { class }) => {
+                        if class.is_known(self.db, KnownClass::Bool) {
+                            Type::BooleanLiteral(true)
+                        } else {
+                            ty
+                        }
                     }
-                    Type::Instance(InstanceType { class })
-                        if class.is_known(self.db, KnownClass::Bool) =>
-                    {
-                        to_add.push(Type::BooleanLiteral(true));
+                    Type::Intersection(intersection) => {
+                        let positive = intersection.positive(self.db);
+                        if positive.iter().any(|ty| {
+                            ty.is_literal_string()
+                                || ty.into_instance().is_some_and(|InstanceType { class }| {
+                                    class.is_known(self.db, KnownClass::Bool)
+                                })
+                        }) {
+                            let mut new_intersection = IntersectionBuilder::new(self.db);
+                            for ty in positive {
+                                match ty {
+                                    Type::LiteralString => {
+                                        new_intersection = new_intersection
+                                            .add_positive(truthy_literal_strings(self.db));
+                                    }
+                                    Type::Instance(InstanceType { class })
+                                        if class.is_known(self.db, KnownClass::Bool) =>
+                                    {
+                                        new_intersection = new_intersection
+                                            .add_positive(Type::BooleanLiteral(true));
+                                    }
+                                    _ => new_intersection = new_intersection.add_positive(*ty),
+                                }
+                            }
+                            for ty in intersection.negative(self.db) {
+                                new_intersection = new_intersection.add_negative(*ty);
+                            }
+                            new_intersection.build()
+                        } else {
+                            ty
+                        }
                     }
-                    _ => continue,
+                    _ => ty,
+                })
+                .collect();
+        }
+
+        let mut sorted_old_elements = self.elements.clone();
+        sorted_old_elements.sort_by(union_elements_ordering);
+        let mut new_elements = Vec::with_capacity(sorted_old_elements.len());
+
+        'outer: for ty in sorted_old_elements {
+            let mut to_remove = SmallVec::<[usize; 2]>::new();
+            let ty_negated = ty.negate(self.db);
+
+            for (index, element) in new_elements.iter().enumerate() {
+                if ty.is_same_gradual_form(*element) || ty.is_subtype_of(self.db, *element) {
+                    continue 'outer;
                 }
-                to_remove.push(index);
+                if element.is_subtype_of(self.db, ty) {
+                    to_remove.push(index);
+                } else if ty_negated.is_subtype_of(self.db, *element) {
+                    // We add `ty` to the union. We just checked that `~ty` is a subtype of an existing `element`.
+                    // This also means that `~ty | ty` is a subtype of `element | ty`, because both elements in the
+                    // first union are subtypes of the corresponding elements in the second union. But `~ty | ty` is
+                    // just `object`. Since `object` is a subtype of `element | ty`, we can only conclude that
+                    // `element | ty` must be `object` (object has no other supertypes). This means we can simplify
+                    // the whole union to just `object`, since all other potential elements would also be subtypes of
+                    // `object`.
+                    new_elements.clear();
+                    new_elements.push(KnownClass::Object.to_instance(self.db));
+                    continue 'outer;
+                }
+            }
+            match to_remove[..] {
+                [] => new_elements.push(ty),
+                [index] => new_elements[index] = ty,
+                _ => {
+                    let mut current_index = 0;
+                    let mut to_remove = to_remove.into_iter();
+                    let mut next_to_remove_index = to_remove.next();
+                    new_elements.retain(|_| {
+                        let retain = if Some(current_index) == next_to_remove_index {
+                            next_to_remove_index = to_remove.next();
+                            false
+                        } else {
+                            true
+                        };
+                        current_index += 1;
+                        retain
+                    });
+                    new_elements.push(ty);
+                }
             }
         }
-        for index in to_remove.into_iter().rev() {
-            self.elements.swap_remove(index);
-        }
-        for ty in to_add {
-            self = self.add(ty);
-        }
+
+        new_elements.sort_by(|left, right| {
+            if let Some(left_pos) = self.elements.iter().position(|ty|ty == left) {
+                if let Some(right_pos) = self.elements.iter().position(|ty|ty == right) {
+                    left_pos.cmp(&right_pos)
+                } else {
+                    std::cmp::Ordering::Less
+                }
+            } else if self.elements.contains(right) {
+                std::cmp::Ordering::Greater
+            } else {
+                union_elements_ordering(left, right)
+            }
+        });
+
+        self.elements = new_elements;
+
         self
     }
 
