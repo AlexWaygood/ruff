@@ -84,4 +84,14 @@ static_assert(
 )
 ```
 
+## Overlapping unions with `AlwaysTruthy`/`AlwaysFalsy`
+
+```py
+from knot_extensions import AlwaysFalsy
+
+def f(x: AlwaysFalsy | bool, y: bool | AlwaysFalsy):
+    reveal_type(x)
+    reveal_type(y)
+```
+
 [the equivalence relation]: https://typing.readthedocs.io/en/latest/spec/glossary.html#term-equivalent
