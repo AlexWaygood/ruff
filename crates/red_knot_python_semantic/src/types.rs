@@ -832,32 +832,10 @@ impl<'db> Type<'db> {
                 .iter()
                 .all(|&elem_ty| elem_ty.is_subtype_of(db, target)),
 
-            (_, Type::Union(union)) => {
-                if union
-                    .elements(db)
-                    .iter()
-                    .any(|&elem_ty| self.is_subtype_of(db, elem_ty))
-                {
-                    return true;
-                }
-
-                if self.is_bool_instance(db) {
-                    let pairs = [
-                        [Type::AlwaysTruthy, Type::BooleanLiteral(false)],
-                        [Type::AlwaysTruthy.negate(db), Type::BooleanLiteral(true)],
-                        [Type::AlwaysFalsy, Type::BooleanLiteral(true)],
-                        [Type::AlwaysFalsy.negate(db), Type::BooleanLiteral(false)],
-                    ];
-                    if pairs
-                        .into_iter()
-                        .any(|pair| UnionType::from_elements(db, pair).is_subtype_of(db, target))
-                    {
-                        return true;
-                    }
-                }
-
-                false
-            }
+            (_, Type::Union(union)) => union
+                .elements(db)
+                .iter()
+                .any(|&elem_ty| self.is_subtype_of(db, elem_ty)),
 
             // `object` is the only type that can be known to be a supertype of any intersection,
             // even an intersection with no positive elements
@@ -1068,13 +1046,10 @@ impl<'db> Type<'db> {
                 .all(|&elem_ty| elem_ty.is_assignable_to(db, ty)),
 
             // A type T is assignable to a union iff T is assignable to any element of the union.
-            (ty, Type::Union(union)) => {
-                union
-                    .elements(db)
-                    .iter()
-                    .any(|&elem_ty| ty.is_assignable_to(db, elem_ty))
-                    || ty.is_subtype_of(db, target)
-            }
+            (ty, Type::Union(union)) => union
+                .elements(db)
+                .iter()
+                .any(|&elem_ty| ty.is_assignable_to(db, elem_ty)),
 
             // A tuple type S is assignable to a tuple type T if their lengths are the same, and
             // each element of S is assignable to the corresponding element of T.
@@ -1154,7 +1129,13 @@ impl<'db> Type<'db> {
                 left.is_equivalent_to(db, right)
             }
             (Type::Tuple(left), Type::Tuple(right)) => left.is_equivalent_to(db, right),
-            _ => self.is_fully_static(db) && other.is_fully_static(db) && self == other,
+            _ => {
+                if self.is_fully_static(db) && other.is_fully_static(db) && self == other {
+                    return true;
+                }
+                self.is_bool_instance(db)
+                    && other.is_equivalent_to(db, UnionType::from_elements(db, [self]))
+            }
         }
     }
 
