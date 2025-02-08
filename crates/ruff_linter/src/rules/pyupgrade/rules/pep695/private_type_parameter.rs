@@ -1,9 +1,8 @@
-use ruff_diagnostics::{Applicability, Diagnostic, Fix, FixAvailability, Violation};
+use ruff_diagnostics::{Diagnostic, Fix, FixAvailability, Violation};
 use ruff_macros::{derive_message_formats, ViolationMetadata};
 use ruff_python_ast::Stmt;
 use ruff_python_semantic::Binding;
 use ruff_python_stdlib::identifiers::is_identifier;
-use ruff_text_size::Ranged;
 
 use crate::{
     checkers::ast::Checker,
@@ -139,8 +138,6 @@ pub(crate) fn private_type_parameter(checker: &Checker, binding: &Binding) -> Op
         return Some(diagnostic);
     }
 
-    let source = checker.source();
-
     diagnostic.try_set_fix(|| {
         let (first, rest) = Renamer::rename(
             old_name,
@@ -150,17 +147,8 @@ pub(crate) fn private_type_parameter(checker: &Checker, binding: &Binding) -> Op
             checker.stylist(),
         )?;
 
-        let applicability = if binding
-            .references()
-            .any(|id| &source[semantic.reference(id).range()] != old_name)
-        {
-            Applicability::DisplayOnly
-        } else {
-            Applicability::Safe
-        };
-
         let fix_isolation = Checker::isolation(binding.source);
-        Ok(Fix::applicable_edits(first, rest, applicability).isolate(fix_isolation))
+        Ok(Fix::safe_edits(first, rest).isolate(fix_isolation))
     });
 
     Some(diagnostic)

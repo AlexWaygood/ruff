@@ -505,15 +505,13 @@ fn replace_custom_typevar_with_self(
     // (4) Replace all other references to the original type variable elsewhere in the function with `Self`
     let replace_references_range = TextRange::new(self_or_cls_annotation.end(), function_def.end());
 
-    replace_typevar_usages_with_self(
+    other_edits.extend(replace_typevar_usages_with_self(
         custom_typevar,
-        checker.source(),
         self_or_cls_annotation.range(),
         &self_symbol_binding,
         replace_references_range,
         checker.semantic(),
-        &mut other_edits,
-    )?;
+    ));
 
     // (5) Determine the safety of the fixes as a whole
     let comment_ranges = checker.comment_ranges();
@@ -558,35 +556,21 @@ fn import_self(checker: &Checker, position: TextSize) -> Result<(Edit, String), 
 /// This ensures that no edit in this series will overlap with other edits.
 fn replace_typevar_usages_with_self<'a>(
     typevar: TypeVar<'a>,
-    source: &'a str,
     self_or_cls_annotation_range: TextRange,
     self_symbol_binding: &'a str,
     editable_range: TextRange,
     semantic: &'a SemanticModel<'a>,
-    edits: &mut Vec<Edit>,
-) -> anyhow::Result<()> {
-    let tvar_name = typevar.name(source);
-    for reference in typevar.references(semantic) {
-        let reference_range = reference.range();
-        if &source[reference_range] != tvar_name {
-            bail!(
-                "Cannot autofix: reference in the source code (`{}`) is not equal to the typevar name (`{}`)",
-                &source[reference_range],
-                tvar_name
-            );
-        }
-        if !editable_range.contains_range(reference_range) {
-            continue;
-        }
-        if self_or_cls_annotation_range.contains_range(reference_range) {
-            continue;
-        }
-        edits.push(Edit::range_replacement(
-            self_symbol_binding.to_string(),
-            reference_range,
-        ));
-    }
-    Ok(())
+) -> impl Iterator<Item = Edit> + 'a {
+    typevar
+        .references(semantic)
+        .map(Ranged::range)
+        .filter(move |reference_range| editable_range.contains_range(*reference_range))
+        .filter(move |reference_range| {
+            !self_or_cls_annotation_range.contains_range(*reference_range)
+        })
+        .map(move |reference_range| {
+            Edit::range_replacement(self_symbol_binding.to_string(), reference_range)
+        })
 }
 
 /// Create an [`Edit`] removing the `TypeVar` binding from the PEP 695 type parameter list.
