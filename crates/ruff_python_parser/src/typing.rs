@@ -2,7 +2,7 @@
 
 use ruff_python_ast::relocate::relocate_expr;
 use ruff_python_ast::str::raw_contents;
-use ruff_python_ast::{Expr, ExprStringLiteral, ModExpression, StringLiteral};
+use ruff_python_ast::{Expr, ExprStringLiteral, ModExpression, StringFlags, StringLiteral};
 use ruff_text_size::Ranged;
 
 use crate::{parse_expression, parse_string_annotation, ParseError, Parsed};
@@ -88,8 +88,25 @@ fn parse_simple_type_annotation(
 }
 
 fn parse_complex_type_annotation(string_expr: &ExprStringLiteral) -> AnnotationParseResult {
-    let mut parsed = parse_expression(string_expr.value.to_str())?;
-    relocate_expr(parsed.expr_mut(), string_expr.range());
+    dbg!(string_expr.value.to_str());
+    let mut parsed = dbg!(parse_expression(string_expr.value.to_str())?);
+
+    let opener_len = string_expr.value.flags().opener_len();
+    let closer_len = string_expr
+        .value
+        .iter()
+        .last()
+        .expect("Every `StringLiteralExpr` should have at least one part")
+        .flags
+        .closer_len();
+
+    relocate_expr(
+        parsed.expr_mut(),
+        string_expr
+            .range()
+            .add_start(opener_len)
+            .sub_end(closer_len),
+    );
     Ok(ParsedAnnotation {
         parsed,
         kind: AnnotationKind::Complex,

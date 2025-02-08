@@ -2421,6 +2421,7 @@ impl<'a> Checker<'a> {
                         self.semantic.flags |=
                             SemanticModelFlags::TYPE_DEFINITION | type_definition_flag;
                         let parsed_expr = parsed_annotation.expression();
+                        //dbg!(parsed_expr.range());
                         self.visit_expr(parsed_expr);
                         if self.semantic.in_type_alias_value() {
                             // stub files are covered by PYI020
