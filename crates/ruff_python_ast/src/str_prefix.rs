@@ -1,5 +1,7 @@
 use std::fmt;
 
+use ruff_text_size::TextSize;
+
 /// Enumerations of the valid prefixes a string literal can have.
 ///
 /// Bytestrings and f-strings are excluded from this enumeration,
@@ -32,6 +34,10 @@ impl StringLiteralPrefix {
             Self::Raw { uppercase: true } => "R",
             Self::Raw { uppercase: false } => "r",
         }
+    }
+
+    pub fn text_len(self) -> TextSize {
+        TextSize::of(self.as_str())
     }
 }
 
@@ -67,6 +73,10 @@ impl FStringPrefix {
     pub const fn is_raw(self) -> bool {
         matches!(self, Self::Raw { .. })
     }
+
+    pub fn text_len(self) -> TextSize {
+        TextSize::of(self.as_str())
+    }
 }
 
 impl fmt::Display for FStringPrefix {
@@ -100,6 +110,10 @@ impl ByteStringPrefix {
     /// e.g. `rb"foo"` or `Rb"foo"`
     pub const fn is_raw(self) -> bool {
         matches!(self, Self::Raw { .. })
+    }
+
+    pub fn text_len(self) -> TextSize {
+        TextSize::of(self.as_str())
     }
 }
 
@@ -146,6 +160,14 @@ impl AnyStringPrefix {
             Self::Regular(regular_prefix) => regular_prefix.is_raw(),
             Self::Bytes(bytestring_prefix) => bytestring_prefix.is_raw(),
             Self::Format(fstring_prefix) => fstring_prefix.is_raw(),
+        }
+    }
+
+    pub fn text_len(self) -> TextSize {
+        match self {
+            Self::Regular(regular_prefix) => regular_prefix.text_len(),
+            Self::Bytes(bytestring_prefix) => bytestring_prefix.text_len(),
+            Self::Format(fstring_prefix) => fstring_prefix.text_len(),
         }
     }
 }

@@ -1,6 +1,6 @@
 use ruff_diagnostics::{AlwaysFixableViolation, Diagnostic, Edit, Fix};
 use ruff_macros::{derive_message_formats, ViolationMetadata};
-use ruff_python_ast::str::{is_triple_quote, leading_quote};
+use ruff_python_ast::str::is_triple_quote;
 use ruff_python_semantic::Definition;
 use ruff_source_file::{LineRanges, NewlineWithTrailingNewline, UniversalNewlineIterator};
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -202,14 +202,16 @@ pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring)
             }
 
             if fixable {
-                let prefix = leading_quote(contents).unwrap();
                 // Use replacement instead of insert to trim possible whitespace between leading
                 // quote and text.
                 let repl = format!(
                     "{}{}{}",
                     checker.stylist().line_ending().as_str(),
                     indentation,
-                    first_line.strip_prefix(prefix).unwrap().trim_start()
+                    first_line
+                        .strip_prefix(docstring.opener())
+                        .unwrap()
+                        .trim_start()
                 );
 
                 diagnostic.set_fix(Fix::safe_edit(Edit::replacement(

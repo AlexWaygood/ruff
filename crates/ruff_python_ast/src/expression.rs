@@ -4,7 +4,7 @@ use ruff_text_size::{Ranged, TextRange};
 
 use crate::{
     self as ast, AnyNodeRef, AnyStringFlags, Expr, ExprBytesLiteral, ExprFString, ExprRef,
-    ExprStringLiteral, StringFlags,
+    ExprStringLiteral, StringFlags, StringPart,
 };
 
 impl<'a> From<&'a Box<Expr>> for ExprRef<'a> {
@@ -209,24 +209,6 @@ pub enum StringLikePart<'a> {
 }
 
 impl<'a> StringLikePart<'a> {
-    /// Returns the [`AnyStringFlags`] for the current string-like part.
-    pub fn flags(&self) -> AnyStringFlags {
-        match self {
-            StringLikePart::String(string) => AnyStringFlags::from(string.flags),
-            StringLikePart::Bytes(bytes) => AnyStringFlags::from(bytes.flags),
-            StringLikePart::FString(f_string) => AnyStringFlags::from(f_string.flags),
-        }
-    }
-
-    /// Returns the range of the string's content in the source (minus prefix and quotes).
-    pub fn content_range(self) -> TextRange {
-        let kind = self.flags();
-        TextRange::new(
-            self.start() + kind.opener_len(),
-            self.end() - kind.closer_len(),
-        )
-    }
-
     pub const fn is_string_literal(self) -> bool {
         matches!(self, Self::String(_))
     }
@@ -283,6 +265,16 @@ impl Ranged for StringLikePart<'_> {
             StringLikePart::String(part) => part.range(),
             StringLikePart::Bytes(part) => part.range(),
             StringLikePart::FString(part) => part.range(),
+        }
+    }
+}
+
+impl StringPart for StringLikePart<'_> {
+    fn flags(&self) -> AnyStringFlags {
+        match self {
+            StringLikePart::String(part) => part.flags().as_any_string_flags(),
+            StringLikePart::Bytes(part) => part.flags().as_any_string_flags(),
+            StringLikePart::FString(part) => part.flags().as_any_string_flags(),
         }
     }
 }

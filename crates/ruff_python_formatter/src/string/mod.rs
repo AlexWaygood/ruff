@@ -1,12 +1,12 @@
 use memchr::memchr2;
 pub(crate) use normalize::{normalize_string, NormalizedString, StringNormalizer};
 use ruff_python_ast::str::{Quote, TripleQuotes};
-use ruff_python_ast::StringLikePart;
 use ruff_python_ast::{
     self as ast,
     str_prefix::{AnyStringPrefix, StringLiteralPrefix},
     AnyStringFlags, StringFlags,
 };
+use ruff_python_ast::{StringLikePart, StringPart};
 use ruff_source_file::LineRanges;
 use ruff_text_size::Ranged;
 
@@ -88,8 +88,7 @@ impl StringLikeExtensions for ast::StringLike<'_> {
     fn is_multiline(&self, context: &PyFormatContext) -> bool {
         self.parts().any(|part| match part {
             StringLikePart::String(_) | StringLikePart::Bytes(_) => {
-                part.flags().is_triple_quoted()
-                    && context.source().contains_line_break(part.range())
+                part.is_triple_quoted() && context.source().contains_line_break(part.range())
             }
             StringLikePart::FString(f_string) => {
                 fn contains_line_break_or_comments(

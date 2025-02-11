@@ -1,4 +1,3 @@
-use ruff_python_ast::str::raw_contents_range;
 use ruff_python_semantic::all::DunderAllName;
 use ruff_python_semantic::{
     BindingKind, ContextualizedDefinition, Definition, Export, Member, MemberKind,
@@ -191,7 +190,7 @@ pub(crate) fn definitions(checker: &mut Checker) {
                 string_literal.start(),
             ));
 
-            if string_literal.value.is_implicit_concatenated() {
+            let [sole_literal_part] = string_literal.value.as_slice() else {
                 #[allow(deprecated)]
                 let location = checker
                     .locator
@@ -203,15 +202,12 @@ pub(crate) fn definitions(checker: &mut Checker) {
                     location.column
                 );
                 continue;
-            }
+            };
 
-            // SAFETY: Safe for docstrings that pass `should_ignore_docstring`.
-            let body_range = raw_contents_range(contents).unwrap();
             let docstring = Docstring {
                 definition,
-                expr: string_literal,
+                expr: sole_literal_part,
                 contents,
-                body_range,
                 indentation,
             };
 

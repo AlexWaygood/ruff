@@ -1,3 +1,4 @@
+use ruff_python_ast::StringPart;
 use ruff_text_size::{TextLen, TextSize};
 
 use ruff_diagnostics::{AlwaysFixableViolation, Diagnostic, Edit, Fix};
@@ -62,7 +63,7 @@ pub(crate) fn newline_after_last_paragraph(checker: &Checker, docstring: &Docstr
     let contents = docstring.contents;
     let body = docstring.body();
 
-    if !docstring.triple_quoted() {
+    if !docstring.is_triple_quoted() {
         return;
     }
 

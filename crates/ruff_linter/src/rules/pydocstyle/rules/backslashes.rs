@@ -1,5 +1,6 @@
 use ruff_diagnostics::{Diagnostic, Edit, Fix, FixAvailability, Violation};
 use ruff_macros::{derive_message_formats, ViolationMetadata};
+use ruff_python_ast::StringPart;
 use ruff_text_size::Ranged;
 
 use crate::checkers::ast::Checker;
@@ -60,7 +61,7 @@ impl Violation for EscapeSequenceInDocstring {
 /// D301
 pub(crate) fn backslashes(checker: &Checker, docstring: &Docstring) {
     // Docstring is already raw.
-    if docstring.leading_quote().contains(['r', 'R']) {
+    if docstring.prefix().is_raw() {
         return;
     }
 
@@ -99,7 +100,7 @@ pub(crate) fn backslashes(checker: &Checker, docstring: &Docstring) {
         if !matches!(*escaped_char, '\r' | '\n' | 'u' | 'U' | 'N') {
             let mut diagnostic = Diagnostic::new(EscapeSequenceInDocstring, docstring.range());
 
-            if !docstring.leading_quote().contains(['u', 'U']) {
+            if !docstring.is_u_string() {
                 diagnostic.set_fix(Fix::unsafe_edit(Edit::range_replacement(
                     "r".to_owned() + docstring.contents,
                     docstring.range(),

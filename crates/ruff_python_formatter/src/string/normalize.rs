@@ -4,6 +4,7 @@ use std::iter::FusedIterator;
 
 use ruff_formatter::FormatContext;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
+use ruff_python_ast::StringPart;
 use ruff_python_ast::{
     str::{Quote, TripleQuotes},
     AnyStringFlags, BytesLiteral, FString, FStringElement, FStringElements, FStringFlags,
@@ -155,7 +156,7 @@ impl<'a, 'src> StringNormalizer<'a, 'src> {
 
     /// Computes the strings preferred quotes.
     pub(crate) fn choose_quotes(&self, string: StringLikePart) -> QuoteSelection {
-        let raw_content = &self.context.source()[string.content_range()];
+        let raw_content = &self.context.source()[string.raw_contents_range()];
         let first_quote_or_normalized_char_offset = raw_content
             .bytes()
             .position(|b| matches!(b, b'\\' | b'"' | b'\'' | b'\r'));
@@ -199,7 +200,7 @@ impl<'a, 'src> StringNormalizer<'a, 'src> {
 
     /// Computes the strings preferred quotes and normalizes its content.
     pub(crate) fn normalize(&self, string: StringLikePart) -> NormalizedString<'src> {
-        let raw_content = &self.context.source()[string.content_range()];
+        let raw_content = &self.context.source()[string.raw_contents_range()];
         let quote_selection = self.choose_quotes(string);
 
         let normalized = if let Some(first_quote_or_escape_offset) =
@@ -217,7 +218,7 @@ impl<'a, 'src> StringNormalizer<'a, 'src> {
 
         NormalizedString {
             flags: quote_selection.flags,
-            content_range: string.content_range(),
+            content_range: string.raw_contents_range(),
             text: normalized,
         }
     }
@@ -255,7 +256,7 @@ impl QuoteMetadata {
     ) -> Self {
         match part {
             StringLikePart::String(_) | StringLikePart::Bytes(_) => {
-                let text = &context.source()[part.content_range()];
+                let text = &context.source()[part.raw_contents_range()];
 
                 Self::from_str(text, part.flags(), preferred_quote)
             }
@@ -970,7 +971,7 @@ pub(super) fn is_fstring_with_triple_quoted_literal_expression_containing_quotes
 
             let contains_quotes = match part {
                 StringLikePart::String(_) | StringLikePart::Bytes(_) => {
-                    self.contains_quote(part.content_range(), part.flags())
+                    self.contains_quote(part.raw_contents_range(), part.flags())
                 }
                 StringLikePart::FString(fstring) => {
                     let mut contains_quotes = false;

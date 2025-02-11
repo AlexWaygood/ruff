@@ -4,8 +4,7 @@ use regex::Regex;
 
 use ruff_diagnostics::{Diagnostic, Violation};
 use ruff_macros::{derive_message_formats, ViolationMetadata};
-use ruff_python_ast::str::raw_contents;
-use ruff_python_ast::{self as ast, Expr, Operator};
+use ruff_python_ast::{self as ast, Expr, Operator, StringPart};
 use ruff_text_size::Ranged;
 
 use crate::checkers::ast::Checker;
@@ -122,7 +121,7 @@ pub(crate) fn hardcoded_sql_expression(checker: &Checker, expr: &Expr) {
 fn concatenated_f_string(expr: &ast::ExprFString, locator: &Locator) -> String {
     expr.value
         .iter()
-        .filter_map(|part| raw_contents(locator.slice(part)))
+        .map(|part| locator.slice(part.raw_contents_range()))
         .collect()
 }
 

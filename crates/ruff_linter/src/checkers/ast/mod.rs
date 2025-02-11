@@ -30,17 +30,18 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use ruff_diagnostics::{Diagnostic, IsolationLevel};
 use ruff_notebook::{CellOffsets, NotebookIndex};
-use ruff_python_ast::helpers::{collect_import_from_member, is_docstring_stmt, to_module_path};
+use ruff_python_ast::helpers::{
+    self, collect_import_from_member, is_docstring_stmt, to_module_path,
+};
 use ruff_python_ast::identifier::Identifier;
 use ruff_python_ast::name::QualifiedName;
-use ruff_python_ast::str::Quote;
-use ruff_python_ast::visitor::{walk_except_handler, walk_pattern, Visitor};
+use ruff_python_ast::str::{self, Quote};
+use ruff_python_ast::visitor::{self, walk_except_handler, walk_pattern, Visitor};
 use ruff_python_ast::{
     self as ast, AnyParameterRef, ArgOrKeyword, Comprehension, ElifElseClause, ExceptHandler, Expr,
     ExprContext, FStringElement, Keyword, MatchCase, ModModule, Parameter, Parameters, Pattern,
-    Stmt, Suite, UnaryOp,
+    PySourceType, Stmt, StringFlags, StringPart, Suite, UnaryOp,
 };
-use ruff_python_ast::{helpers, str, visitor, PySourceType};
 use ruff_python_codegen::{Generator, Stylist};
 use ruff_python_index::Indexer;
 use ruff_python_parser::typing::{parse_type_annotation, AnnotationKind, ParsedAnnotation};
@@ -335,7 +336,7 @@ impl<'a> Checker<'a> {
             .semantic
             .current_expressions()
             .find_map(|expr| expr.as_f_string_expr())?;
-        Some(value.iter().next()?.quote_style().opposite())
+        Some(value.iter().next()?.flags().quote_style().opposite())
     }
 
     /// Returns the [`SourceRow`] for the given offset.

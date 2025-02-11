@@ -2,7 +2,7 @@ use memchr::memchr_iter;
 
 use ruff_diagnostics::{AlwaysFixableViolation, Diagnostic, Edit, Fix};
 use ruff_macros::{derive_message_formats, ViolationMetadata};
-use ruff_python_ast::{AnyStringFlags, FStringElement, StringLike, StringLikePart};
+use ruff_python_ast::{AnyStringFlags, FStringElement, StringLike, StringLikePart, StringPart};
 use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
 
 use crate::checkers::ast::Checker;
@@ -63,7 +63,7 @@ pub(crate) fn invalid_escape_sequence(checker: &Checker, string_like: StringLike
     let locator = checker.locator();
 
     for part in string_like.parts() {
-        if part.flags().is_raw_string() {
+        if part.is_raw_string() {
             continue;
         }
         let state = match part {

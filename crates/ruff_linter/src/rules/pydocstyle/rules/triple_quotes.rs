@@ -1,7 +1,8 @@
 use ruff_diagnostics::{Diagnostic, Edit, Fix, FixAvailability, Violation};
 use ruff_macros::{derive_message_formats, ViolationMetadata};
 use ruff_python_ast::str::Quote;
-use ruff_text_size::Ranged;
+use ruff_python_ast::StringPart;
+use ruff_text_size::{Ranged, TextRange};
 
 use crate::checkers::ast::Checker;
 use crate::docstrings::Docstring;
@@ -64,9 +65,13 @@ impl Violation for TripleSingleQuotes {
 
 /// D300
 pub(crate) fn triple_quotes(checker: &Checker, docstring: &Docstring) {
-    let leading_quote = docstring.leading_quote();
+    let leading_quote = docstring.opener();
 
-    let prefixes = leading_quote.trim_end_matches(['\'', '"']).to_owned();
+    let docstring_prefix_range = TextRange::new(
+        docstring.start(),
+        docstring.start() + docstring.prefix().text_len(),
+    );
+    let prefixes = &checker.source()[docstring_prefix_range];
 
     let expected_quote = if docstring.body().contains("\"\"\"") {
         if docstring.body().contains("\'\'\'") {

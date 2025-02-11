@@ -1,6 +1,5 @@
 use ruff_db::source::source_text;
-use ruff_python_ast::str::raw_contents;
-use ruff_python_ast::{self as ast, ModExpression};
+use ruff_python_ast::{self as ast, ModExpression, StringPart};
 use ruff_python_parser::Parsed;
 use ruff_text_size::Ranged;
 
@@ -138,7 +137,6 @@ pub(crate) fn parse_string_annotation(
     let _span = tracing::trace_span!("parse_string_annotation", string=?string_expr.range(), file=%file.path(db)).entered();
 
     let source = source_text(db.upcast(), file);
-    let node_text = &source[string_expr.range()];
 
     if let [string_literal] = string_expr.value.as_slice() {
         let prefix = string_literal.flags.prefix();
@@ -150,9 +148,7 @@ pub(crate) fn parse_string_annotation(
             );
         // Compare the raw contents (without quotes) of the expression with the parsed contents
         // contained in the string literal.
-        } else if raw_contents(node_text)
-            .is_some_and(|raw_contents| raw_contents == string_literal.as_str())
-        {
+        } else if &source[string_literal.raw_contents_range()] == string_literal.as_str() {
             match ruff_python_parser::parse_string_annotation(source.as_str(), string_literal) {
                 Ok(parsed) => return Some(parsed),
                 Err(parse_error) => context.report_lint(

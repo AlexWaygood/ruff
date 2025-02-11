@@ -959,20 +959,20 @@ pub enum FStringPart {
     FString(FString),
 }
 
-impl FStringPart {
-    pub fn quote_style(&self) -> Quote {
-        match self {
-            Self::Literal(string_literal) => string_literal.flags.quote_style(),
-            Self::FString(f_string) => f_string.flags.quote_style(),
-        }
-    }
-}
-
 impl Ranged for FStringPart {
     fn range(&self) -> TextRange {
         match self {
             FStringPart::Literal(string_literal) => string_literal.range(),
             FStringPart::FString(f_string) => f_string.range(),
+        }
+    }
+}
+
+impl StringPart for FStringPart {
+    fn flags(&self) -> AnyStringFlags {
+        match self {
+            Self::FString(fstring) => fstring.flags().as_any_string_flags(),
+            Self::Literal(string_literal) => string_literal.flags().as_any_string_flags(),
         }
     }
 }
@@ -1207,6 +1207,12 @@ impl From<FString> for Expr {
     }
 }
 
+impl StringPart for FString {
+    fn flags(&self) -> AnyStringFlags {
+        self.flags.as_any_string_flags()
+    }
+}
+
 /// A newtype wrapper around a list of [`FStringElement`].
 #[derive(Clone, Default, PartialEq)]
 pub struct FStringElements(Vec<FStringElement>);
@@ -1292,7 +1298,7 @@ impl StringLiteralValue {
     /// Returns the [`StringLiteralFlags`] associated with this string literal.
     ///
     /// For an implicitly concatenated string, it returns the flags for the first literal.
-    pub fn flags(&self) -> StringLiteralFlags {
+    pub fn first_literal_flags(&self) -> StringLiteralFlags {
         self.iter()
             .next()
             .expect(
@@ -1645,6 +1651,12 @@ impl From<StringLiteral> for Expr {
     }
 }
 
+impl StringPart for StringLiteral {
+    fn flags(&self) -> AnyStringFlags {
+        self.flags.as_any_string_flags()
+    }
+}
+
 /// An internal representation of [`StringLiteral`] that represents an
 /// implicitly concatenated string.
 #[derive(Clone)]
@@ -1768,16 +1780,6 @@ impl BytesLiteralValue {
     /// Returns an iterator over the bytes of the concatenated bytes.
     pub fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
         self.iter().flat_map(|part| part.as_slice().iter().copied())
-    }
-
-    /// Returns the [`BytesLiteralFlags`] associated with this literal.
-    ///
-    /// For an implicitly concatenated literal, it returns the flags for the first literal.
-    pub fn flags(&self) -> BytesLiteralFlags {
-        self.iter()
-            .next()
-            .expect("There should always be at least one literal in an `ExprBytesLiteral` node")
-            .flags
     }
 }
 
@@ -2021,6 +2023,12 @@ impl From<BytesLiteral> for Expr {
             value: BytesLiteralValue::single(payload),
         }
         .into()
+    }
+}
+
+impl StringPart for BytesLiteral {
+    fn flags(&self) -> AnyStringFlags {
+        self.flags.as_any_string_flags()
     }
 }
 
@@ -2286,6 +2294,49 @@ impl From<AnyStringFlags> for FStringFlags {
 impl From<FStringFlags> for AnyStringFlags {
     fn from(value: FStringFlags) -> Self {
         value.as_any_string_flags()
+    }
+}
+
+pub trait StringPart: Ranged {
+    fn flags(&self) -> AnyStringFlags;
+
+    fn prefix(&self) -> AnyStringPrefix {
+        self.flags().prefix()
+    }
+
+    fn quote_style(&self) -> Quote {
+        self.flags().quote_style()
+    }
+
+    /// Does the string have a `u` or `U` prefix?
+    fn is_u_string(&self) -> bool {
+        self.flags().is_u_string()
+    }
+
+    /// Does the string have an `r` or `R` prefix?
+    fn is_raw_string(&self) -> bool {
+        self.flags().is_raw_string()
+    }
+
+    /// Does the string have an `f` or `F` prefix?
+    fn is_f_string(&self) -> bool {
+        self.flags().is_f_string()
+    }
+
+    /// Does the string have a `b` or `B` prefix?
+    fn is_byte_string(&self) -> bool {
+        self.flags().is_byte_string()
+    }
+
+    fn is_triple_quoted(&self) -> bool {
+        self.flags().0.contains(AnyStringFlagsInner::TRIPLE_QUOTED)
+    }
+
+    /// The range of the string part's contents, excluding the opener and closer.
+    fn raw_contents_range(&self) -> TextRange {
+        self.range()
+            .add_start(self.flags().opener_len())
+            .sub_end(self.flags().closer_len())
     }
 }
 

@@ -4,7 +4,9 @@ use ruff_python_ast::str::{Quote, TripleQuotes};
 use ruff_python_ast::str_prefix::{
     AnyStringPrefix, ByteStringPrefix, FStringPrefix, StringLiteralPrefix,
 };
-use ruff_python_ast::{AnyStringFlags, FStringElement, StringFlags, StringLike, StringLikePart};
+use ruff_python_ast::{
+    AnyStringFlags, FStringElement, StringFlags, StringLike, StringLikePart, StringPart,
+};
 use ruff_source_file::LineRanges;
 use ruff_text_size::{Ranged, TextRange};
 use std::borrow::Cow;
@@ -152,7 +154,7 @@ impl<'a> FormatImplicitConcatenatedStringFlat<'a> {
                 // That means the joined string formatting would have to call into
                 // the docstring formatting or otherwise guarantee that the output
                 // won't change on a second run.
-                if part.flags().is_triple_quoted() || part.flags().is_raw_string() {
+                if part.is_triple_quoted() || part.is_raw_string() {
                     return None;
                 }
 
@@ -269,7 +271,10 @@ impl Format<PyFormatContext<'_>> for FormatImplicitConcatenatedStringFlat<'_> {
             for part in self.string.parts().rev() {
                 assert!(part.is_string_literal());
 
-                if f.context().source()[part.content_range()].trim().is_empty() {
+                if f.context().source()[part.raw_contents_range()]
+                    .trim()
+                    .is_empty()
+                {
                     // Don't format the part.
                     parts.next_back();
                 } else {
@@ -284,7 +289,7 @@ impl Format<PyFormatContext<'_>> for FormatImplicitConcatenatedStringFlat<'_> {
             match part {
                 StringLikePart::String(_) | StringLikePart::Bytes(_) => {
                     FormatLiteralContent {
-                        range: part.content_range(),
+                        range: part.raw_contents_range(),
                         flags: self.flags,
                         is_fstring: false,
                         trim_start: first_non_empty && self.docstring,
@@ -293,7 +298,7 @@ impl Format<PyFormatContext<'_>> for FormatImplicitConcatenatedStringFlat<'_> {
                     .fmt(f)?;
 
                     if first_non_empty {
-                        first_non_empty = f.context().source()[part.content_range()]
+                        first_non_empty = f.context().source()[part.raw_contents_range()]
                             .trim_start()
                             .is_empty();
                     }
