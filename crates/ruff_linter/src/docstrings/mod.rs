@@ -3,6 +3,7 @@ use std::ops::Deref;
 
 use ruff_python_ast::{AnyStringFlags, StringFlags, StringLiteral, StringPart};
 use ruff_python_semantic::Definition;
+use ruff_source_file::LineRanges;
 use ruff_text_size::{Ranged, TextRange};
 
 pub(crate) mod extraction;
@@ -16,30 +17,33 @@ pub(crate) struct Docstring<'a> {
     pub(crate) definition: &'a Definition<'a>,
     /// The literal AST node representing the docstring.
     pub(crate) expr: &'a StringLiteral,
-    /// The content of the docstring, including the leading and trailing quotes.
-    pub(crate) contents: &'a str,
-    pub(crate) indentation: &'a str,
+    /// The source file the docstring was defined in.
+    pub(crate) source: &'a str,
 }
 
 impl<'a> Docstring<'a> {
+    /// The contents of the docstring, including the opening and closing quotes.
+    pub(crate) fn contents(&self) -> &'a str {
+        &self.source[self.range()]
+    }
+
+    /// The contents of the docstring, excluding the opening and closing quotes.
     pub(crate) fn body(&self) -> DocstringBody {
         DocstringBody { docstring: self }
     }
 
-    /// The range of the docstring body (without the quotes). The range is relative to [`Self::contents`].
-    pub(crate) fn body_range(&self) -> TextRange {
-        self.raw_contents_range() - self.start()
+    pub(crate) fn indentation(&self) -> &'a str {
+        &self.source[TextRange::new(self.source.line_start(self.start()), self.start())]
     }
 
     /// The docstring's "opener" (the string's prefix, if any, and its opening quotes).
     pub(crate) fn opener(&self) -> &'a str {
-        &self.contents[TextRange::up_to(self.body_range().start())]
+        &self.source[TextRange::new(self.start(), self.start() + self.flags().opener_len())]
     }
 
     /// The docstring's closing quotes.
     pub(crate) fn closer(&self) -> &'a str {
-        let contents_end = self.body_range().end();
-        &self.contents[TextRange::new(contents_end, contents_end + self.flags().closer_len())]
+        &self.source[TextRange::new(self.end() - self.flags().closer_len(), self.end())]
     }
 }
 
@@ -62,13 +66,13 @@ pub(crate) struct DocstringBody<'a> {
 
 impl<'a> DocstringBody<'a> {
     pub(crate) fn as_str(self) -> &'a str {
-        &self.docstring.contents[self.docstring.body_range()]
+        &self.docstring.source[self.docstring.raw_contents_range()]
     }
 }
 
 impl Ranged for DocstringBody<'_> {
     fn range(&self) -> TextRange {
-        self.docstring.body_range() + self.docstring.start()
+        self.docstring.raw_contents_range()
     }
 }
 

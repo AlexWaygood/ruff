@@ -61,7 +61,7 @@ impl Violation for EscapeSequenceInDocstring {
 /// D301
 pub(crate) fn backslashes(checker: &Checker, docstring: &Docstring) {
     // Docstring is already raw.
-    if docstring.prefix().is_raw() {
+    if docstring.is_raw_string() {
         return;
     }
 
@@ -101,9 +101,9 @@ pub(crate) fn backslashes(checker: &Checker, docstring: &Docstring) {
             let mut diagnostic = Diagnostic::new(EscapeSequenceInDocstring, docstring.range());
 
             if !docstring.is_u_string() {
-                diagnostic.set_fix(Fix::unsafe_edit(Edit::range_replacement(
-                    "r".to_owned() + docstring.contents,
-                    docstring.range(),
+                diagnostic.set_fix(Fix::unsafe_edit(Edit::insertion(
+                    "r".to_string(),
+                    docstring.start(),
                 )));
             }
 

@@ -60,7 +60,7 @@ impl AlwaysFixableViolation for NewLineAfterLastParagraph {
 
 /// D209
 pub(crate) fn newline_after_last_paragraph(checker: &Checker, docstring: &Docstring) {
-    let contents = docstring.contents;
+    let contents = docstring.contents();
     let body = docstring.body();
 
     if !docstring.is_triple_quoted() {
@@ -93,7 +93,7 @@ pub(crate) fn newline_after_last_paragraph(checker: &Checker, docstring: &Docstr
                     let content = format!(
                         "{}{}",
                         checker.stylist().line_ending().as_str(),
-                        clean_space(docstring.indentation)
+                        clean_space(docstring.indentation())
                     );
                     diagnostic.set_fix(Fix::safe_edit(Edit::replacement(
                         content,

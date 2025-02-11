@@ -2,8 +2,7 @@ use ruff_python_semantic::all::DunderAllName;
 use ruff_python_semantic::{
     BindingKind, ContextualizedDefinition, Definition, Export, Member, MemberKind,
 };
-use ruff_source_file::LineRanges;
-use ruff_text_size::{Ranged, TextRange};
+use ruff_text_size::Ranged;
 
 use crate::checkers::ast::Checker;
 use crate::codes::Rule;
@@ -183,13 +182,6 @@ pub(crate) fn definitions(checker: &mut Checker) {
                 continue;
             };
 
-            let contents = checker.locator().slice(string_literal);
-
-            let indentation = checker.locator().slice(TextRange::new(
-                checker.locator.line_start(string_literal.start()),
-                string_literal.start(),
-            ));
-
             let [sole_literal_part] = string_literal.value.as_slice() else {
                 #[allow(deprecated)]
                 let location = checker
@@ -207,8 +199,7 @@ pub(crate) fn definitions(checker: &mut Checker) {
             let docstring = Docstring {
                 definition,
                 expr: sole_literal_part,
-                contents,
-                indentation,
+                source: checker.source(),
             };
 
             if !pydocstyle::rules::not_empty(checker, &docstring) {

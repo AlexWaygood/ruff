@@ -137,7 +137,6 @@ impl AlwaysFixableViolation for MultiLineSummarySecondLine {
 
 /// D212, D213
 pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring) {
-    let contents = docstring.contents;
     let body = docstring.body();
 
     if NewlineWithTrailingNewline::from(body.as_str())
@@ -146,7 +145,8 @@ pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring)
     {
         return;
     };
-    let mut content_lines = UniversalNewlineIterator::with_offset(contents, docstring.start());
+    let mut content_lines =
+        UniversalNewlineIterator::with_offset(docstring.contents(), docstring.start());
 
     let Some(first_line) = content_lines.next() else {
         return;
@@ -179,7 +179,7 @@ pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring)
     } else {
         if checker.enabled(Rule::MultiLineSummarySecondLine) {
             let mut diagnostic = Diagnostic::new(MultiLineSummarySecondLine, docstring.range());
-            let mut indentation = String::from(docstring.indentation);
+            let mut indentation = String::from(docstring.indentation());
             let mut fixable = true;
             if !indentation.chars().all(char::is_whitespace) {
                 fixable = false;
