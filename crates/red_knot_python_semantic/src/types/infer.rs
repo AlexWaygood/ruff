@@ -744,6 +744,10 @@ impl<'db> TypeInferenceBuilder<'db> {
                     definition,
                 );
             }
+            DefinitionKind::WildcardImport(_) => {
+                // Wildcard imports are not resolved in the semantic index.
+                // The types of the imported names are inferred in the module scope.
+            }
             DefinitionKind::Assignment(assignment) => {
                 self.infer_assignment_definition(assignment, definition);
             }

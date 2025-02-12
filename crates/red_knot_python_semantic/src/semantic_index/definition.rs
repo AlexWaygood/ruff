@@ -443,6 +443,7 @@ impl DefinitionCategory {
 pub enum DefinitionKind<'db> {
     Import(AstNodeRef<ast::Alias>),
     ImportFrom(ImportFromDefinitionKind),
+    WildcardImport(AstNodeRef<ast::StmtImportFrom>),
     Function(AstNodeRef<ast::StmtFunctionDef>),
     Class(AstNodeRef<ast::StmtClassDef>),
     TypeAlias(AstNodeRef<ast::StmtTypeAlias>),
@@ -474,6 +475,7 @@ impl DefinitionKind<'_> {
         match self {
             DefinitionKind::Import(alias) => alias.range(),
             DefinitionKind::ImportFrom(import) => import.alias().range(),
+            DefinitionKind::WildcardImport(import) => import.range(),
             DefinitionKind::Function(function) => function.name.range(),
             DefinitionKind::Class(class) => class.name.range(),
             DefinitionKind::TypeAlias(type_alias) => type_alias.name.range(),
@@ -503,6 +505,7 @@ impl DefinitionKind<'_> {
             | DefinitionKind::TypeAlias(_)
             | DefinitionKind::Import(_)
             | DefinitionKind::ImportFrom(_)
+            | DefinitionKind::WildcardImport(_)
             | DefinitionKind::TypeVar(_)
             | DefinitionKind::ParamSpec(_)
             | DefinitionKind::TypeVarTuple(_) => DefinitionCategory::DeclarationAndBinding,
