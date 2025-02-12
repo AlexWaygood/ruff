@@ -431,7 +431,7 @@ mod tests {
     fn names(table: &SymbolTable) -> Vec<String> {
         table
             .symbols()
-            .map(|symbol| symbol.name().to_string())
+            .map(|symbol| symbol.name_and_kind().name().unwrap().to_string())
             .collect()
     }
 

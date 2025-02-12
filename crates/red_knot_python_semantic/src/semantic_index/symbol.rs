@@ -13,18 +13,18 @@ use rustc_hash::FxHasher;
 use crate::ast_node_ref::AstNodeRef;
 use crate::node_key::NodeKey;
 use crate::semantic_index::{semantic_index, SymbolMap};
-use crate::Db;
+use crate::{Db, ModuleName};
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Symbol {
-    name: Name,
+    name_and_kind: SymbolNameAndKind,
     flags: SymbolFlags,
 }
 
 impl Symbol {
-    fn new(name: Name) -> Self {
+    fn new(name: SymbolNameAndKind) -> Self {
         Self {
-            name,
+            name_and_kind: name,
             flags: SymbolFlags::empty(),
         }
     }
@@ -34,8 +34,8 @@ impl Symbol {
     }
 
     /// The symbol's name.
-    pub fn name(&self) -> &Name {
-        &self.name
+    pub fn name_and_kind(&self) -> &SymbolNameAndKind {
+        &self.name_and_kind
     }
 
     /// Is the symbol used in its containing scope?
@@ -51,6 +51,21 @@ impl Symbol {
     /// Is the symbol declared in its containing scope?
     pub fn is_declared(&self) -> bool {
         self.flags.contains(SymbolFlags::IS_DECLARED)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum SymbolNameAndKind {
+    Named(Name),
+    Wildcard { module_name: ModuleName },
+}
+
+impl SymbolNameAndKind {
+    pub(crate) fn name(&self) -> Option<&str> {
+        match self {
+            SymbolNameAndKind::Named(name) => Some(name),
+            SymbolNameAndKind::Wildcard { .. } => None,
+        }
     }
 }
 
@@ -250,17 +265,15 @@ impl SymbolTable {
 
     /// Returns the [`ScopedSymbolId`] of the symbol named `name`.
     pub(crate) fn symbol_id_by_name(&self, name: &str) -> Option<ScopedSymbolId> {
-        let (id, ()) = self
-            .symbols_by_name
-            .raw_entry()
-            .from_hash(Self::hash_name(name), |id| {
-                self.symbol(*id).name().as_str() == name
-            })?;
+        let (id, ()) = self.symbols_by_name.raw_entry().from_hash(
+            Self::hash_name(&SymbolNameAndKind::Named(name.into())),
+            |id| self.symbol(*id).name_and_kind().name() == Some(name),
+        )?;
 
         Some(*id)
     }
 
-    fn hash_name(name: &str) -> u64 {
+    fn hash_name(name: &SymbolNameAndKind) -> u64 {
         let mut hasher = FxHasher::default();
         name.hash(&mut hasher);
         hasher.finish()
@@ -282,13 +295,13 @@ pub(super) struct SymbolTableBuilder {
 }
 
 impl SymbolTableBuilder {
-    pub(super) fn add_symbol(&mut self, name: Name) -> (ScopedSymbolId, bool) {
+    pub(super) fn add_symbol(&mut self, name: SymbolNameAndKind) -> (ScopedSymbolId, bool) {
         let hash = SymbolTable::hash_name(&name);
         let entry = self
             .table
             .symbols_by_name
             .raw_entry_mut()
-            .from_hash(hash, |id| self.table.symbols[*id].name() == &name);
+            .from_hash(hash, |id| self.table.symbols[*id].name_and_kind() == &name);
 
         match entry {
             RawEntryMut::Occupied(entry) => (*entry.key(), false),
@@ -297,7 +310,7 @@ impl SymbolTableBuilder {
 
                 let id = self.table.symbols.push(symbol);
                 entry.insert_with_hasher(hash, id, (), |id| {
-                    SymbolTable::hash_name(self.table.symbols[*id].name().as_str())
+                    SymbolTable::hash_name(self.table.symbols[*id].name_and_kind())
                 });
                 (id, true)
             }

@@ -36,6 +36,7 @@ use super::definition::{
     DefinitionCategory, ExceptHandlerDefinitionNodeRef, MatchPatternDefinitionNodeRef,
     WithItemDefinitionNodeRef,
 };
+use super::symbol::SymbolNameAndKind;
 
 mod except_handlers;
 
@@ -253,7 +254,19 @@ impl<'db> SemanticIndexBuilder<'db> {
     }
 
     fn add_symbol(&mut self, name: Name) -> ScopedSymbolId {
-        let (symbol_id, added) = self.current_symbol_table().add_symbol(name);
+        let (symbol_id, added) = self
+            .current_symbol_table()
+            .add_symbol(SymbolNameAndKind::Named(name));
+        if added {
+            self.current_use_def_map_mut().add_symbol(symbol_id);
+        }
+        symbol_id
+    }
+
+    fn add_wildcard_symbol(&mut self, module_name: ModuleName) -> ScopedSymbolId {
+        let (symbol_id, added) = self
+            .current_symbol_table()
+            .add_symbol(SymbolNameAndKind::Wildcard { module_name });
         if added {
             self.current_use_def_map_mut().add_symbol(symbol_id);
         }
