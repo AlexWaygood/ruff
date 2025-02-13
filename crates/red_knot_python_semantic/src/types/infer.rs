@@ -2448,7 +2448,9 @@ impl<'db> TypeInferenceBuilder<'db> {
         } = import;
 
         for alias in names {
-            self.infer_definition(alias);
+            if &alias.name != "*" {
+                self.infer_definition(alias);
+            }
         }
     }
 

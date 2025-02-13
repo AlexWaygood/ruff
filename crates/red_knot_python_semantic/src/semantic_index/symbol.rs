@@ -13,7 +13,7 @@ use rustc_hash::FxHasher;
 use crate::ast_node_ref::AstNodeRef;
 use crate::node_key::NodeKey;
 use crate::semantic_index::{semantic_index, SymbolMap};
-use crate::{Db, ModuleName};
+use crate::Db;
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Symbol {
@@ -57,7 +57,10 @@ impl Symbol {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum SymbolNameAndKind {
     Named(Name),
-    Wildcard { module_name: ModuleName },
+    Wildcard {
+        module_name: Option<Name>,
+        level: u32,
+    },
 }
 
 impl SymbolNameAndKind {

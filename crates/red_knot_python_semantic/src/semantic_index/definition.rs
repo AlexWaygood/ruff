@@ -63,6 +63,7 @@ impl<'db> Definition<'db> {
 pub(crate) enum DefinitionNodeRef<'a> {
     Import(&'a ast::Alias),
     ImportFrom(ImportFromDefinitionNodeRef<'a>),
+    Wildcard(&'a ast::StmtImportFrom),
     For(ForStmtDefinitionNodeRef<'a>),
     Function(&'a ast::StmtFunctionDef),
     Class(&'a ast::StmtClassDef),
@@ -185,10 +186,21 @@ impl<'a> From<MatchPatternDefinitionNodeRef<'a>> for DefinitionNodeRef<'a> {
     }
 }
 
+impl<'a> From<WildcardDefinitionNodeRef<'a>> for DefinitionNodeRef<'a> {
+    fn from(node: WildcardDefinitionNodeRef<'a>) -> Self {
+        Self::Wildcard(node.node)
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct ImportFromDefinitionNodeRef<'a> {
     pub(crate) node: &'a ast::StmtImportFrom,
     pub(crate) alias_index: usize,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct WildcardDefinitionNodeRef<'a> {
+    pub(crate) node: &'a ast::StmtImportFrom,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -252,6 +264,9 @@ impl<'db> DefinitionNodeRef<'db> {
                     node: AstNodeRef::new(parsed, node),
                     alias_index,
                 })
+            }
+            DefinitionNodeRef::Wildcard(import) => {
+                DefinitionKind::WildcardImport(AstNodeRef::new(parsed, import))
             }
             DefinitionNodeRef::Function(function) => {
                 DefinitionKind::Function(AstNodeRef::new(parsed, function))
@@ -358,6 +373,7 @@ impl<'db> DefinitionNodeRef<'db> {
             Self::ImportFrom(ImportFromDefinitionNodeRef { node, alias_index }) => {
                 (&node.names[alias_index]).into()
             }
+            Self::Wildcard(node) => node.into(),
             Self::Function(node) => node.into(),
             Self::Class(node) => node.into(),
             Self::TypeAlias(node) => node.into(),
@@ -819,5 +835,11 @@ impl From<&ast::TypeParamParamSpec> for DefinitionNodeKey {
 impl From<&ast::TypeParamTypeVarTuple> for DefinitionNodeKey {
     fn from(value: &ast::TypeParamTypeVarTuple) -> Self {
         Self(NodeKey::from_node(value))
+    }
+}
+
+impl From<&ast::StmtImportFrom> for DefinitionNodeKey {
+    fn from(node: &ast::StmtImportFrom) -> Self {
+        Self(NodeKey::from_node(node))
     }
 }

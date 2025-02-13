@@ -34,7 +34,7 @@ use crate::Db;
 use super::constraint::{Constraint, ConstraintNode, PatternConstraint};
 use super::definition::{
     DefinitionCategory, ExceptHandlerDefinitionNodeRef, MatchPatternDefinitionNodeRef,
-    WithItemDefinitionNodeRef,
+    WildcardDefinitionNodeRef, WithItemDefinitionNodeRef,
 };
 use super::symbol::SymbolNameAndKind;
 
@@ -263,10 +263,10 @@ impl<'db> SemanticIndexBuilder<'db> {
         symbol_id
     }
 
-    fn add_wildcard_symbol(&mut self, module_name: ModuleName) -> ScopedSymbolId {
+    fn add_wildcard_symbol(&mut self, module_name: Option<Name>, level: u32) -> ScopedSymbolId {
         let (symbol_id, added) = self
             .current_symbol_table()
-            .add_symbol(SymbolNameAndKind::Wildcard { module_name });
+            .add_symbol(SymbolNameAndKind::Wildcard { module_name, level });
         if added {
             self.current_use_def_map_mut().add_symbol(symbol_id);
         }
@@ -910,24 +910,47 @@ where
                 }
             }
             ast::Stmt::ImportFrom(node) => {
-                for (alias_index, alias) in node.names.iter().enumerate() {
-                    let symbol_name = if let Some(asname) = &alias.asname {
-                        &asname.id
-                    } else {
-                        &alias.name.id
-                    };
+                let ast::StmtImportFrom {
+                    module,
+                    names,
+                    level,
+                    range: _,
+                } = node;
 
-                    // Look for imports `from __future__ import annotations`, ignore `as ...`
-                    // We intentionally don't enforce the rules about location of `__future__`
-                    // imports here, we assume the user's intent was to apply the `__future__`
-                    // import, so we still check using it (and will also emit a diagnostic about a
-                    // miss-placed `__future__` import.)
-                    self.has_future_annotations |= alias.name.id == "annotations"
-                        && node.module.as_deref() == Some("__future__");
+                match names.as_slice() {
+                    [ast::Alias {
+                        name,
+                        asname: None,
+                        range: _,
+                    }] if name == "*" => {
+                        let module_name = module.as_ref().map(|module| module.id.clone());
+                        let symbol = self.add_wildcard_symbol(module_name, *level);
+                        self.add_definition(symbol, WildcardDefinitionNodeRef { node });
+                    }
+                    names => {
+                        for (alias_index, alias) in names.iter().enumerate() {
+                            let symbol_name = if let Some(asname) = &alias.asname {
+                                &asname.id
+                            } else {
+                                &alias.name.id
+                            };
 
-                    let symbol = self.add_symbol(symbol_name.clone());
+                            // Look for imports `from __future__ import annotations`, ignore `as ...`
+                            // We intentionally don't enforce the rules about location of `__future__`
+                            // imports here, we assume the user's intent was to apply the `__future__`
+                            // import, so we still check using it (and will also emit a diagnostic about a
+                            // miss-placed `__future__` import.)
+                            self.has_future_annotations |= alias.name.id == "annotations"
+                                && module.as_deref() == Some("__future__");
 
-                    self.add_definition(symbol, ImportFromDefinitionNodeRef { node, alias_index });
+                            let symbol = self.add_symbol(symbol_name.clone());
+
+                            self.add_definition(
+                                symbol,
+                                ImportFromDefinitionNodeRef { node, alias_index },
+                            );
+                        }
+                    }
                 }
             }
             ast::Stmt::Assign(node) => {
