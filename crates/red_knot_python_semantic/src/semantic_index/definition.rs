@@ -561,6 +561,10 @@ impl DefinitionKind<'_> {
             | DefinitionKind::ExceptHandler(_) => DefinitionCategory::Binding,
         }
     }
+
+    pub(super) const fn is_wildcard(&self) -> bool {
+        matches!(self, DefinitionKind::WildcardImport(_))
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Hash)]

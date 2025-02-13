@@ -295,6 +295,7 @@ impl<'db> SemanticIndexBuilder<'db> {
         // SAFETY: `definition_node` is guaranteed to be a child of `self.module`
         let kind = unsafe { definition_node.into_owned(self.module.clone()) };
         let category = kind.category();
+        let is_wildcard_definition = kind.is_wildcard();
         let definition = Definition::new(
             self.db,
             self.file,
@@ -317,12 +318,17 @@ impl<'db> SemanticIndexBuilder<'db> {
         }
 
         let use_def = self.current_use_def_map_mut();
-        match category {
-            DefinitionCategory::DeclarationAndBinding => {
-                use_def.record_declaration_and_binding(symbol, definition);
+
+        if is_wildcard_definition {
+            use_def.record_wildcard_import(symbol, definition);
+        } else {
+            match category {
+                DefinitionCategory::DeclarationAndBinding => {
+                    use_def.record_declaration_and_binding(symbol, definition);
+                }
+                DefinitionCategory::Declaration => use_def.record_declaration(symbol, definition),
+                DefinitionCategory::Binding => use_def.record_binding(symbol, definition),
             }
-            DefinitionCategory::Declaration => use_def.record_declaration(symbol, definition),
-            DefinitionCategory::Binding => use_def.record_binding(symbol, definition),
         }
 
         let mut try_node_stack_manager = std::mem::take(&mut self.try_node_context_stack_manager);
