@@ -880,11 +880,7 @@ impl<'db> TypeInferenceBuilder<'db> {
             .unwrap_or_else(|(ty, conflicting)| {
                 // TODO point out the conflicting declarations in the diagnostic?
                 let symbol_table = self.index.symbol_table(binding.file_scope(self.db()));
-                let symbol_name = symbol_table
-                    .symbol(binding.symbol(self.db()))
-                    .name_and_kind()
-                    .name()
-                    .unwrap();
+                let symbol_name = symbol_table.symbol(binding.symbol(self.db()).expect("Should not call `add_binding` for wildcard imports; these are declarations")).name();
                 self.context.report_lint(
                     &CONFLICTING_DECLARATIONS,
                     node,

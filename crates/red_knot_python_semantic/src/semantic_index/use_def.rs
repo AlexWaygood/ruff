@@ -522,12 +522,7 @@ impl Default for UseDefMapBuilder<'_> {
 }
 
 impl<'db> UseDefMapBuilder<'db> {
-    pub(super) fn record_wildcard_import(
-        &mut self,
-        wildcard_symbol: ScopedSymbolId,
-        definition: Definition<'db>,
-    ) {
-        self.record_declaration_and_binding(wildcard_symbol, definition);
+    pub(super) fn record_wildcard_import(&mut self, definition: Definition<'db>) {
         let def_id = self.all_definitions.push(Some(definition));
         for symbol_state in &mut self.symbol_states {
             symbol_state.record_declaration(def_id);

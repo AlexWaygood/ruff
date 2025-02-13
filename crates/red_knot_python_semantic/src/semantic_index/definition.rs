@@ -31,7 +31,9 @@ pub struct Definition<'db> {
     pub(crate) file_scope: FileScopeId,
 
     /// The symbol defined.
-    pub(crate) symbol: ScopedSymbolId,
+    ///
+    /// This will be `None` if it's a definition for a wildcard import.
+    pub(crate) symbol: Option<ScopedSymbolId>,
 
     #[no_eq]
     #[return_ref]

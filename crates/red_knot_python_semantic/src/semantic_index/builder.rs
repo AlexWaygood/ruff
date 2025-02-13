@@ -33,10 +33,9 @@ use crate::Db;
 
 use super::constraint::{Constraint, ConstraintNode, PatternConstraint};
 use super::definition::{
-    DefinitionCategory, ExceptHandlerDefinitionNodeRef, MatchPatternDefinitionNodeRef,
-    WildcardDefinitionNodeRef, WithItemDefinitionNodeRef,
+    DefinitionCategory, DefinitionKind, ExceptHandlerDefinitionNodeRef,
+    MatchPatternDefinitionNodeRef, WildcardDefinitionNodeRef, WithItemDefinitionNodeRef,
 };
-use super::symbol::SymbolNameAndKind;
 
 mod except_handlers;
 
@@ -254,19 +253,7 @@ impl<'db> SemanticIndexBuilder<'db> {
     }
 
     fn add_symbol(&mut self, name: Name) -> ScopedSymbolId {
-        let (symbol_id, added) = self
-            .current_symbol_table()
-            .add_symbol(SymbolNameAndKind::Named(name));
-        if added {
-            self.current_use_def_map_mut().add_symbol(symbol_id);
-        }
-        symbol_id
-    }
-
-    fn add_wildcard_symbol(&mut self, module_name: Option<Name>, level: u32) -> ScopedSymbolId {
-        let (symbol_id, added) = self
-            .current_symbol_table()
-            .add_symbol(SymbolNameAndKind::Wildcard { module_name, level });
+        let (symbol_id, added) = self.current_symbol_table().add_symbol(name);
         if added {
             self.current_use_def_map_mut().add_symbol(symbol_id);
         }
@@ -295,12 +282,11 @@ impl<'db> SemanticIndexBuilder<'db> {
         // SAFETY: `definition_node` is guaranteed to be a child of `self.module`
         let kind = unsafe { definition_node.into_owned(self.module.clone()) };
         let category = kind.category();
-        let is_wildcard_definition = kind.is_wildcard();
         let definition = Definition::new(
             self.db,
             self.file,
             self.current_scope(),
-            symbol,
+            Some(symbol),
             kind,
             countme::Count::default(),
         );
@@ -319,16 +305,12 @@ impl<'db> SemanticIndexBuilder<'db> {
 
         let use_def = self.current_use_def_map_mut();
 
-        if is_wildcard_definition {
-            use_def.record_wildcard_import(symbol, definition);
-        } else {
-            match category {
-                DefinitionCategory::DeclarationAndBinding => {
-                    use_def.record_declaration_and_binding(symbol, definition);
-                }
-                DefinitionCategory::Declaration => use_def.record_declaration(symbol, definition),
-                DefinitionCategory::Binding => use_def.record_binding(symbol, definition),
+        match category {
+            DefinitionCategory::DeclarationAndBinding => {
+                use_def.record_declaration_and_binding(symbol, definition);
             }
+            DefinitionCategory::Declaration => use_def.record_declaration(symbol, definition),
+            DefinitionCategory::Binding => use_def.record_binding(symbol, definition),
         }
 
         let mut try_node_stack_manager = std::mem::take(&mut self.try_node_context_stack_manager);
@@ -336,6 +318,23 @@ impl<'db> SemanticIndexBuilder<'db> {
         self.try_node_context_stack_manager = try_node_stack_manager;
 
         definition
+    }
+
+    fn add_wildcard_definition(&mut self, node: &ast::StmtImportFrom) {
+        // SAFETY: `node` is guaranteed to be a child of `self.module`
+        #[allow(unsafe_code)]
+        let node_ref = unsafe { AstNodeRef::new(self.module.clone(), node)};
+        let kind = DefinitionKind::WildcardImport(node_ref);
+
+        let definition = Definition::new(
+            self.db,
+            self.file,
+            self.current_scope(),
+            None,
+            kind,
+            countme::Count::default(),
+        );
+        self.current_use_def_map_mut().record_wildcard_import(definition);
     }
 
     fn record_expression_constraint(&mut self, constraint_node: &ast::Expr) -> Constraint<'db> {
@@ -930,8 +929,7 @@ where
                         range: _,
                     }] if name == "*" => {
                         let module_name = module.as_ref().map(|module| module.id.clone());
-                        let symbol = self.add_wildcard_symbol(module_name, *level);
-                        self.add_definition(symbol, WildcardDefinitionNodeRef { node });
+                        self.add_wildcard_definition(node);
                     }
                     names => {
                         for (alias_index, alias) in names.iter().enumerate() {

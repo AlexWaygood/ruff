@@ -50,7 +50,10 @@ pub(crate) fn narrowing_constraint<'db>(
         ConstraintNode::Pattern(pattern) => all_narrowing_constraints_for_pattern(db, pattern),
     };
     if let Some(constraints) = constraints {
-        constraints.get(&definition.symbol(db)).copied()
+        let Some(symbol) = definition.symbol(db) else {
+            todo!("Constraints for wildcard symbols")
+        };
+        constraints.get(&symbol).copied()
     } else {
         None
     }

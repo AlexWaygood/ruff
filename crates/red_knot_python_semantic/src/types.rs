@@ -245,9 +245,9 @@ fn module_type_symbols<'db>(db: &'db dyn Db) -> smallvec::SmallVec<[ast::name::N
     module_type_symbol_table
         .symbols()
         .filter(|symbol| symbol.is_declared())
-        .filter_map(|symbol| symbol.name_and_kind().name())
-        .filter(|symbol_name| !matches!(*symbol_name, "__dict__" | "__getattr__" | "__init__"))
-        .map(ast::name::Name::new)
+        .map(symbol::Symbol::name)
+        .filter(|symbol_name| !matches!(&***symbol_name, "__dict__" | "__getattr__" | "__init__"))
+        .cloned()
         .collect()
 }
 
