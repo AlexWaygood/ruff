@@ -75,6 +75,18 @@ we're dealing with:
 reveal_type(typing.__getattr__)  # revealed: Unknown
 ```
 
+## Accessed as imports
+
+These implicit globals can also be imported from other modules:
+
+```py
+from collections import __name__ as collections_name
+from functools import __doc__ as functools_doc
+
+reveal_type(collections_name)  # revealed: str
+reveal_type(functools_doc)  # revealed: str | None
+```
+
 ## `types.ModuleType.__dict__` takes precedence over global variable `__dict__`
 
 It's impossible to override the `__dict__` attribute of `types.ModuleType` instances from inside the

@@ -183,20 +183,34 @@ pub(crate) fn symbol<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str) -> S
     symbol_impl(db, scope, name, RequiresExplicitReExport::No)
 }
 
-/// Infers the public type of a module-global symbol as seen from within the same file.
+/// Infers the public type of an explicit module-global symbol as seen from within the same file.
 ///
-/// If it's not defined explicitly in the global scope, it will look it up in `types.ModuleType`
-/// with a few very special exceptions.
+/// Note that all global scopes also include various "implicit globals" such as `__name__`,
+/// `__doc__` and `__file__`. This function **does not** consider those symbols; it will return
+/// `Symbol::Unbound` for them. Use the (currently test-only) `global_symbol` query to also include
+/// those additional symbols.
 ///
 /// Use [`imported_symbol`] to perform the lookup as seen from outside the file (e.g. via imports).
-pub(crate) fn global_symbol<'db>(db: &'db dyn Db, file: File, name: &str) -> Symbol<'db> {
+pub(crate) fn explicit_global_symbol<'db>(db: &'db dyn Db, file: File, name: &str) -> Symbol<'db> {
     symbol_impl(
         db,
         global_scope(db, file),
         name,
         RequiresExplicitReExport::No,
     )
-    .or_fall_back_to(db, || module_type_symbol(db, name))
+}
+
+/// Infers the public type of an explicit module-global symbol as seen from within the same file.
+///
+/// Unlike [`explicit_global_symbol`], this function also considers various "implicit globals"
+/// such as `__name__`, `__doc__` and `__file__`. These are looked up as attributes on `types.ModuleType`
+/// rather than being looked up as symbols explicitly defined/declared in the global scope.
+///
+/// Use [`imported_symbol`] to perform the lookup as seen from outside the file (e.g. via imports).
+#[cfg(test)]
+pub(crate) fn global_symbol<'db>(db: &'db dyn Db, file: File, name: &str) -> Symbol<'db> {
+    explicit_global_symbol(db, file, name)
+        .or_fall_back_to(db, || module_type_implicit_global_symbol(db, name))
 }
 
 /// Infers the public type of an imported symbol.
@@ -225,7 +239,7 @@ pub(crate) fn imported_symbol<'db>(db: &'db dyn Db, module: &Module, name: &str)
     })
 }
 
-/// Lookup the type of `symbol` in the builtins namespace.
+/// Lookup the type of `symbol` in the builtins namespace *from within the builtins namespace*.
 ///
 /// Returns `Symbol::Unbound` if the `builtins` module isn't available for some reason.
 ///
@@ -239,7 +253,7 @@ pub(crate) fn builtins_symbol<'db>(db: &'db dyn Db, symbol: &str) -> Symbol<'db>
                 // We're looking up in the builtins namespace and not the module, so we should
                 // do the normal lookup in `types.ModuleType` and not the special one as in
                 // `imported_symbol`.
-                module_type_symbol(db, symbol)
+                module_type_implicit_global_symbol(db, symbol)
             })
         })
         .unwrap_or(Symbol::Unbound)
@@ -650,56 +664,63 @@ fn symbol_from_declarations_impl<'db>(
     }
 }
 
-/// Return a list of the symbols that typeshed declares in the body scope of
-/// the stub for the class `types.ModuleType`.
+/// Lookup a symbol in the `types.ModuleType` namespace, but only if the symbol is known
+/// to exist as an "implicit global" in every Python module.
 ///
-/// Conceptually this could be a `Set` rather than a list,
-/// but the number of symbols declared in this scope is likely to be very small,
-/// so the cost of hashing the names is likely to be more expensive than it's worth.
-#[salsa::tracked(return_ref)]
-fn module_type_symbols<'db>(db: &'db dyn Db) -> smallvec::SmallVec<[ast::name::Name; 8]> {
-    let Some(module_type) = KnownClass::ModuleType
-        .to_class_literal(db)
-        .into_class_literal()
-    else {
-        // The most likely way we get here is if a user specified a `--custom-typeshed-dir`
-        // without a `types.pyi` stub in the `stdlib/` directory
-        return smallvec::SmallVec::default();
-    };
+/// This function returns [`Symbol::Unbound`] if the symbol is `__dict__` or `__init__`,
+/// even though these attributes can be found on all instances of `types.ModuleType`. This is
+/// because all other `ModuleType` symbols can be found as implicit globals in any Python
+/// module, but that does not apply to `__dict__` or `__init__`:
+///
+/// ```pycon
+/// >>> import typing
+/// >>> from typing import __doc__
+/// >>> "__doc__" in typing.__dict__
+/// True
+/// >>> from typing import __init__
+/// >>> "__init__" in typing.__dict__
+/// False
+/// ```
+///
+/// If you're doing a `ModuleType` fallback as part of a global-namespace lookup from another
+/// module (rather than from within the same module), you'll probably want to also account for
+/// the fact that `__init__` and `__dict__` can be imported from any Python module (they just
+/// aren't present in the global namespace).
+pub(crate) fn module_type_implicit_global_symbol<'db>(db: &'db dyn Db, name: &str) -> Symbol<'db> {
+    // The inner Salsa query is a micro-optimisation to avoid calling
+    // `KnownModule::to_instance(db).member()` unless it's absolutely necessary to do so.
+    // That's because this function can be called in a very hot path.
+    #[salsa::tracked(return_ref)]
+    fn module_type_symbols<'db>(db: &'db dyn Db) -> smallvec::SmallVec<[ast::name::Name; 8]> {
+        let Some(module_type) = KnownClass::ModuleType
+            .to_class_literal(db)
+            .into_class_literal()
+        else {
+            // The most likely way we get here is if a user specified a `--custom-typeshed-dir`
+            // without a `types.pyi` stub in the `stdlib/` directory
+            return smallvec::SmallVec::default();
+        };
 
-    let module_type_scope = module_type.body_scope(db);
-    let module_type_symbol_table = symbol_table(db, module_type_scope);
+        let module_type_scope = module_type.body_scope(db);
+        let module_type_symbol_table = symbol_table(db, module_type_scope);
 
-    // `__dict__` and `__init__` are very special members that can be accessed as attributes
-    // on the module when imported, but cannot be accessed as globals *inside* the module.
-    //
-    // `__getattr__` is even more special: it doesn't exist at runtime, but typeshed includes it
-    // to reduce false positives associated with functions that dynamically import modules
-    // and return `Instance(types.ModuleType)`. We should ignore it for any known module-literal type.
-    module_type_symbol_table
-        .symbols()
-        .filter(|symbol| symbol.is_declared())
-        .map(semantic_index::symbol::Symbol::name)
-        .filter(|symbol_name| !matches!(&***symbol_name, "__dict__" | "__getattr__" | "__init__"))
-        .cloned()
-        .collect()
-}
+        // `__dict__` and `__init__` are very special members that can be accessed as attributes
+        // on the module when imported, but cannot be accessed as globals *inside* the module.
+        //
+        // `__getattr__` is even more special: it doesn't exist at runtime, but typeshed includes it
+        // to reduce false positives associated with functions that dynamically import modules
+        // and return `Instance(types.ModuleType)`. We should ignore it for any known module-literal type.
+        module_type_symbol_table
+            .symbols()
+            .filter(|symbol| symbol.is_declared())
+            .map(semantic_index::symbol::Symbol::name)
+            .filter(|symbol_name| {
+                !matches!(&***symbol_name, "__dict__" | "__getattr__" | "__init__")
+            })
+            .cloned()
+            .collect()
+    }
 
-/// Return the symbol for a member of `types.ModuleType`.
-///
-/// ## Notes
-///
-/// In general we wouldn't check to see whether a symbol exists on a class before doing the
-/// [`member`] call on the instance type -- we'd just do the [`member`] call on the instance
-/// type, since it has the same end result. The reason to only call [`member`] on [`ModuleType`]
-/// instance when absolutely necessary is that it was a fairly significant performance regression
-/// to fallback to doing that for every name lookup that wasn't found in the module's globals
-/// ([`global_symbol`]). So we use less idiomatic (and much more verbose) code here as a
-/// micro-optimisation because it's used in a very hot path.
-///
-/// [`member`]: Type::member
-/// [`ModuleType`]: KnownClass::ModuleType
-fn module_type_symbol<'db>(db: &'db dyn Db, name: &str) -> Symbol<'db> {
     if module_type_symbols(db)
         .iter()
         .any(|module_type_member| &**module_type_member == name)
@@ -818,17 +839,5 @@ mod tests {
             Symbol::Type(ty1, Bound).or_fall_back_to(&db, || Symbol::Type(ty2, Bound)),
             Symbol::Type(ty1, Bound)
         );
-    }
-
-    #[test]
-    fn module_type_symbols_includes_declared_types_but_not_referenced_types() {
-        let db = setup_db();
-        let symbol_names = module_type_symbols(&db);
-
-        let dunder_name_symbol_name = ast::name::Name::new_static("__name__");
-        assert!(symbol_names.contains(&dunder_name_symbol_name));
-
-        let property_symbol_name = ast::name::Name::new_static("property");
-        assert!(!symbol_names.contains(&property_symbol_name));
     }
 }
