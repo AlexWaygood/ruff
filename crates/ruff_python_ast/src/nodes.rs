@@ -811,7 +811,8 @@ pub struct DebugText {
     pub trailing: String,
 }
 
-/// An AST node used to represent an f-string.
+/// An AST node that represents either a single-part f-string literal
+/// or an implicitly concatenated f-string literal.
 ///
 /// This type differs from the original Python AST ([JoinedStr]) in that it
 /// doesn't join the implicitly concatenated parts into a single string. Instead,
@@ -824,6 +825,18 @@ pub struct ExprFString {
     pub value: FStringValue,
 }
 
+impl ExprFString {
+    /// Return `Some(literal)` if the f-string only consists of a single [`FString`] part.
+    /// Return `None` if the f-string consists of multiple parts
+    /// (indicating that it is implicitly concatenated).
+    pub const fn as_single_part_fstring(&self) -> Option<&FString> {
+        match &self.value.inner {
+            FStringValueInner::SinglePart(FStringPart::FString(fstring)) => Some(fstring),
+            _ => None,
+        }
+    }
+}
+
 /// The value representing an [`ExprFString`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct FStringValue {
@@ -831,70 +844,65 @@ pub struct FStringValue {
 }
 
 impl FStringValue {
-    /// Creates a new f-string with the given value.
-    pub fn single(value: FString) -> Self {
+    /// Create a new f-string literal with a single [`FString`] part.
+    pub fn single_part(value: FString) -> Self {
         Self {
-            inner: FStringValueInner::Single(FStringPart::FString(value)),
+            inner: FStringValueInner::SinglePart(FStringPart::FString(value)),
         }
     }
 
-    /// Creates a new f-string with the given values that represents an implicitly
+    /// Create a new f-string with the given values that represents an implicitly
     /// concatenated f-string.
     ///
     /// # Panics
     ///
-    /// Panics if `values` is less than 2. Use [`FStringValue::single`] instead.
-    pub fn concatenated(values: Vec<FStringPart>) -> Self {
-        assert!(values.len() > 1);
+    /// Panics if `values` has less than 2 elements.
+    /// Use [`FStringValue::single_part`] instead.
+    pub fn multi_part(values: Vec<FStringPart>) -> Self {
+        assert!(
+            values.len() > 1,
+            "Use `FStringValue::single_part` to create single-part f-strings"
+        );
         Self {
-            inner: FStringValueInner::Concatenated(values),
+            inner: FStringValueInner::MultiPart(values),
         }
     }
 
-    /// Returns `true` if the f-string is implicitly concatenated, `false` otherwise.
-    pub fn is_implicit_concatenated(&self) -> bool {
-        matches!(self.inner, FStringValueInner::Concatenated(_))
+    /// Return `true` if the f-string is implicitly concatenated, `false` otherwise.
+    pub fn is_implicitly_concatenated(&self) -> bool {
+        matches!(self.inner, FStringValueInner::MultiPart(_))
     }
 
-    /// Returns the single [`FString`] if the f-string isn't implicitly concatenated, [`None`]
-    /// otherwise.
-    pub fn as_single(&self) -> Option<&FString> {
-        match &self.inner {
-            FStringValueInner::Single(FStringPart::FString(fstring)) => Some(fstring),
-            _ => None,
-        }
-    }
-
-    /// Returns a slice of all the [`FStringPart`]s contained in this value.
+    /// Return a slice of all the [`FStringPart`]s contained in this value.
     pub fn as_slice(&self) -> &[FStringPart] {
         match &self.inner {
-            FStringValueInner::Single(part) => std::slice::from_ref(part),
-            FStringValueInner::Concatenated(parts) => parts,
+            FStringValueInner::SinglePart(part) => std::slice::from_ref(part),
+            FStringValueInner::MultiPart(parts) => parts,
         }
     }
 
-    /// Returns a mutable slice of all the [`FStringPart`]s contained in this value.
+    /// Return a mutable slice of all the [`FStringPart`]s contained in this value.
     fn as_mut_slice(&mut self) -> &mut [FStringPart] {
         match &mut self.inner {
-            FStringValueInner::Single(part) => std::slice::from_mut(part),
-            FStringValueInner::Concatenated(parts) => parts,
+            FStringValueInner::SinglePart(part) => std::slice::from_mut(part),
+            FStringValueInner::MultiPart(parts) => parts,
         }
     }
 
-    /// Returns an iterator over all the [`FStringPart`]s contained in this value.
+    /// Return an iterator over all the [`FStringPart`]s contained in this value.
     pub fn iter(&self) -> Iter<FStringPart> {
         self.as_slice().iter()
     }
 
-    /// Returns an iterator over all the [`FStringPart`]s contained in this value
+    /// Return an iterator over all the [`FStringPart`]s contained in this value
     /// that allows modification.
     pub fn iter_mut(&mut self) -> IterMut<FStringPart> {
         self.as_mut_slice().iter_mut()
     }
 
-    /// Returns an iterator over the [`StringLiteral`] parts contained in this value.
+    /// Iterate over the [`StringLiteral`] parts contained in this value.
     ///
-    /// Note that this doesn't nest into the f-string parts. For example,
+    /// Note that this doesn't recurse into nested f-string parts. For example,
     ///
     /// ```python
     /// "foo" f"bar {x}" "baz" f"qux"
@@ -905,9 +913,9 @@ impl FStringValue {
         self.iter().filter_map(|part| part.as_literal())
     }
 
-    /// Returns an iterator over the [`FString`] parts contained in this value.
+    /// Iterate over the [`FString`] parts contained in this value.
     ///
-    /// Note that this doesn't nest into the f-string parts. For example,
+    /// Note that this doesn't recurse into nested f-string parts. For example,
     ///
     /// ```python
     /// "foo" f"bar {x}" "baz" f"qux"
@@ -918,9 +926,9 @@ impl FStringValue {
         self.iter().filter_map(|part| part.as_f_string())
     }
 
-    /// Returns an iterator over all the [`FStringElement`] contained in this value.
+    /// Iterate over all the [`FStringElement`] contained in this value.
     ///
-    /// An f-string element is what makes up an [`FString`] i.e., it is either a
+    /// An f-string element is what makes up an [`FString`], i.e., it is either a
     /// string literal or an expression. In the following example,
     ///
     /// ```python
@@ -958,10 +966,11 @@ enum FStringValueInner {
     ///
     /// This is always going to be `FStringPart::FString` variant which is
     /// maintained by the `FStringValue::single` constructor.
-    Single(FStringPart),
+    SinglePart(FStringPart),
 
-    /// An implicitly concatenated f-string i.e., `"foo" f"bar {x}"`.
-    Concatenated(Vec<FStringPart>),
+    /// An implicitly concatenated f-string that consists of multiple parts,
+    /// e.g. `"foo" f"bar {x}"`.
+    MultiPart(Vec<FStringPart>),
 }
 
 /// An f-string part which is either a string literal or an f-string.
@@ -1029,7 +1038,7 @@ pub trait StringFlags: Copy {
     /// i.e., the length of the prefixes plus the length
     /// of the quotes used to open the string.
     fn opener_len(self) -> TextSize {
-        self.prefix().as_str().text_len() + self.quote_len()
+        self.prefix().text_len() + self.quote_len()
     }
 
     /// The total length of the string's closer.
@@ -1213,7 +1222,7 @@ impl From<FString> for Expr {
     fn from(payload: FString) -> Self {
         ExprFString {
             range: payload.range,
-            value: FStringValue::single(payload),
+            value: FStringValue::single_part(payload),
         }
         .into()
     }
@@ -1279,8 +1288,8 @@ impl fmt::Debug for FStringElements {
     }
 }
 
-/// An AST node that represents either a single string literal or an implicitly
-/// concatenated string literals.
+/// An AST node that represents either a single-part string literal
+/// or an implicitly concatenated string literal.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExprStringLiteral {
     pub range: TextRange,
@@ -1288,12 +1297,13 @@ pub struct ExprStringLiteral {
 }
 
 impl ExprStringLiteral {
-    /// Return `Some(literal)` if the string only consists of a single `StringLiteral` part
-    /// (indicating that it is not implicitly concatenated). Otherwise, return `None`.
-    pub fn as_unconcatenated_literal(&self) -> Option<&StringLiteral> {
+    /// Return `Some(literal)` if the string only consists of a single [`StringLiteral`] part.
+    /// Return `None` if the string consists of multiple parts
+    /// (indicating that it is implicitly concatenated).
+    pub const fn as_single_part_string(&self) -> Option<&StringLiteral> {
         match &self.value.inner {
-            StringLiteralValueInner::Single(value) => Some(value),
-            StringLiteralValueInner::Concatenated(_) => None,
+            StringLiteralValueInner::SinglePart(value) => Some(value),
+            StringLiteralValueInner::MultiPart(_) => None,
         }
     }
 }
@@ -1305,10 +1315,10 @@ pub struct StringLiteralValue {
 }
 
 impl StringLiteralValue {
-    /// Creates a new single string literal with the given value.
-    pub fn single(string: StringLiteral) -> Self {
+    /// Create a new string literal with a single [`StringLiteral`] part.
+    pub fn single_part(string: StringLiteral) -> Self {
         Self {
-            inner: StringLiteralValueInner::Single(string),
+            inner: StringLiteralValueInner::SinglePart(string),
         }
     }
 
@@ -1324,89 +1334,100 @@ impl StringLiteralValue {
             .flags
     }
 
-    /// Creates a new string literal with the given values that represents an
+    /// Create a new string literal with the given values that represents an
     /// implicitly concatenated strings.
     ///
     /// # Panics
     ///
-    /// Panics if `strings` is less than 2. Use [`StringLiteralValue::single`]
-    /// instead.
-    pub fn concatenated(strings: Vec<StringLiteral>) -> Self {
-        assert!(strings.len() > 1);
+    /// Panics if `strings` has less than 2 elements.
+    /// Use [`StringLiteralValue::single_part`] instead.
+    pub fn multi_part(strings: Vec<StringLiteral>) -> Self {
+        assert!(
+            strings.len() > 1,
+            "Use `StringLiteralValue::single_part` to create single-part strings"
+        );
         Self {
-            inner: StringLiteralValueInner::Concatenated(ConcatenatedStringLiteral {
+            inner: StringLiteralValueInner::MultiPart(ConcatenatedStringLiteral {
                 strings,
                 value: OnceLock::new(),
             }),
         }
     }
 
-    /// Returns `true` if the string literal is implicitly concatenated.
-    pub const fn is_implicit_concatenated(&self) -> bool {
-        matches!(self.inner, StringLiteralValueInner::Concatenated(_))
+    /// Return `true` if the string literal is implicitly concatenated.
+    pub const fn is_implicitly_concatenated(&self) -> bool {
+        matches!(self.inner, StringLiteralValueInner::MultiPart(_))
     }
 
-    /// Returns `true` if the string literal is a unicode string.
+    /// Return `true` if the string literal has a `u` prefix, e.g. `u"foo"`.
     ///
-    /// For an implicitly concatenated string, it returns `true` only if the first
-    /// string literal is a unicode string.
-    pub fn is_unicode(&self) -> bool {
+    /// Although all strings in Python 3 are valid unicode (and the `u` prefix
+    /// is only retained for backwards compatibility), these strings are sometimes
+    /// known as "unicode strings".
+    ///
+    /// For an implicitly concatenated string, return `true` only if the first
+    /// string literal has the `u` prefix.
+    pub fn is_u_string(&self) -> bool {
         self.iter()
             .next()
             .is_some_and(|part| part.flags.prefix().is_unicode())
     }
 
-    /// Returns a slice of all the [`StringLiteral`] parts contained in this value.
+    /// Return a slice of all the [`StringLiteral`] parts contained in this value.
     pub fn as_slice(&self) -> &[StringLiteral] {
         match &self.inner {
-            StringLiteralValueInner::Single(value) => std::slice::from_ref(value),
-            StringLiteralValueInner::Concatenated(value) => value.strings.as_slice(),
+            StringLiteralValueInner::SinglePart(value) => std::slice::from_ref(value),
+            StringLiteralValueInner::MultiPart(value) => value.strings.as_slice(),
         }
     }
 
-    /// Returns a mutable slice of all the [`StringLiteral`] parts contained in this value.
+    /// Return a mutable slice of all the [`StringLiteral`] parts contained in this value.
     fn as_mut_slice(&mut self) -> &mut [StringLiteral] {
         match &mut self.inner {
-            StringLiteralValueInner::Single(value) => std::slice::from_mut(value),
-            StringLiteralValueInner::Concatenated(value) => value.strings.as_mut_slice(),
+            StringLiteralValueInner::SinglePart(value) => std::slice::from_mut(value),
+            StringLiteralValueInner::MultiPart(value) => value.strings.as_mut_slice(),
         }
     }
 
-    /// Returns an iterator over all the [`StringLiteral`] parts contained in this value.
+    /// Iterate over all the [`StringLiteral`] parts contained in this value.
     pub fn iter(&self) -> Iter<StringLiteral> {
         self.as_slice().iter()
     }
 
-    /// Returns an iterator over all the [`StringLiteral`] parts contained in this value
+    /// Return an iterator over all the [`StringLiteral`] parts contained in this value
     /// that allows modification.
     pub fn iter_mut(&mut self) -> IterMut<StringLiteral> {
         self.as_mut_slice().iter_mut()
     }
 
-    /// Returns `true` if the string literal value is empty.
+    /// Return `true` if the node represents an empty string.
+    ///
+    /// Note that a [`StringLiteralValue`] node will always have >=1 [`StringLiteral`] parts
+    /// inside it. This method checks whether the value of the concatenated parts is equal
+    /// to the empty string, not whether the string has 0 parts inside it.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Returns the total length of the string literal value, in bytes, not
+    /// Return the total length of the string literal value, in bytes, not
     /// [`char`]s or graphemes.
     pub fn len(&self) -> usize {
         self.iter().fold(0, |acc, part| acc + part.value.len())
     }
 
-    /// Returns an iterator over the [`char`]s of each string literal part.
+    /// Iterate over the [`char`]s of each string literal part.
     pub fn chars(&self) -> impl Iterator<Item = char> + Clone + '_ {
         self.iter().flat_map(|part| part.value.chars())
     }
 
-    /// Returns the concatenated string value as a [`str`].
+    /// Return the concatenated string value as a [`str`].
     ///
     /// Note that this will perform an allocation on the first invocation if the
     /// string value is implicitly concatenated.
     pub fn to_str(&self) -> &str {
         match &self.inner {
-            StringLiteralValueInner::Single(value) => value.as_str(),
-            StringLiteralValueInner::Concatenated(value) => value.to_str(),
+            StringLiteralValueInner::SinglePart(value) => value.as_str(),
+            StringLiteralValueInner::MultiPart(value) => value.to_str(),
         }
     }
 }
@@ -1447,11 +1468,12 @@ impl fmt::Display for StringLiteralValue {
 /// An internal representation of [`StringLiteralValue`].
 #[derive(Clone, Debug, PartialEq)]
 enum StringLiteralValueInner {
-    /// A single string literal i.e., `"foo"`.
-    Single(StringLiteral),
+    /// A single-part string literal, e.g. `"foo"`.
+    SinglePart(StringLiteral),
 
-    /// An implicitly concatenated string literals i.e., `"foo" "bar"`.
-    Concatenated(ConcatenatedStringLiteral),
+    /// An implicitly concatenated string literal that consists of multiple parts,
+    /// e.g. `"foo" "bar"`.
+    MultiPart(ConcatenatedStringLiteral),
 }
 
 bitflags! {
@@ -1672,7 +1694,7 @@ impl From<StringLiteral> for Expr {
     fn from(payload: StringLiteral) -> Self {
         ExprStringLiteral {
             range: payload.range,
-            value: StringLiteralValue::single(payload),
+            value: StringLiteralValue::single_part(payload),
         }
         .into()
     }
@@ -1682,7 +1704,7 @@ impl From<StringLiteral> for Expr {
 /// implicitly concatenated string.
 #[derive(Clone)]
 struct ConcatenatedStringLiteral {
-    /// Each string literal that makes up the concatenated string.
+    /// The individual string-literal parts that make up the concatenated string.
     strings: Vec<StringLiteral>,
     /// The concatenated string value.
     value: OnceLock<Box<str>>,
@@ -1720,12 +1742,24 @@ impl Debug for ConcatenatedStringLiteral {
     }
 }
 
-/// An AST node that represents either a single bytes literal or an implicitly
-/// concatenated bytes literals.
+/// An AST node that represents either a single-part bytestring literal
+/// or an implicitly concatenated bytestring literal.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExprBytesLiteral {
     pub range: TextRange,
     pub value: BytesLiteralValue,
+}
+
+impl ExprBytesLiteral {
+    /// Return `Some(literal)` if the bytestring only consists of a single [`BytesLiteral`] part.
+    /// Return `None` if the bytestring consists of multiple parts
+    /// (indicating that it is implicitly concatenated).
+    pub const fn as_single_part_bytestring(&self) -> Option<&BytesLiteral> {
+        match &self.value.inner {
+            BytesLiteralValueInner::SinglePart(value) => Some(value),
+            BytesLiteralValueInner::MultiPart(_) => None,
+        }
+    }
 }
 
 /// The value representing a [`ExprBytesLiteral`].
@@ -1735,70 +1769,77 @@ pub struct BytesLiteralValue {
 }
 
 impl BytesLiteralValue {
-    /// Creates a new single bytes literal with the given value.
-    pub fn single(value: BytesLiteral) -> Self {
+    /// Create a new bytestring literal with a single [`BytesLiteral`] part.
+    pub fn single_part(value: BytesLiteral) -> Self {
         Self {
-            inner: BytesLiteralValueInner::Single(value),
+            inner: BytesLiteralValueInner::SinglePart(value),
         }
     }
 
-    /// Creates a new bytes literal with the given values that represents an
-    /// implicitly concatenated bytes.
+    /// Create a new bytestring literal with the given values that represents an
+    /// implicitly concatenated bytestring.
     ///
     /// # Panics
     ///
-    /// Panics if `values` is less than 2. Use [`BytesLiteralValue::single`]
-    /// instead.
-    pub fn concatenated(values: Vec<BytesLiteral>) -> Self {
-        assert!(values.len() > 1);
+    /// Panics if `values` has less than 2 elements.
+    /// Use [`BytesLiteralValue::single_part`] instead.
+    pub fn multi_part(values: Vec<BytesLiteral>) -> Self {
+        assert!(
+            values.len() > 1,
+            "Use `BytesLiteralValue::single_part` to create single-part bytestrings"
+        );
         Self {
-            inner: BytesLiteralValueInner::Concatenated(values),
+            inner: BytesLiteralValueInner::MultiPart(values),
         }
     }
 
-    /// Returns `true` if the bytes literal is implicitly concatenated.
-    pub const fn is_implicit_concatenated(&self) -> bool {
-        matches!(self.inner, BytesLiteralValueInner::Concatenated(_))
+    /// Return `true` if the bytestring is implicitly concatenated.
+    pub const fn is_implicitly_concatenated(&self) -> bool {
+        matches!(self.inner, BytesLiteralValueInner::MultiPart(_))
     }
 
-    /// Returns a slice of all the [`BytesLiteral`] parts contained in this value.
+    /// Return a slice of all the [`BytesLiteral`] parts contained in this value.
     pub fn as_slice(&self) -> &[BytesLiteral] {
         match &self.inner {
-            BytesLiteralValueInner::Single(value) => std::slice::from_ref(value),
-            BytesLiteralValueInner::Concatenated(value) => value.as_slice(),
+            BytesLiteralValueInner::SinglePart(value) => std::slice::from_ref(value),
+            BytesLiteralValueInner::MultiPart(value) => value.as_slice(),
         }
     }
 
-    /// Returns a mutable slice of all the [`BytesLiteral`] parts contained in this value.
+    /// Return a mutable slice of all the [`BytesLiteral`] parts contained in this value.
     fn as_mut_slice(&mut self) -> &mut [BytesLiteral] {
         match &mut self.inner {
-            BytesLiteralValueInner::Single(value) => std::slice::from_mut(value),
-            BytesLiteralValueInner::Concatenated(value) => value.as_mut_slice(),
+            BytesLiteralValueInner::SinglePart(value) => std::slice::from_mut(value),
+            BytesLiteralValueInner::MultiPart(value) => value.as_mut_slice(),
         }
     }
 
-    /// Returns an iterator over all the [`BytesLiteral`] parts contained in this value.
+    /// Iterate over all the [`BytesLiteral`] parts contained in this value.
     pub fn iter(&self) -> Iter<BytesLiteral> {
         self.as_slice().iter()
     }
 
-    /// Returns an iterator over all the [`BytesLiteral`] parts contained in this value
+    /// Return an iterator over all the [`BytesLiteral`] parts contained in this value
     /// that allows modification.
     pub fn iter_mut(&mut self) -> IterMut<BytesLiteral> {
         self.as_mut_slice().iter_mut()
     }
 
-    /// Returns `true` if the concatenated bytes has a length of zero.
+    /// Return `true` if the node represents an empty bytestring.
+    ///
+    /// Note that a [`BytesLiteralValue`] node will always have >=1 [`BytesLiteral`] parts
+    /// inside it. This method checks whether the value of the concatenated parts is equal
+    /// to the empty bytestring, not whether the bytestring has 0 parts inside it.
     pub fn is_empty(&self) -> bool {
         self.iter().all(|part| part.is_empty())
     }
 
-    /// Returns the length of the concatenated bytes.
+    /// Return the length of the concatenated bytestring.
     pub fn len(&self) -> usize {
         self.iter().map(|part| part.len()).sum()
     }
 
-    /// Returns an iterator over the bytes of the concatenated bytes.
+    /// Iterate over the bytes of the concatenated bytestring.
     pub fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
         self.iter().flat_map(|part| part.as_slice().iter().copied())
     }
@@ -1836,10 +1877,10 @@ impl PartialEq<[u8]> for BytesLiteralValue {
 impl<'a> From<&'a BytesLiteralValue> for Cow<'a, [u8]> {
     fn from(value: &'a BytesLiteralValue) -> Self {
         match &value.inner {
-            BytesLiteralValueInner::Single(BytesLiteral {
+            BytesLiteralValueInner::SinglePart(BytesLiteral {
                 value: bytes_value, ..
             }) => Cow::from(bytes_value.as_ref()),
-            BytesLiteralValueInner::Concatenated(bytes_literal_vec) => Cow::Owned(
+            BytesLiteralValueInner::MultiPart(bytes_literal_vec) => Cow::Owned(
                 bytes_literal_vec
                     .iter()
                     .flat_map(|bytes_literal| bytes_literal.value.to_vec())
@@ -1852,11 +1893,12 @@ impl<'a> From<&'a BytesLiteralValue> for Cow<'a, [u8]> {
 /// An internal representation of [`BytesLiteralValue`].
 #[derive(Clone, Debug, PartialEq)]
 enum BytesLiteralValueInner {
-    /// A single bytes literal i.e., `b"foo"`.
-    Single(BytesLiteral),
+    /// A single-part bytestring, e.g. `b"foo"`.
+    SinglePart(BytesLiteral),
 
-    /// An implicitly concatenated bytes literals i.e., `b"foo" b"bar"`.
-    Concatenated(Vec<BytesLiteral>),
+    /// An implicitly concatenated bytestring that consists of multiple parts,
+    /// e.g. `b"foo" b"bar"`.
+    MultiPart(Vec<BytesLiteral>),
 }
 
 bitflags! {
@@ -1886,7 +1928,7 @@ bitflags! {
 }
 
 /// Flags that can be queried to obtain information
-/// regarding the prefixes and quotes used for a bytes literal.
+/// regarding the prefixes and quotes used for a bytestring literal.
 ///
 /// ## Notes on usage
 ///
@@ -2003,7 +2045,7 @@ impl fmt::Debug for BytesLiteralFlags {
     }
 }
 
-/// An AST node that represents a single bytes literal which is part of an
+/// An AST node that represents a single bytes-literal part which is part of an
 /// [`ExprBytesLiteral`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct BytesLiteral {
@@ -2040,7 +2082,7 @@ impl From<BytesLiteral> for Expr {
     fn from(payload: BytesLiteral) -> Self {
         ExprBytesLiteral {
             range: payload.range,
-            value: BytesLiteralValue::single(payload),
+            value: BytesLiteralValue::single_part(payload),
         }
         .into()
     }

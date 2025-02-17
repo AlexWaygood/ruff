@@ -800,7 +800,7 @@ impl<'a> DocstringStmt<'a> {
 
     pub(crate) fn is_docstring_statement(stmt: &StmtExpr, context: &PyFormatContext) -> bool {
         if let Expr::StringLiteral(ast::ExprStringLiteral { value, .. }) = stmt.value.as_ref() {
-            !value.is_implicit_concatenated()
+            !value.is_implicitly_concatenated()
                 || !value.iter().any(|literal| context.comments().has(literal))
         } else {
             false

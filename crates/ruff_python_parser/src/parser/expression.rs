@@ -1109,15 +1109,15 @@ impl<'src> Parser<'src> {
             // We need a owned value, hence the `pop` here.
             1 => match strings.pop().unwrap() {
                 StringType::Str(string) => Expr::StringLiteral(ast::ExprStringLiteral {
-                    value: ast::StringLiteralValue::single(string),
+                    value: ast::StringLiteralValue::single_part(string),
                     range,
                 }),
                 StringType::Bytes(bytes) => Expr::BytesLiteral(ast::ExprBytesLiteral {
-                    value: ast::BytesLiteralValue::single(bytes),
+                    value: ast::BytesLiteralValue::single_part(bytes),
                     range,
                 }),
                 StringType::FString(fstring) => Expr::FString(ast::ExprFString {
-                    value: ast::FStringValue::single(fstring),
+                    value: ast::FStringValue::single_part(fstring),
                     range,
                 }),
             },
@@ -1181,7 +1181,7 @@ impl<'src> Parser<'src> {
                         });
                     }
                     return Expr::from(ast::ExprBytesLiteral {
-                        value: ast::BytesLiteralValue::concatenated(values),
+                        value: ast::BytesLiteralValue::multi_part(values),
                         range,
                     });
                 }
@@ -1220,7 +1220,7 @@ impl<'src> Parser<'src> {
                 });
             }
             return Expr::from(ast::ExprStringLiteral {
-                value: ast::StringLiteralValue::concatenated(values),
+                value: ast::StringLiteralValue::multi_part(values),
                 range,
             });
         }
@@ -1237,7 +1237,7 @@ impl<'src> Parser<'src> {
         }
 
         Expr::from(ast::ExprFString {
-            value: ast::FStringValue::concatenated(parts),
+            value: ast::FStringValue::multi_part(parts),
             range,
         })
     }

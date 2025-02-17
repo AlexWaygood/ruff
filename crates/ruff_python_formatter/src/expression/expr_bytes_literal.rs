@@ -13,9 +13,7 @@ pub struct FormatExprBytesLiteral;
 
 impl FormatNodeRule<ExprBytesLiteral> for FormatExprBytesLiteral {
     fn fmt_fields(&self, item: &ExprBytesLiteral, f: &mut PyFormatter) -> FormatResult<()> {
-        let ExprBytesLiteral { value, .. } = item;
-
-        if let [bytes_literal] = value.as_slice() {
+        if let Some(bytes_literal) = item.as_single_part_bytestring() {
             bytes_literal.format().fmt(f)
         } else {
             // Always join byte literals that aren't parenthesized and thus, always on a single line.
@@ -38,7 +36,7 @@ impl NeedsParentheses for ExprBytesLiteral {
         _parent: AnyNodeRef,
         context: &PyFormatContext,
     ) -> OptionalParentheses {
-        if self.value.is_implicit_concatenated() {
+        if self.value.is_implicitly_concatenated() {
             OptionalParentheses::Multiline
         } else if StringLike::Bytes(self).is_multiline(context) {
             OptionalParentheses::Never

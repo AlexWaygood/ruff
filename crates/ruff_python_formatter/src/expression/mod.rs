@@ -1221,9 +1221,9 @@ pub(crate) fn is_splittable_expression(expr: &Expr, context: &PyFormatContext) -
         }
 
         // String like literals can expand if they are implicit concatenated.
-        Expr::FString(fstring) => fstring.value.is_implicit_concatenated(),
-        Expr::StringLiteral(string) => string.value.is_implicit_concatenated(),
-        Expr::BytesLiteral(bytes) => bytes.value.is_implicit_concatenated(),
+        Expr::FString(fstring) => fstring.value.is_implicitly_concatenated(),
+        Expr::StringLiteral(string) => string.value.is_implicitly_concatenated(),
+        Expr::BytesLiteral(bytes) => bytes.value.is_implicitly_concatenated(),
 
         // Expressions that have no split points per se, but they contain nested sub expressions that might expand.
         Expr::Lambda(ast::ExprLambda {

@@ -76,6 +76,13 @@ impl FStringPrefix {
     pub const fn is_raw(self) -> bool {
         matches!(self, Self::Raw { .. })
     }
+
+    pub const fn text_len(self) -> TextSize {
+        match self {
+            Self::Regular => TextSize::new(1),
+            Self::Raw { .. } => TextSize::new(2),
+        }
+    }
 }
 
 impl fmt::Display for FStringPrefix {
@@ -102,6 +109,13 @@ impl ByteStringPrefix {
             Self::Regular => "b",
             Self::Raw { uppercase_r: true } => "Rb",
             Self::Raw { uppercase_r: false } => "rb",
+        }
+    }
+
+    pub const fn text_len(self) -> TextSize {
+        match self {
+            Self::Regular => TextSize::new(1),
+            Self::Raw { .. } => TextSize::new(2),
         }
     }
 
@@ -155,6 +169,14 @@ impl AnyStringPrefix {
             Self::Regular(regular_prefix) => regular_prefix.is_raw(),
             Self::Bytes(bytestring_prefix) => bytestring_prefix.is_raw(),
             Self::Format(fstring_prefix) => fstring_prefix.is_raw(),
+        }
+    }
+
+    pub const fn text_len(self) -> TextSize {
+        match self {
+            Self::Regular(regular_prefix) => regular_prefix.text_len(),
+            Self::Bytes(bytestring_prefix) => bytestring_prefix.text_len(),
+            Self::Format(fstring_prefix) => fstring_prefix.text_len(),
         }
     }
 }
