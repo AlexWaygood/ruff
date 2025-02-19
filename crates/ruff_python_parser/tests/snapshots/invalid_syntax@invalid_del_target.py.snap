@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/inline/err/invalid_del_target.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -52,7 +51,7 @@ Module(
                                                 ExprStringLiteral {
                                                     range: 15..18,
                                                     value: StringLiteralValue {
-                                                        inner: Single(
+                                                        inner: SinglePart(
                                                             StringLiteral {
                                                                 range: 15..18,
                                                                 value: "x",
@@ -94,7 +93,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 28..31,
                                             value: StringLiteralValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     StringLiteral {
                                                         range: 28..31,
                                                         value: "x",
@@ -112,7 +111,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 33..36,
                                             value: StringLiteralValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     StringLiteral {
                                                         range: 33..36,
                                                         value: "y",
@@ -173,7 +172,7 @@ Module(
                             ExprStringLiteral {
                                 range: 69..74,
                                 value: StringLiteralValue {
-                                    inner: Single(
+                                    inner: SinglePart(
                                         StringLiteral {
                                             range: 69..74,
                                             value: "abc",

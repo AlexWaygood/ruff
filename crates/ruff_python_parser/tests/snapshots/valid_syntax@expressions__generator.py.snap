@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/expressions/generator.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -529,7 +528,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 340..343,
                                             value: StringLiteralValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     StringLiteral {
                                                         range: 340..343,
                                                         value: " ",
@@ -594,7 +593,7 @@ Module(
                                                                                     ExprStringLiteral {
                                                                                         range: 383..393,
                                                                                         value: StringLiteralValue {
-                                                                                            inner: Single(
+                                                                                            inner: SinglePart(
                                                                                                 StringLiteral {
                                                                                                     range: 383..393,
                                                                                                     value: "LIMIT %d",
@@ -642,7 +641,7 @@ Module(
                                                                                     ExprStringLiteral {
                                                                                         range: 431..442,
                                                                                         value: StringLiteralValue {
-                                                                                            inner: Single(
+                                                                                            inner: SinglePart(
                                                                                                 StringLiteral {
                                                                                                     range: 431..442,
                                                                                                     value: "OFFSET %d",

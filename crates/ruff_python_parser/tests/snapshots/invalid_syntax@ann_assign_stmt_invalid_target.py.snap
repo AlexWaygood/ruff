@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/inline/err/ann_assign_stmt_invalid_target.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -17,7 +16,7 @@ Module(
                         ExprStringLiteral {
                             range: 0..5,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 0..5,
                                         value: "abc",
@@ -43,7 +42,7 @@ Module(
                             ExprStringLiteral {
                                 range: 13..18,
                                 value: StringLiteralValue {
-                                    inner: Single(
+                                    inner: SinglePart(
                                         StringLiteral {
                                             range: 13..18,
                                             value: "def",
@@ -93,7 +92,7 @@ Module(
                             ExprStringLiteral {
                                 range: 33..37,
                                 value: StringLiteralValue {
-                                    inner: Single(
+                                    inner: SinglePart(
                                         StringLiteral {
                                             range: 33..37,
                                             value: "no",

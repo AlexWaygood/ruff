@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/statement/while.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -155,7 +154,7 @@ Module(
                                                     ExprStringLiteral {
                                                         range: 96..110,
                                                         value: StringLiteralValue {
-                                                            inner: Single(
+                                                            inner: SinglePart(
                                                                 StringLiteral {
                                                                     range: 96..110,
                                                                     value: "Hello World!",
@@ -198,7 +197,7 @@ Module(
                                                     ExprStringLiteral {
                                                         range: 129..143,
                                                         value: StringLiteralValue {
-                                                            inner: Single(
+                                                            inner: SinglePart(
                                                                 StringLiteral {
                                                                     range: 129..143,
                                                                     value: "Olá, Mundo!",

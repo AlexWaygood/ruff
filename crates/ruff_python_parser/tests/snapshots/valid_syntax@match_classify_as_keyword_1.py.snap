@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/inline/ok/match_classify_as_keyword_1.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -169,7 +168,7 @@ Module(
                         ExprStringLiteral {
                             range: 111..116,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 111..116,
                                         value: "foo",
@@ -217,7 +216,7 @@ Module(
                         ExprFString {
                             range: 140..150,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 140..150,

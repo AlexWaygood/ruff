@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/expressions/dictionary.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -113,7 +112,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 35..42,
                                             value: StringLiteralValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     StringLiteral {
                                                         range: 35..42,
                                                         value: "hello",
@@ -357,7 +356,7 @@ Module(
                                             ExprStringLiteral {
                                                 range: 173..176,
                                                 value: StringLiteralValue {
-                                                    inner: Single(
+                                                    inner: SinglePart(
                                                         StringLiteral {
                                                             range: 173..176,
                                                             value: "A",
@@ -412,7 +411,7 @@ Module(
                                             ExprStringLiteral {
                                                 range: 194..197,
                                                 value: StringLiteralValue {
-                                                    inner: Single(
+                                                    inner: SinglePart(
                                                         StringLiteral {
                                                             range: 194..197,
                                                             value: "B",
@@ -646,7 +645,7 @@ Module(
                                             ExprStringLiteral {
                                                 range: 314..317,
                                                 value: StringLiteralValue {
-                                                    inner: Single(
+                                                    inner: SinglePart(
                                                         StringLiteral {
                                                             range: 314..317,
                                                             value: "a",
@@ -665,7 +664,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 319..322,
                                             value: StringLiteralValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     StringLiteral {
                                                         range: 319..322,
                                                         value: "b",
@@ -696,7 +695,7 @@ Module(
                                             ExprStringLiteral {
                                                 range: 329..332,
                                                 value: StringLiteralValue {
-                                                    inner: Single(
+                                                    inner: SinglePart(
                                                         StringLiteral {
                                                             range: 329..332,
                                                             value: "d",
@@ -715,7 +714,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 334..337,
                                             value: StringLiteralValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     StringLiteral {
                                                         range: 334..337,
                                                         value: "e",
@@ -774,7 +773,7 @@ Module(
                                                             ExprStringLiteral {
                                                                 range: 349..357,
                                                                 value: StringLiteralValue {
-                                                                    inner: Single(
+                                                                    inner: SinglePart(
                                                                         StringLiteral {
                                                                             range: 349..357,
                                                                             value: "nested",
@@ -793,7 +792,7 @@ Module(
                                                         ExprStringLiteral {
                                                             range: 359..365,
                                                             value: StringLiteralValue {
-                                                                inner: Single(
+                                                                inner: SinglePart(
                                                                     StringLiteral {
                                                                         range: 359..365,
                                                                         value: "dict",

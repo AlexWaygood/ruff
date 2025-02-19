@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/src/string.rs
 expression: suite
-snapshot_kind: text
 ---
 [
     Assign(
@@ -20,7 +19,7 @@ snapshot_kind: text
                 ExprStringLiteral {
                     range: 7..16,
                     value: StringLiteralValue {
-                        inner: Single(
+                        inner: SinglePart(
                             StringLiteral {
                                 range: 7..16,
                                 value: "\u{3}8[1m",

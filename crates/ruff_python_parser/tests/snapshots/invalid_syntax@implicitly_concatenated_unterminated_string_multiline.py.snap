@@ -16,7 +16,7 @@ Module(
                         ExprFString {
                             range: 6..31,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         Literal(
                                             StringLiteral {
@@ -103,7 +103,7 @@ Module(
                         ExprStringLiteral {
                             range: 44..51,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 44..51,
                                         value: "first",
@@ -126,7 +126,7 @@ Module(
                         ExprFString {
                             range: 68..76,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 68..76,

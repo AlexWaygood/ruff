@@ -243,7 +243,7 @@ Module(
                                             ExprStringLiteral {
                                                 range: 187..190,
                                                 value: StringLiteralValue {
-                                                    inner: Single(
+                                                    inner: SinglePart(
                                                         StringLiteral {
                                                             range: 187..190,
                                                             value: "a",
@@ -683,7 +683,7 @@ Module(
                         ExprFString {
                             range: 387..396,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 387..396,
@@ -733,7 +733,7 @@ Module(
                         ExprFString {
                             range: 403..421,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 403..421,
@@ -804,7 +804,7 @@ Module(
                         ExprStringLiteral {
                             range: 429..434,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 429..434,
                                         value: "foo",
@@ -836,7 +836,7 @@ Module(
                         ExprBytesLiteral {
                             range: 441..447,
                             value: BytesLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     BytesLiteral {
                                         range: 441..447,
                                         value: [

@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/inline/err/f_string_unclosed_lbrace_in_format_spec.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -17,7 +16,7 @@ Module(
                         ExprFString {
                             range: 0..12,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 0..12,
@@ -69,7 +68,7 @@ Module(
                         ExprFString {
                             range: 13..28,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 13..28,

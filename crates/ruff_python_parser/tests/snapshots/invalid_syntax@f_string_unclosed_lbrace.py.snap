@@ -16,7 +16,7 @@ Module(
                         ExprFString {
                             range: 0..4,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 0..4,
@@ -57,7 +57,7 @@ Module(
                         ExprFString {
                             range: 5..14,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 5..14,
@@ -98,7 +98,7 @@ Module(
                         ExprFString {
                             range: 15..23,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 15..23,
@@ -144,7 +144,7 @@ Module(
                         ExprFString {
                             range: 24..37,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         FString(
                                             FString {

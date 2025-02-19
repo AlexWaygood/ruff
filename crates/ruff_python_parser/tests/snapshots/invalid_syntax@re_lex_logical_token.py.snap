@@ -521,7 +521,7 @@ Module(
                                         ExprFString {
                                             range: 895..905,
                                             value: FStringValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     FString(
                                                         FString {
                                                             range: 895..905,
@@ -617,7 +617,7 @@ Module(
                                         ExprFString {
                                             range: 944..951,
                                             value: FStringValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     FString(
                                                         FString {
                                                             range: 944..951,

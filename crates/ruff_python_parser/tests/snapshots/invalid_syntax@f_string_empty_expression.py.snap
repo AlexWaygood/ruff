@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/inline/err/f_string_empty_expression.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -17,7 +16,7 @@ Module(
                         ExprFString {
                             range: 0..5,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 0..5,
@@ -58,7 +57,7 @@ Module(
                         ExprFString {
                             range: 6..13,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 6..13,

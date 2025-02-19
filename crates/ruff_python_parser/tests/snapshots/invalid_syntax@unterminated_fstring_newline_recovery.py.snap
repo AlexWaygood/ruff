@@ -16,7 +16,7 @@ Module(
                         ExprFString {
                             range: 0..7,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 0..7,
@@ -68,7 +68,7 @@ Module(
                         ExprFString {
                             range: 14..24,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 14..24,
@@ -142,7 +142,7 @@ Module(
                         ExprFString {
                             range: 31..42,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 31..42,
@@ -221,7 +221,7 @@ Module(
                         ExprFString {
                             range: 49..60,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 49..60,

@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/src/string.rs
 expression: suite
-snapshot_kind: text
 ---
 [
     Expr(
@@ -11,7 +10,7 @@ snapshot_kind: text
                 ExprBytesLiteral {
                     range: 0..8,
                     value: BytesLiteralValue {
-                        inner: Single(
+                        inner: SinglePart(
                             BytesLiteral {
                                 range: 0..8,
                                 value: [

@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/expressions/string.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -17,7 +16,7 @@ Module(
                         ExprStringLiteral {
                             range: 0..13,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 0..13,
                                         value: "Hello World",
@@ -40,7 +39,7 @@ Module(
                         ExprStringLiteral {
                             range: 14..20,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 14..20,
                                         value: "😎",
@@ -63,7 +62,7 @@ Module(
                         ExprStringLiteral {
                             range: 21..32,
                             value: StringLiteralValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     ConcatenatedStringLiteral {
                                         strings: [
                                             StringLiteral {
@@ -100,7 +99,7 @@ Module(
                         ExprStringLiteral {
                             range: 39..58,
                             value: StringLiteralValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     ConcatenatedStringLiteral {
                                         strings: [
                                             StringLiteral {
@@ -146,7 +145,7 @@ Module(
                         ExprStringLiteral {
                             range: 61..79,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 61..79,
                                         value: "Olá, Mundo!",
@@ -169,7 +168,7 @@ Module(
                         ExprStringLiteral {
                             range: 80..91,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 80..91,
                                         value: "ABCDE",
@@ -192,7 +191,7 @@ Module(
                         ExprStringLiteral {
                             range: 98..119,
                             value: StringLiteralValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     ConcatenatedStringLiteral {
                                         strings: [
                                             StringLiteral {
@@ -229,7 +228,7 @@ Module(
                         ExprBytesLiteral {
                             range: 122..136,
                             value: BytesLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     BytesLiteral {
                                         range: 122..136,
                                         value: [
@@ -264,7 +263,7 @@ Module(
                         ExprBytesLiteral {
                             range: 137..161,
                             value: BytesLiteralValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         BytesLiteral {
                                             range: 137..145,

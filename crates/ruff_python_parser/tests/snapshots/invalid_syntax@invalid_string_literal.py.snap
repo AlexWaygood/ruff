@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/inline/err/invalid_string_literal.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -17,7 +16,7 @@ Module(
                         ExprStringLiteral {
                             range: 0..25,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 0..25,
                                         value: "",
@@ -40,7 +39,7 @@ Module(
                         ExprStringLiteral {
                             range: 26..55,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 26..55,
                                         value: "",

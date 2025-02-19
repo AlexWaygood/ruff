@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/inline/err/mixed_bytes_and_non_bytes_literals.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -17,7 +16,7 @@ Module(
                         ExprStringLiteral {
                             range: 0..17,
                             value: StringLiteralValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     ConcatenatedStringLiteral {
                                         strings: [
                                             StringLiteral {
@@ -54,7 +53,7 @@ Module(
                         ExprFString {
                             range: 18..36,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         FString(
                                             FString {
@@ -99,7 +98,7 @@ Module(
                         ExprFString {
                             range: 37..63,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         Literal(
                                             StringLiteral {

@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/invalid/re_lexing/triple_quoted_fstring_3.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -30,7 +29,7 @@ Module(
                                         ExprFString {
                                             range: 239..253,
                                             value: FStringValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     FString(
                                                         FString {
                                                             range: 239..253,

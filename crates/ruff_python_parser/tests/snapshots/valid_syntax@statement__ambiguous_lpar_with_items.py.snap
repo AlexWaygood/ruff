@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/statement/ambiguous_lpar_with_items.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -940,7 +939,7 @@ Module(
                                 ExprFString {
                                     range: 1186..1201,
                                     value: FStringValue {
-                                        inner: Single(
+                                        inner: SinglePart(
                                             FString(
                                                 FString {
                                                     range: 1186..1201,
@@ -1012,7 +1011,7 @@ Module(
                                 ExprFString {
                                     range: 1214..1231,
                                     value: FStringValue {
-                                        inner: Single(
+                                        inner: SinglePart(
                                             FString(
                                                 FString {
                                                     range: 1214..1231,
@@ -2345,7 +2344,7 @@ Module(
                                                 ExprStringLiteral {
                                                     range: 2181..2187,
                                                     value: StringLiteralValue {
-                                                        inner: Single(
+                                                        inner: SinglePart(
                                                             StringLiteral {
                                                                 range: 2181..2187,
                                                                 value: "a.py",
@@ -2385,7 +2384,7 @@ Module(
                                                 ExprStringLiteral {
                                                     range: 2197..2203,
                                                     value: StringLiteralValue {
-                                                        inner: Single(
+                                                        inner: SinglePart(
                                                             StringLiteral {
                                                                 range: 2197..2203,
                                                                 value: "b.py",

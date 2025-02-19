@@ -112,7 +112,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 89..92,
                                             value: StringLiteralValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     StringLiteral {
                                                         range: 89..92,
                                                         value: "a",

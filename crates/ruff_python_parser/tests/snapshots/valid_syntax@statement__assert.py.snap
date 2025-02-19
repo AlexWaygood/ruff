@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/statement/assert.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -198,7 +197,7 @@ Module(
                             ExprStringLiteral {
                                 range: 111..118,
                                 value: StringLiteralValue {
-                                    inner: Single(
+                                    inner: SinglePart(
                                         StringLiteral {
                                             range: 111..118,
                                             value: "error",

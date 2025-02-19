@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/statement/type.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -89,7 +88,7 @@ Module(
                                 ExprStringLiteral {
                                     range: 47..60,
                                     value: StringLiteralValue {
-                                        inner: Single(
+                                        inner: SinglePart(
                                             StringLiteral {
                                                 range: 47..60,
                                                 value: "ForwardRefY",

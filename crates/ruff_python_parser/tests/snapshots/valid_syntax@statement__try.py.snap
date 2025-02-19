@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/statement/try.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -571,7 +570,7 @@ Module(
                                                                 ExprFString {
                                                                     range: 505..524,
                                                                     value: FStringValue {
-                                                                        inner: Single(
+                                                                        inner: SinglePart(
                                                                             FString(
                                                                                 FString {
                                                                                     range: 505..524,
@@ -676,7 +675,7 @@ Module(
                                                                 ExprFString {
                                                                     range: 557..576,
                                                                     value: FStringValue {
-                                                                        inner: Single(
+                                                                        inner: SinglePart(
                                                                             FString(
                                                                                 FString {
                                                                                     range: 557..576,
@@ -773,7 +772,7 @@ Module(
                                                         ExprStringLiteral {
                                                             range: 609..613,
                                                             value: StringLiteralValue {
-                                                                inner: Single(
+                                                                inner: SinglePart(
                                                                     StringLiteral {
                                                                         range: 609..613,
                                                                         value: "eg",
@@ -949,7 +948,7 @@ Module(
                                                                 ExprFString {
                                                                     range: 704..750,
                                                                     value: FStringValue {
-                                                                        inner: Single(
+                                                                        inner: SinglePart(
                                                                             FString(
                                                                                 FString {
                                                                                     range: 704..750,
@@ -1085,7 +1084,7 @@ Module(
                                                                 ExprFString {
                                                                     range: 784..830,
                                                                     value: FStringValue {
-                                                                        inner: Single(
+                                                                        inner: SinglePart(
                                                                             FString(
                                                                                 FString {
                                                                                     range: 784..830,
@@ -1207,7 +1206,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 854..865,
                                             value: StringLiteralValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     StringLiteral {
                                                         range: 854..865,
                                                         value: "exception",

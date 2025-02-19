@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/src/string.rs
 expression: suite
-snapshot_kind: text
 ---
 [
     Expr(
@@ -11,7 +10,7 @@ snapshot_kind: text
                 ExprFString {
                     range: 0..22,
                     value: FStringValue {
-                        inner: Concatenated(
+                        inner: MultiPart(
                             [
                                 Literal(
                                     StringLiteral {
@@ -41,7 +40,7 @@ snapshot_kind: text
                                                         ExprStringLiteral {
                                                             range: 17..20,
                                                             value: StringLiteralValue {
-                                                                inner: Single(
+                                                                inner: SinglePart(
                                                                     StringLiteral {
                                                                         range: 17..20,
                                                                         value: "!",

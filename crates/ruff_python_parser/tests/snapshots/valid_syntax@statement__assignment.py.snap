@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/statement/assignment.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -775,7 +774,7 @@ Module(
                                     ExprStringLiteral {
                                         range: 669..674,
                                         value: StringLiteralValue {
-                                            inner: Single(
+                                            inner: SinglePart(
                                                 StringLiteral {
                                                     range: 669..674,
                                                     value: "foo",

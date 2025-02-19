@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/valid/expressions/f_string.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -17,7 +16,7 @@ Module(
                         ExprFString {
                             range: 18..21,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 18..21,
@@ -42,7 +41,7 @@ Module(
                         ExprFString {
                             range: 22..25,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 22..25,
@@ -67,7 +66,7 @@ Module(
                         ExprFString {
                             range: 26..29,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 26..29,
@@ -92,7 +91,7 @@ Module(
                         ExprFString {
                             range: 30..37,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 30..37,
@@ -117,7 +116,7 @@ Module(
                         ExprFString {
                             range: 38..45,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 38..45,
@@ -142,7 +141,7 @@ Module(
                         ExprFString {
                             range: 47..56,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 47..56,
@@ -154,7 +153,7 @@ Module(
                                                             ExprStringLiteral {
                                                                 range: 50..54,
                                                                 value: StringLiteralValue {
-                                                                    inner: Single(
+                                                                    inner: SinglePart(
                                                                         StringLiteral {
                                                                             range: 50..54,
                                                                             value: " f",
@@ -194,7 +193,7 @@ Module(
                         ExprFString {
                             range: 57..67,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 57..67,
@@ -235,7 +234,7 @@ Module(
                         ExprFString {
                             range: 68..75,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 68..75,
@@ -286,7 +285,7 @@ Module(
                         ExprFString {
                             range: 76..86,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 76..86,
@@ -351,7 +350,7 @@ Module(
                         ExprFString {
                             range: 87..102,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 87..102,
@@ -380,7 +379,7 @@ Module(
                                                                                 ExprStringLiteral {
                                                                                     range: 93..96,
                                                                                     value: StringLiteralValue {
-                                                                                        inner: Single(
+                                                                                        inner: SinglePart(
                                                                                             StringLiteral {
                                                                                                 range: 93..96,
                                                                                                 value: "}",
@@ -431,7 +430,7 @@ Module(
                         ExprFString {
                             range: 103..118,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 103..118,
@@ -460,7 +459,7 @@ Module(
                                                                                 ExprStringLiteral {
                                                                                     range: 109..112,
                                                                                     value: StringLiteralValue {
-                                                                                        inner: Single(
+                                                                                        inner: SinglePart(
                                                                                             StringLiteral {
                                                                                                 range: 109..112,
                                                                                                 value: "{",
@@ -511,7 +510,7 @@ Module(
                         ExprFString {
                             range: 119..133,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 119..133,
@@ -557,7 +556,7 @@ Module(
                         ExprFString {
                             range: 134..154,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 134..154,
@@ -615,7 +614,7 @@ Module(
                         ExprFString {
                             range: 155..173,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 155..173,
@@ -661,7 +660,7 @@ Module(
                         ExprFString {
                             range: 174..190,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 174..190,
@@ -725,7 +724,7 @@ Module(
                         ExprFString {
                             range: 191..217,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 191..217,
@@ -737,7 +736,7 @@ Module(
                                                             ExprFString {
                                                                 range: 194..210,
                                                                 value: FStringValue {
-                                                                    inner: Single(
+                                                                    inner: SinglePart(
                                                                         FString(
                                                                             FString {
                                                                                 range: 194..210,
@@ -831,7 +830,7 @@ Module(
                                             ExprFString {
                                                 range: 220..248,
                                                 value: FStringValue {
-                                                    inner: Concatenated(
+                                                    inner: MultiPart(
                                                         [
                                                             Literal(
                                                                 StringLiteral {
@@ -947,7 +946,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 274..279,
                                             value: StringLiteralValue {
-                                                inner: Single(
+                                                inner: SinglePart(
                                                     StringLiteral {
                                                         range: 274..279,
                                                         value: "one",
@@ -981,7 +980,7 @@ Module(
                                         ExprStringLiteral {
                                             range: 303..331,
                                             value: StringLiteralValue {
-                                                inner: Concatenated(
+                                                inner: MultiPart(
                                                     ConcatenatedStringLiteral {
                                                         strings: [
                                                             StringLiteral {
@@ -1030,7 +1029,7 @@ Module(
                         ExprFString {
                             range: 347..364,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 347..364,
@@ -1110,7 +1109,7 @@ Module(
                         ExprFString {
                             range: 365..379,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 365..379,
@@ -1142,7 +1141,7 @@ Module(
                         ExprFString {
                             range: 380..420,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 380..420,
@@ -1195,7 +1194,7 @@ Module(
                         ExprFString {
                             range: 421..439,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 421..439,
@@ -1241,7 +1240,7 @@ Module(
                         ExprFString {
                             range: 441..486,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 441..486,
@@ -1336,7 +1335,7 @@ Module(
                         ExprFString {
                             range: 487..529,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 487..529,
@@ -1446,7 +1445,7 @@ Module(
                         ExprFString {
                             range: 530..549,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 530..549,
@@ -1505,7 +1504,7 @@ Module(
                         ExprFString {
                             range: 550..568,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 550..568,
@@ -1595,7 +1594,7 @@ Module(
                         ExprFString {
                             range: 569..588,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 569..588,
@@ -1671,7 +1670,7 @@ Module(
                         ExprFString {
                             range: 589..597,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 589..597,
@@ -1717,7 +1716,7 @@ Module(
                         ExprFString {
                             range: 598..611,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 598..611,
@@ -1763,7 +1762,7 @@ Module(
                         ExprFString {
                             range: 612..621,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 612..621,
@@ -1809,7 +1808,7 @@ Module(
                         ExprFString {
                             range: 622..636,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 622..636,
@@ -1862,7 +1861,7 @@ Module(
                         ExprFString {
                             range: 637..653,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 637..653,
@@ -1920,7 +1919,7 @@ Module(
                         ExprFString {
                             range: 654..667,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 654..667,
@@ -1973,7 +1972,7 @@ Module(
                         ExprFString {
                             range: 668..682,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         Literal(
                                             StringLiteral {
@@ -2027,7 +2026,7 @@ Module(
                         ExprFString {
                             range: 683..696,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         FString(
                                             FString {
@@ -2097,7 +2096,7 @@ Module(
                         ExprFString {
                             range: 697..711,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         FString(
                                             FString {
@@ -2151,7 +2150,7 @@ Module(
                         ExprFString {
                             range: 712..756,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 712..756,
@@ -2220,7 +2219,7 @@ Module(
                         ExprFString {
                             range: 757..775,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         Literal(
                                             StringLiteral {
@@ -2285,7 +2284,7 @@ Module(
                         ExprFString {
                             range: 782..823,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         FString(
                                             FString {
@@ -2388,7 +2387,7 @@ Module(
                         ExprFString {
                             range: 850..879,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         Literal(
                                             StringLiteral {
@@ -2464,7 +2463,7 @@ Module(
                         ExprFString {
                             range: 880..909,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         Literal(
                                             StringLiteral {
@@ -2540,7 +2539,7 @@ Module(
                         ExprFString {
                             range: 910..939,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         Literal(
                                             StringLiteral {
@@ -2616,7 +2615,7 @@ Module(
                         ExprFString {
                             range: 940..978,
                             value: FStringValue {
-                                inner: Concatenated(
+                                inner: MultiPart(
                                     [
                                         Literal(
                                             StringLiteral {

@@ -1,7 +1,6 @@
 ---
 source: crates/ruff_python_parser/tests/fixtures.rs
 input_file: crates/ruff_python_parser/resources/inline/err/invalid_byte_literal.py
-snapshot_kind: text
 ---
 ## AST
 
@@ -17,7 +16,7 @@ Module(
                         ExprBytesLiteral {
                             range: 0..12,
                             value: BytesLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     BytesLiteral {
                                         range: 0..12,
                                         value: [],
@@ -40,7 +39,7 @@ Module(
                         ExprBytesLiteral {
                             range: 13..26,
                             value: BytesLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     BytesLiteral {
                                         range: 13..26,
                                         value: [],
@@ -65,7 +64,7 @@ Module(
                         ExprBytesLiteral {
                             range: 27..43,
                             value: BytesLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     BytesLiteral {
                                         range: 27..43,
                                         value: [],

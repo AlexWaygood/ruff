@@ -16,7 +16,7 @@ Module(
                         ExprFString {
                             range: 162..192,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 162..192,
@@ -34,7 +34,7 @@ Module(
                                                             ExprStringLiteral {
                                                                 range: 172..180,
                                                                 value: StringLiteralValue {
-                                                                    inner: Single(
+                                                                    inner: SinglePart(
                                                                         StringLiteral {
                                                                             range: 172..180,
                                                                             value: "string",
@@ -110,7 +110,7 @@ Module(
                         ExprFString {
                             range: 207..228,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 207..228,
@@ -128,7 +128,7 @@ Module(
                                                             ExprStringLiteral {
                                                                 range: 217..225,
                                                                 value: StringLiteralValue {
-                                                                    inner: Single(
+                                                                    inner: SinglePart(
                                                                         StringLiteral {
                                                                             range: 217..225,
                                                                             value: "string",
@@ -180,7 +180,7 @@ Module(
                         ExprStringLiteral {
                             range: 237..250,
                             value: StringLiteralValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     StringLiteral {
                                         range: 237..250,
                                         value: "format spec",
@@ -203,7 +203,7 @@ Module(
                         ExprFString {
                             range: 253..285,
                             value: FStringValue {
-                                inner: Single(
+                                inner: SinglePart(
                                     FString(
                                         FString {
                                             range: 253..285,
@@ -221,7 +221,7 @@ Module(
                                                             ExprStringLiteral {
                                                                 range: 263..271,
                                                                 value: StringLiteralValue {
-                                                                    inner: Single(
+                                                                    inner: SinglePart(
                                                                         StringLiteral {
                                                                             range: 263..271,
                                                                             value: "string",
