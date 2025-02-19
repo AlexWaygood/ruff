@@ -2658,6 +2658,8 @@ pub enum KnownInstanceType<'db> {
     OrderedDict,
     /// The symbol `typing.Type` (which can also be found as `typing_extensions.Type`)
     Type,
+    /// The symbol `typing.Protocol` (which can also be found as `typing_extensions.Protocol`)
+    Protocol,
     /// A single instance of `typing.TypeVar`
     TypeVar(TypeVarInstance<'db>),
     /// A single instance of `typing.TypeAliasType` (PEP 695 type alias)
@@ -2734,6 +2736,7 @@ impl<'db> KnownInstanceType<'db> {
             Self::Not => "Not",
             Self::Intersection => "Intersection",
             Self::TypeOf => "TypeOf",
+            Self::Protocol => "Protocol",
         }
     }
 
@@ -2778,6 +2781,7 @@ impl<'db> KnownInstanceType<'db> {
             | Self::AlwaysFalsy
             | Self::Not
             | Self::Intersection
+            | Self::Protocol
             | Self::TypeOf => Truthiness::AlwaysTrue,
         }
     }
@@ -2824,6 +2828,7 @@ impl<'db> KnownInstanceType<'db> {
             Self::Not => "knot_extensions.Not",
             Self::Intersection => "knot_extensions.Intersection",
             Self::TypeOf => "knot_extensions.TypeOf",
+            Self::Protocol => "typing.Protocol",
         }
     }
 
@@ -2852,6 +2857,7 @@ impl<'db> KnownInstanceType<'db> {
             Self::TypeGuard => KnownClass::SpecialForm,
             Self::TypeIs => KnownClass::SpecialForm,
             Self::ReadOnly => KnownClass::SpecialForm,
+            Self::Protocol => KnownClass::SpecialForm,
             Self::List => KnownClass::StdlibAlias,
             Self::Dict => KnownClass::StdlibAlias,
             Self::DefaultDict => KnownClass::StdlibAlias,
@@ -2925,6 +2931,7 @@ impl<'db> KnownInstanceType<'db> {
             "Not" => Self::Not,
             "Intersection" => Self::Intersection,
             "TypeOf" => Self::TypeOf,
+            "Protocol" => Self::Protocol,
             _ => return None,
         };
 
@@ -2970,6 +2977,7 @@ impl<'db> KnownInstanceType<'db> {
             | Self::TypeGuard
             | Self::TypeIs
             | Self::ReadOnly
+            | Self::Protocol
             | Self::TypeAliasType(_)
             | Self::TypeVar(_) => {
                 matches!(module, KnownModule::Typing | KnownModule::TypingExtensions)
@@ -2990,6 +2998,10 @@ impl<'db> KnownInstanceType<'db> {
             _ => return self.instance_fallback(db).member(db, name),
         };
         Symbol::bound(ty)
+    }
+
+    const fn is_protocol(self) -> bool {
+        matches!(self, Self::Protocol)
     }
 }
 
@@ -3497,6 +3509,14 @@ impl<'db> Class<'db> {
     /// Return `true` if this class represents the builtin class `object`
     pub fn is_object(self, db: &'db dyn Db) -> bool {
         self.is_known(db, KnownClass::Object)
+    }
+
+    pub fn is_protocol_class(self, db: &'db dyn Db) -> bool {
+        self.explicit_bases(db)
+            .iter()
+            .copied()
+            .filter_map(Type::into_known_instance)
+            .any(KnownInstanceType::is_protocol)
     }
 
     /// Return an iterator over the inferred types of this class's *explicit* bases.

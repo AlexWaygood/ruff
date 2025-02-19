@@ -209,6 +209,9 @@ pub(super) fn union_elements_ordering<'db>(left: &Type<'db>, right: &Type<'db>) 
                 (KnownInstanceType::Union, _) => Ordering::Less,
                 (_, KnownInstanceType::Union) => Ordering::Greater,
 
+                (KnownInstanceType::Protocol, _) => Ordering::Less,
+                (_, KnownInstanceType::Protocol) => Ordering::Greater,
+
                 (
                     KnownInstanceType::TypeAliasType(left),
                     KnownInstanceType::TypeAliasType(right),

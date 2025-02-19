@@ -5751,6 +5751,10 @@ impl<'db> TypeInferenceBuilder<'db> {
                 self.infer_type_expression(arguments_slice);
                 todo_type!("Callable types")
             }
+            KnownInstanceType::Protocol => {
+                self.infer_type_expression(arguments_slice);
+                todo_type!("Generic Protocol types")
+            }
 
             // Type API special forms
             KnownInstanceType::Not => match arguments_slice {
