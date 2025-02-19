@@ -219,7 +219,7 @@ fn check_os_environ_subscript(checker: &Checker, expr: &Expr) {
     let node = ast::StringLiteral {
         value: capital_env_var.into_boxed_str(),
         flags: checker.default_string_flags().with_prefix({
-            if env_var.is_unicode() {
+            if env_var.is_u_string() {
                 StringLiteralPrefix::Unicode
             } else {
                 StringLiteralPrefix::Empty

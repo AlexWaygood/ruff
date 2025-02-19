@@ -69,7 +69,7 @@ pub(crate) struct FormatImplicitConcatenatedStringExpanded<'a> {
 
 impl<'a> FormatImplicitConcatenatedStringExpanded<'a> {
     pub(crate) fn new(string: StringLike<'a>, layout: ImplicitConcatenatedLayout) -> Self {
-        assert!(string.is_implicit_concatenated());
+        assert!(string.is_implicitly_concatenated());
 
         Self { string, layout }
     }
@@ -233,7 +233,7 @@ impl<'a> FormatImplicitConcatenatedStringFlat<'a> {
             Some(AnyStringFlags::new(prefix, quote, TripleQuotes::No))
         }
 
-        if !string.is_implicit_concatenated() {
+        if !string.is_implicitly_concatenated() {
             return None;
         }
 

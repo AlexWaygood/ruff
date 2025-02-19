@@ -124,9 +124,9 @@ pub(crate) fn bit_count(checker: &Checker, call: &ExprCall) {
             )
         }
 
-        Expr::StringLiteral(inner) => inner.value.is_implicit_concatenated(),
-        Expr::BytesLiteral(inner) => inner.value.is_implicit_concatenated(),
-        Expr::FString(inner) => inner.value.is_implicit_concatenated(),
+        Expr::StringLiteral(inner) => inner.value.is_implicitly_concatenated(),
+        Expr::BytesLiteral(inner) => inner.value.is_implicitly_concatenated(),
+        Expr::FString(inner) => inner.value.is_implicitly_concatenated(),
 
         Expr::Await(_)
         | Expr::Starred(_)

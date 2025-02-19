@@ -224,7 +224,7 @@ fn is_huggable_string_argument(
     arguments: &Arguments,
     context: &PyFormatContext,
 ) -> bool {
-    if string.is_implicit_concatenated()
+    if string.is_implicitly_concatenated()
         || !string.is_multiline(context)
         || !string
             .parts()

@@ -66,13 +66,13 @@ impl<'a> From<LiteralExpressionRef<'a>> for AnyNodeRef<'a> {
 impl LiteralExpressionRef<'_> {
     /// Returns `true` if the literal is either a string or bytes literal that
     /// is implicitly concatenated.
-    pub fn is_implicit_concatenated(&self) -> bool {
+    pub const fn is_implicitly_concatenated(&self) -> bool {
         match self {
             LiteralExpressionRef::StringLiteral(expression) => {
-                expression.value.is_implicit_concatenated()
+                expression.value.is_implicitly_concatenated()
             }
             LiteralExpressionRef::BytesLiteral(expression) => {
-                expression.value.is_implicit_concatenated()
+                expression.value.is_implicitly_concatenated()
             }
             _ => false,
         }
@@ -103,11 +103,11 @@ impl<'a> StringLike<'a> {
     }
 
     /// Returns `true` if the string is implicitly concatenated.
-    pub fn is_implicit_concatenated(self) -> bool {
+    pub const fn is_implicitly_concatenated(self) -> bool {
         match self {
-            Self::String(ExprStringLiteral { value, .. }) => value.is_implicit_concatenated(),
-            Self::Bytes(ExprBytesLiteral { value, .. }) => value.is_implicit_concatenated(),
-            Self::FString(ExprFString { value, .. }) => value.is_implicit_concatenated(),
+            Self::String(ExprStringLiteral { value, .. }) => value.is_implicitly_concatenated(),
+            Self::Bytes(ExprBytesLiteral { value, .. }) => value.is_implicitly_concatenated(),
+            Self::FString(ExprFString { value, .. }) => value.is_implicitly_concatenated(),
         }
     }
 

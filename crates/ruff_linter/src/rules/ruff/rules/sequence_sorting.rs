@@ -300,7 +300,7 @@ impl<'a> SortClassification<'a> {
                     let Some(string_node) = expr.as_string_literal_expr() else {
                         return Self::NotAListOfStringLiterals;
                     };
-                    any_implicit_concatenation |= string_node.value.is_implicit_concatenated();
+                    any_implicit_concatenation |= string_node.value.is_implicitly_concatenated();
                     items.push(string_node.value.to_str());
                 }
                 if any_implicit_concatenation {

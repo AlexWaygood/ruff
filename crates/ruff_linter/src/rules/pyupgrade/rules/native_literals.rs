@@ -210,7 +210,7 @@ pub(crate) fn native_literals(
         Some(arg) => {
             let (has_unary_op, literal_expr) = if let Some(literal_expr) = arg.as_literal_expr() {
                 // Skip implicit concatenated strings.
-                if literal_expr.is_implicit_concatenated() {
+                if literal_expr.is_implicitly_concatenated() {
                     return;
                 }
                 (false, literal_expr)

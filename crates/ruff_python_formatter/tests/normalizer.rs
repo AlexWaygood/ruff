@@ -72,13 +72,13 @@ impl Transformer for Normalizer {
         // Normalizer.
         match expr {
             Expr::StringLiteral(string) => {
-                if string.value.is_implicit_concatenated() {
+                if string.value.is_implicitly_concatenated() {
                     let can_join = string.value.iter().all(|literal| {
                         !literal.flags.is_triple_quoted() && !literal.flags.prefix().is_raw()
                     });
 
                     if can_join {
-                        string.value = ast::StringLiteralValue::single(ast::StringLiteral {
+                        string.value = ast::StringLiteralValue::single_part(ast::StringLiteral {
                             value: Box::from(string.value.to_str()),
                             range: string.range,
                             flags: StringLiteralFlags::empty(),
@@ -88,13 +88,13 @@ impl Transformer for Normalizer {
             }
 
             Expr::BytesLiteral(bytes) => {
-                if bytes.value.is_implicit_concatenated() {
+                if bytes.value.is_implicitly_concatenated() {
                     let can_join = bytes.value.iter().all(|literal| {
                         !literal.flags.is_triple_quoted() && !literal.flags.prefix().is_raw()
                     });
 
                     if can_join {
-                        bytes.value = ast::BytesLiteralValue::single(ast::BytesLiteral {
+                        bytes.value = ast::BytesLiteralValue::single_part(ast::BytesLiteral {
                             value: bytes.value.bytes().collect(),
                             range: bytes.range,
                             flags: BytesLiteralFlags::empty(),
@@ -104,7 +104,7 @@ impl Transformer for Normalizer {
             }
 
             Expr::FString(fstring) => {
-                if fstring.value.is_implicit_concatenated() {
+                if fstring.value.is_implicitly_concatenated() {
                     let can_join = fstring.value.iter().all(|part| match part {
                         FStringPart::Literal(literal) => {
                             !literal.flags.is_triple_quoted() && !literal.flags.prefix().is_raw()
@@ -178,7 +178,7 @@ impl Transformer for Normalizer {
                             }
                         }
 
-                        fstring.value = ast::FStringValue::single(ast::FString {
+                        fstring.value = ast::FStringValue::single_part(ast::FString {
                             elements: collector.elements.into(),
                             range: fstring.range,
                             flags: FStringFlags::empty(),

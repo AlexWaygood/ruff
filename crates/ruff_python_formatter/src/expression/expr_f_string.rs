@@ -44,10 +44,10 @@ impl NeedsParentheses for ExprFString {
         _parent: AnyNodeRef,
         context: &PyFormatContext,
     ) -> OptionalParentheses {
-        if self.value.is_implicit_concatenated() {
+        if self.value.is_implicitly_concatenated() {
             OptionalParentheses::Multiline
         } else if StringLike::FString(self).is_multiline(context)
-            || self.value.as_single().is_some_and(|f_string| {
+            || self.as_single_part_fstring().is_some_and(|f_string| {
                 FStringLayout::from_f_string(f_string, context.source()).is_multiline()
             })
         {

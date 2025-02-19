@@ -296,7 +296,7 @@ impl Format<PyFormatContext<'_>> for BinaryLike<'_> {
                 StringLike::try_from(operand.expression())
                     .ok()
                     .filter(|string| {
-                        string.is_implicit_concatenated()
+                        string.is_implicitly_concatenated()
                             && !is_expression_parenthesized(
                                 string.into(),
                                 comments.ranges(),

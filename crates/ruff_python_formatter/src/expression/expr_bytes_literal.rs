@@ -38,7 +38,7 @@ impl NeedsParentheses for ExprBytesLiteral {
         _parent: AnyNodeRef,
         context: &PyFormatContext,
     ) -> OptionalParentheses {
-        if self.value.is_implicit_concatenated() {
+        if self.value.is_implicitly_concatenated() {
             OptionalParentheses::Multiline
         } else if StringLike::Bytes(self).is_multiline(context) {
             OptionalParentheses::Never

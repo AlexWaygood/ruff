@@ -236,7 +236,7 @@ mod print_arguments {
         });
 
         Some(Expr::FString(ExprFString {
-            value: FStringValue::single(FString {
+            value: FStringValue::single_part(FString {
                 elements: FStringElements::from(fstring_elements),
                 flags,
                 range: TextRange::default(),
