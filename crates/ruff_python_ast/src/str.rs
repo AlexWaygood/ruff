@@ -2,8 +2,6 @@ use aho_corasick::{AhoCorasick, AhoCorasickKind, Anchored, Input, MatchKind, Sta
 use std::fmt;
 use std::sync::LazyLock;
 
-use ruff_text_size::{TextLen, TextRange};
-
 /// Enumeration of the two kinds of quotes that can be used
 /// for Python string/f-string/bytestring literals
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, is_macro::Is)]
@@ -209,25 +207,6 @@ pub const SINGLE_QUOTE_BYTE_PREFIXES: &[&str] = &[
     "B'",
     "b'",
 ];
-
-/// Strip the leading and trailing quotes from a string.
-/// Assumes that the string is a valid string literal, but does not verify that the string
-/// is a "simple" string literal (i.e., that it does not contain any implicit concatenations).
-pub fn raw_contents(contents: &str) -> Option<&str> {
-    let range = raw_contents_range(contents)?;
-
-    Some(&contents[range])
-}
-
-pub fn raw_contents_range(contents: &str) -> Option<TextRange> {
-    let leading_quote_str = leading_quote(contents)?;
-    let trailing_quote_str = trailing_quote(contents)?;
-
-    Some(TextRange::new(
-        leading_quote_str.text_len(),
-        contents.text_len() - trailing_quote_str.text_len(),
-    ))
-}
 
 /// An [`AhoCorasick`] matcher for string and byte literal prefixes.
 static PREFIX_MATCHER: LazyLock<AhoCorasick> = LazyLock::new(|| {

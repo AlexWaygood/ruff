@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 
-use ruff_python_ast::{self as ast, StringFlags};
+use ruff_python_ast::{self as ast, StringFlags, StringPart};
 use ruff_python_semantic::Definition;
 use ruff_source_file::LineRanges;
 use ruff_text_size::{Ranged, TextRange, TextSize};
@@ -67,20 +67,17 @@ impl<'a> Docstring<'a> {
         // N.B. This will normally be exactly the same as what you might get from
         // `self.flags().prefix().as_str()`, but doing it this way has a few small advantages.
         // For example, the casing of the `u` prefix will be preserved if it's a u-string.
-        &self.source[TextRange::new(
-            self.start(),
-            self.start() + self.flags().prefix().text_len(),
-        )]
+        &self.source[self.expr.prefix_range()]
     }
 
     /// The docstring's "opener" (the string's prefix, if any, and its opening quotes).
     pub(crate) fn opener(&self) -> &'a str {
-        &self.source[TextRange::new(self.start(), self.start() + self.flags().opener_len())]
+        &self.source[self.expr.opener_range()]
     }
 
     /// The docstring's closing quotes.
-    pub(crate) fn closer(&self) -> &'a str {
-        &self.source[TextRange::new(self.end() - self.flags().closer_len(), self.end())]
+    pub(crate) fn closer(&self) -> &'static str {
+        self.flags().quote_str()
     }
 }
 

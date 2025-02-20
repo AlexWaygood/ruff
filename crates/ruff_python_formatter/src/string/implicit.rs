@@ -4,7 +4,9 @@ use ruff_python_ast::str::{Quote, TripleQuotes};
 use ruff_python_ast::str_prefix::{
     AnyStringPrefix, ByteStringPrefix, FStringPrefix, StringLiteralPrefix,
 };
-use ruff_python_ast::{AnyStringFlags, FStringElement, StringFlags, StringLike, StringLikePart};
+use ruff_python_ast::{
+    AnyStringFlags, FStringElement, StringFlags, StringLike, StringLikePart, StringPart,
+};
 use ruff_source_file::LineRanges;
 use ruff_text_size::{Ranged, TextRange};
 use std::borrow::Cow;

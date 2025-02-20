@@ -996,6 +996,17 @@ impl Ranged for FStringPart {
     }
 }
 
+impl StringPart for FStringPart {
+    type Flags = AnyStringFlags;
+
+    fn flags(&self) -> Self::Flags {
+        match self {
+            Self::FString(fstring) => fstring.flags.as_any_string_flags(),
+            Self::Literal(string_literal) => string_literal.flags.as_any_string_flags(),
+        }
+    }
+}
+
 pub trait StringFlags: Copy {
     /// Does the string use single or double quotes in its opener and closer?
     fn quote_style(self) -> Quote;
@@ -1223,6 +1234,14 @@ impl From<FString> for Expr {
             value: FStringValue::single(payload),
         }
         .into()
+    }
+}
+
+impl StringPart for FString {
+    type Flags = FStringFlags;
+
+    fn flags(&self) -> Self::Flags {
+        self.flags
     }
 }
 
@@ -1674,16 +1693,6 @@ impl StringLiteral {
             flags: StringLiteralFlags::empty().with_invalid(),
         }
     }
-
-    /// The range of the string literal's contents.
-    ///
-    /// This excludes any prefixes, opening quotes or closing quotes.
-    pub fn content_range(&self) -> TextRange {
-        TextRange::new(
-            self.start() + self.flags.opener_len(),
-            self.end() - self.flags.closer_len(),
-        )
-    }
 }
 
 impl From<StringLiteral> for Expr {
@@ -1693,6 +1702,48 @@ impl From<StringLiteral> for Expr {
             value: StringLiteralValue::single(payload),
         }
         .into()
+    }
+}
+
+/// A trait for AST nodes that represent a part of a string literal:
+/// `StringLiteral`, `FString`, `BytesLiteral`, `FStringPart`, etc.
+pub trait StringPart: Ranged {
+    type Flags: StringFlags;
+
+    fn flags(&self) -> Self::Flags;
+
+    /// The range of the string literal's prefixes.
+    ///
+    /// If the string has no prefix, this will be an empty range.
+    fn prefix_range(&self) -> TextRange {
+        let start = self.start();
+        TextRange::new(start, start + self.flags().prefix().text_len())
+    }
+
+    /// The range of the string literal's "opener",
+    /// i.e., its prefix (if any), plus its opening quotes
+    fn opener_range(&self) -> TextRange {
+        let start = self.start();
+        TextRange::new(start, start + self.flags().opener_len())
+    }
+
+    /// The range of the string literal's contents.
+    ///
+    /// This excludes any prefixes, opening quotes or closing quotes.
+    fn content_range(&self) -> TextRange {
+        let flags = self.flags();
+        TextRange::new(
+            self.start() + flags.opener_len(),
+            self.end() - flags.closer_len(),
+        )
+    }
+}
+
+impl StringPart for StringLiteral {
+    type Flags = StringLiteralFlags;
+
+    fn flags(&self) -> StringLiteralFlags {
+        self.flags
     }
 }
 
@@ -2079,6 +2130,14 @@ impl From<BytesLiteral> for Expr {
             value: BytesLiteralValue::single(payload),
         }
         .into()
+    }
+}
+
+impl StringPart for BytesLiteral {
+    type Flags = BytesLiteralFlags;
+
+    fn flags(&self) -> BytesLiteralFlags {
+        self.flags
     }
 }
 

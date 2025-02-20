@@ -7,7 +7,7 @@ use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use ruff_python_ast::{
     str::{Quote, TripleQuotes},
     AnyStringFlags, BytesLiteral, FString, FStringElement, FStringElements, FStringFlags,
-    StringFlags, StringLikePart, StringLiteral,
+    StringFlags, StringLikePart, StringLiteral, StringPart,
 };
 use ruff_text_size::{Ranged, TextRange, TextSlice};
 

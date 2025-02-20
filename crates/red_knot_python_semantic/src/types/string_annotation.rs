@@ -1,5 +1,5 @@
 use ruff_db::source::source_text;
-use ruff_python_ast::{self as ast, ModExpression};
+use ruff_python_ast::{self as ast, ModExpression, StringPart};
 use ruff_python_parser::Parsed;
 use ruff_text_size::Ranged;
 

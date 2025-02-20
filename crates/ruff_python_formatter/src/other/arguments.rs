@@ -1,5 +1,5 @@
 use ruff_formatter::{write, FormatContext};
-use ruff_python_ast::{ArgOrKeyword, Arguments, Expr, StringFlags, StringLike};
+use ruff_python_ast::{ArgOrKeyword, Arguments, Expr, StringFlags, StringLike, StringPart};
 use ruff_python_trivia::{PythonWhitespace, SimpleTokenKind, SimpleTokenizer};
 use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
 

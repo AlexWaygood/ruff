@@ -1,11 +1,10 @@
 use memchr::memchr2;
 pub(crate) use normalize::{normalize_string, NormalizedString, StringNormalizer};
-use ruff_python_ast::str::{Quote, TripleQuotes};
-use ruff_python_ast::StringLikePart;
 use ruff_python_ast::{
     self as ast,
+    str::{Quote, TripleQuotes},
     str_prefix::{AnyStringPrefix, StringLiteralPrefix},
-    AnyStringFlags, StringFlags,
+    AnyStringFlags, StringFlags, StringLikePart, StringPart,
 };
 use ruff_source_file::LineRanges;
 use ruff_text_size::Ranged;
