@@ -3,7 +3,7 @@ use std::hash::Hash;
 use bitflags::bitflags;
 use call::{CallDunderError, CallError};
 use context::InferContext;
-use diagnostic::{report_not_iterable, report_not_iterable_possibly_unbound};
+use diagnostic::NOT_ITERABLE;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use ruff_db::files::File;
@@ -2333,30 +2333,32 @@ impl<'db> Type<'db> {
         let dunder_iter_result = self.try_call_dunder(db, "__iter__", &CallArguments::none());
         match &dunder_iter_result {
             Ok(outcome) | Err(CallDunderError::PossiblyUnbound(outcome)) => {
-                let iterator_ty = outcome.return_type(db);
+                let iterator_type = outcome.return_type(db);
 
-                return match iterator_ty.try_call_dunder(db, "__next__", &CallArguments::none()) {
+                return match iterator_type.try_call_dunder(db, "__next__", &CallArguments::none()) {
                     Ok(outcome) => {
                         if matches!(
                             dunder_iter_result,
                             Err(CallDunderError::PossiblyUnbound { .. })
                         ) {
-                            Err(IterateError::PossiblyUnbound {
-                                iterable_ty: self,
-                                element_ty: outcome.return_type(db),
+                            Err(IterateError::PossiblyUnboundDunder {
+                                iterable_type: self,
+                                element_type: outcome.return_type(db),
+                                possibly_unbound_dunder: IterationDunder::Iter,
                             })
                         } else {
                             Ok(outcome.return_type(db))
                         }
                     }
                     Err(CallDunderError::PossiblyUnbound(outcome)) => {
-                        Err(IterateError::PossiblyUnbound {
-                            iterable_ty: self,
-                            element_ty: outcome.return_type(db),
+                        Err(IterateError::PossiblyUnboundDunder {
+                            iterable_type: self,
+                            element_type: outcome.return_type(db),
+                            possibly_unbound_dunder: IterationDunder::Next { iterator_type },
                         })
                     }
                     Err(_) => Err(IterateError::NotIterable {
-                        not_iterable_ty: self,
+                        not_iterable_type: self,
                     }),
                 };
             }
@@ -2364,7 +2366,7 @@ impl<'db> Type<'db> {
             // return not iterable over falling back to `__getitem__`.
             Err(CallDunderError::Call(_)) => {
                 return Err(IterateError::NotIterable {
-                    not_iterable_ty: self,
+                    not_iterable_type: self,
                 })
             }
             Err(CallDunderError::MethodNotAvailable) => {
@@ -2384,12 +2386,15 @@ impl<'db> Type<'db> {
             &CallArguments::positional([KnownClass::Int.to_instance(db)]),
         ) {
             Ok(outcome) => Ok(outcome.return_type(db)),
-            Err(CallDunderError::PossiblyUnbound(outcome)) => Err(IterateError::PossiblyUnbound {
-                iterable_ty: self,
-                element_ty: outcome.return_type(db),
-            }),
+            Err(CallDunderError::PossiblyUnbound(outcome)) => {
+                Err(IterateError::PossiblyUnboundDunder {
+                    iterable_type: self,
+                    element_type: outcome.return_type(db),
+                    possibly_unbound_dunder: IterationDunder::GetItem,
+                })
+            }
             Err(_) => Err(IterateError::NotIterable {
-                not_iterable_ty: self,
+                not_iterable_type: self,
             }),
         }
     }
@@ -3673,12 +3678,12 @@ enum IterateError<'db> {
     /// method that returns something with a `__next__` method. The old-style iteration
     /// protocol requires a type being iterated over to have a `__getitem__` method that accepts
     /// a positive-integer argument.
-    NotIterable { not_iterable_ty: Type<'db> },
+    NotIterable { not_iterable_type: Type<'db> },
 
-    /// The type is iterable but the methods aren't always bound.
-    PossiblyUnbound {
-        iterable_ty: Type<'db>,
-        element_ty: Type<'db>,
+    PossiblyUnboundDunder {
+        iterable_type: Type<'db>,
+        element_type: Type<'db>,
+        possibly_unbound_dunder: IterationDunder<'db>,
     },
 }
 
@@ -3686,14 +3691,49 @@ impl<'db> IterateError<'db> {
     /// Reports the diagnostic for this error.
     fn report_diagnostic(&self, context: &InferContext<'db>, iterable_node: ast::AnyNodeRef) {
         match self {
-            Self::NotIterable { not_iterable_ty } => {
-                report_not_iterable(context, iterable_node, *not_iterable_ty);
+            Self::NotIterable { not_iterable_type } => {
+                context.report_lint(
+                    &NOT_ITERABLE,
+                    iterable_node,
+                    format_args!(
+                        "Object of type `{}` is not iterable",
+                        not_iterable_type.display(context.db())
+                    ),
+                );
             }
-            Self::PossiblyUnbound {
-                iterable_ty,
-                element_ty: _,
-            } => {
-                report_not_iterable_possibly_unbound(context, iterable_node, *iterable_ty);
+
+            Self::PossiblyUnboundDunder {
+                iterable_type,
+                element_type: _,
+                possibly_unbound_dunder
+            } => match possibly_unbound_dunder {
+                    IterationDunder::Iter => context.report_lint(
+                        &NOT_ITERABLE,
+                        iterable_node,
+                        format_args!(
+                            "Object of type `{}` may not be iterable because its `__iter__` method is possibly unbound",
+                            iterable_type.display(context.db())
+                        ),
+                    ),
+                    IterationDunder::Next {iterator_type} => context.report_lint(
+                        &NOT_ITERABLE,
+                        iterable_node,
+                        format_args!(
+                            "Object of type `{iterable_type}` may not be iterable because its `__iter__` method \
+                            returns an object of type `{iterator_type}`, which may not have a `__next__` method",
+                            iterable_type = iterable_type.display(context.db()),
+                            iterator_type = iterator_type.display(context.db()),
+                        ),
+                    ),
+                    IterationDunder::GetItem => context.report_lint(
+                        &NOT_ITERABLE,
+                        iterable_node,
+                        format_args!(
+                            "Object of type `{}` may not be iterable because it has no `__iter__` method \
+                            and its `__getitem__` method is possibly unbound",
+                            iterable_type.display(context.db())
+                        ),
+                    ),
             }
         }
     }
@@ -3702,7 +3742,7 @@ impl<'db> IterateError<'db> {
     fn element_type(&self) -> Option<Type<'db>> {
         match self {
             IterateError::NotIterable { .. } => None,
-            IterateError::PossiblyUnbound { element_ty, .. } => Some(*element_ty),
+            IterateError::PossiblyUnboundDunder { element_type, .. } => Some(*element_type),
         }
     }
 
@@ -3710,6 +3750,13 @@ impl<'db> IterateError<'db> {
     fn fallback_element_type(&self) -> Type<'db> {
         self.element_type().unwrap_or(Type::unknown())
     }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum IterationDunder<'db> {
+    Iter,
+    Next { iterator_type: Type<'db> },
+    GetItem,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

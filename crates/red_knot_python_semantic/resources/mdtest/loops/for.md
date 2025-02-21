@@ -221,7 +221,11 @@ def _(flag: bool):
 
 ## Union type as iterable where one union element has no `__iter__` method
 
+<!-- snapshot-diagnostics -->
+
 ```py
+from typing_extensions import reveal_type
+
 class TestIter:
     def __next__(self) -> int:
         return 42
@@ -231,14 +235,18 @@ class Test:
         return TestIter()
 
 def _(flag: bool):
-    # error: [not-iterable] "Object of type `Test | Literal[42]` is not iterable because its `__iter__` method is possibly unbound"
+    # error: [not-iterable]
     for x in Test() if flag else 42:
         reveal_type(x)  # revealed: int
 ```
 
 ## Union type as iterable where one union element has invalid `__iter__` method
 
+<!-- snapshot-diagnostics -->
+
 ```py
+from typing_extensions import reveal_type
+
 class TestIter:
     def __next__(self) -> int:
         return 42
@@ -253,14 +261,18 @@ class Test2:
 
 def _(flag: bool):
     # TODO: Improve error message to state which union variant isn't iterable (https://github.com/astral-sh/ruff/issues/13989)
-    # error: "Object of type `Test | Test2` is not iterable"
+    # error: [not-iterable]
     for x in Test() if flag else Test2():
         reveal_type(x)  # revealed: int
 ```
 
 ## Union type as iterator where one union element has no `__next__` method
 
+<!-- snapshot-diagnostics -->
+
 ```py
+from typing_extensions import reveal_type
+
 class TestIter:
     def __next__(self) -> int:
         return 42
@@ -269,7 +281,25 @@ class Test:
     def __iter__(self) -> TestIter | int:
         return TestIter()
 
-# error: [not-iterable] "Object of type `Test` is not iterable"
+# error: [not-iterable]
 for x in Test():
     reveal_type(x)  # revealed: int
+```
+
+## Old-style iteration over a variable that has a possibly unbound `__getitem__` method
+
+<!-- snapshot-diagnostics -->
+
+```py
+from typing_extensions import reveal_type
+
+def _(flag: bool):
+    class Foo:
+        if flag:
+            def __getitem__(self, index: int) -> str:
+                return "foo"
+
+    # error: [not-iterable]
+    for x in Foo():
+        reveal_type(x)  # revealed: str
 ```
