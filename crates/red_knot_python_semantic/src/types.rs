@@ -2393,7 +2393,7 @@ impl<'db> Type<'db> {
                     possibly_unbound_dunder: IterationDunder::GetItem,
                 })
             }
-            Err(_) => Err(IterateError::NotIterable {
+            Err(_) => Err(IterateError::NeitherProtocolSatisfied {
                 not_iterable_type: self,
             }),
         }
@@ -3678,7 +3678,13 @@ enum IterateError<'db> {
     /// method that returns something with a `__next__` method. The old-style iteration
     /// protocol requires a type being iterated over to have a `__getitem__` method that accepts
     /// a positive-integer argument.
-    NotIterable { not_iterable_type: Type<'db> },
+    NeitherProtocolSatisfied {
+        not_iterable_type: Type<'db>,
+    },
+
+    NotIterable {
+        not_iterable_type: Type<'db>,
+    },
 
     PossiblyUnboundDunder {
         iterable_type: Type<'db>,
@@ -3697,6 +3703,17 @@ impl<'db> IterateError<'db> {
                     iterable_node,
                     format_args!(
                         "Object of type `{}` is not iterable",
+                        not_iterable_type.display(context.db())
+                    ),
+                );
+            }
+
+            Self::NeitherProtocolSatisfied { not_iterable_type } => {
+                context.report_lint(
+                    &NOT_ITERABLE,
+                    iterable_node,
+                    format_args!(
+                        "Object of type `{}` is not iterable because it doesn't have an `__iter__` method or a `__getitem__` method",
                         not_iterable_type.display(context.db())
                     ),
                 );
@@ -3742,6 +3759,7 @@ impl<'db> IterateError<'db> {
     fn element_type(&self) -> Option<Type<'db>> {
         match self {
             IterateError::NotIterable { .. } => None,
+            IterateError::NeitherProtocolSatisfied { .. } => None,
             IterateError::PossiblyUnboundDunder { element_type, .. } => Some(*element_type),
         }
     }
