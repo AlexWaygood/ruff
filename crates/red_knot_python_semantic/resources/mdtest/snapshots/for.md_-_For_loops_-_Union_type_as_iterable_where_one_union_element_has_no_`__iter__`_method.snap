@@ -37,7 +37,7 @@ error: lint:not-iterable
 11 | def _(flag: bool):
 12 |     # error: [not-iterable]
 13 |     for x in Test() if flag else 42:
-   |              ^^^^^^^^^^^^^^^^^^^^^^ Object of type `Test | Literal[42]` may not be iterable because its `__iter__` method is possibly unbound
+   |              ^^^^^^^^^^^^^^^^^^^^^^ Object of type `Test | Literal[42]` may not be iterable because its `__iter__` method is possibly unbound and it has no `__getitem__` method
 14 |         reveal_type(x)  # revealed: int
    |
 
