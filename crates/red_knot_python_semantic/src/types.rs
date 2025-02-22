@@ -2288,6 +2288,23 @@ impl<'db> Type<'db> {
 
     /// Look up a dunder method on the meta type of `self` and call it.
     ///
+    /// This method omits errors when calling the dunder method failed
+    /// (e.g. because it doesn't exist). [`Type::try_call_dunder`] should usually be preferred;
+    /// **only** use this method if you're **sure** you want to avoid emitting diagnostics from
+    /// failed calls.
+    fn call_dunder(
+        self,
+        db: &'db dyn Db,
+        name: &str,
+        arguments: &CallArguments<'_, 'db>,
+    ) -> Type<'db> {
+        self.try_call_dunder(db, name, arguments)
+            .map(|outcome| outcome.return_type(db))
+            .unwrap_or_else(|err| err.fallback_return_type(db))
+    }
+
+    /// Look up a dunder method on the meta type of `self` and call it.
+    ///
     /// Returns an `Err` if the dunder method can't be called,
     /// or the given arguments are not valid.
     fn try_call_dunder(
@@ -2368,6 +2385,11 @@ impl<'db> Type<'db> {
                 return Err(IterateError::DunderIterCallError {
                     not_iterable_type: self,
                     error: error.clone(),
+                    element_type: error.fallback_return_type(db).call_dunder(
+                        db,
+                        "__next__",
+                        &CallArguments::none(),
+                    ),
                 })
             }
             Err(CallDunderError::MethodNotAvailable) => {
@@ -2378,9 +2400,6 @@ impl<'db> Type<'db> {
         // Although it's not considered great practice,
         // classes that define `__getitem__` are also iterable,
         // even if they do not define `__iter__`.
-        //
-        // TODO(Alex) this is only valid if the `__getitem__` method is annotated as
-        // accepting `int` or `SupportsIndex`
         match self.try_call_dunder(
             db,
             "__getitem__",
@@ -3686,6 +3705,7 @@ enum IterateError<'db> {
     DunderIterCallError {
         not_iterable_type: Type<'db>,
         error: CallError<'db>,
+        element_type: Type<'db>,
     },
 
     NotIterable {
@@ -3714,7 +3734,7 @@ impl<'db> IterateError<'db> {
                 );
             }
 
-            Self::DunderIterCallError {not_iterable_type, error} => match error {
+            Self::DunderIterCallError {not_iterable_type, error, ..} => match error {
                 CallError::NotCallable { not_callable_ty } => context.report_lint(
                     &NOT_ITERABLE,
                     iterable_node,
@@ -3808,8 +3828,8 @@ impl<'db> IterateError<'db> {
         match self {
             IterateError::NotIterable { .. } => None,
             IterateError::NeitherProtocolSatisfied { .. } => None,
-            IterateError::DunderIterCallError { .. } => None,
-            IterateError::PossiblyUnboundDunder { element_type, .. } => Some(*element_type),
+            IterateError::PossiblyUnboundDunder { element_type, .. }
+            | IterateError::DunderIterCallError { element_type, .. } => Some(*element_type),
         }
     }
 

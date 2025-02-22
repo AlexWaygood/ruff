@@ -12,21 +12,21 @@ mdtest path: crates/red_knot_python_semantic/resources/mdtest/loops/for.md
 ## mdtest_snippet.py
 
 ```
- 1 | from typing import ClassVar
+ 1 | from typing_extensions import ClassVar, reveal_type
  2 | 
  3 | class Foo:
  4 |     __iter__: ClassVar[None] = None
  5 | 
  6 | # error: [not-iterable]
  7 | for x in Foo():
- 8 |     pass
+ 8 |     reveal_type(x)  # revealed: Unknown
  9 | 
 10 | class Bar:
 11 |     __iter__ = None
 12 | 
 13 | # error: [not-iterable]
 14 | for y in Bar():
-15 |     pass
+15 |     reveal_type(y)  # revealed: Unknown
 ```
 
 # Diagnostics
@@ -38,8 +38,22 @@ error: lint:not-iterable
 6 | # error: [not-iterable]
 7 | for x in Foo():
   |          ^^^^^ Object of type `Foo` is not iterable because its `__iter__` attribute has type `None`, which is not callable
-8 |     pass
+8 |     reveal_type(x)  # revealed: Unknown
   |
+
+```
+
+```
+info: revealed-type
+  --> /src/mdtest_snippet.py:8:5
+   |
+ 6 | # error: [not-iterable]
+ 7 | for x in Foo():
+ 8 |     reveal_type(x)  # revealed: Unknown
+   |     -------------- info: Revealed type is `Unknown`
+ 9 |
+10 | class Bar:
+   |
 
 ```
 
@@ -50,7 +64,19 @@ error: lint:not-iterable
 13 | # error: [not-iterable]
 14 | for y in Bar():
    |          ^^^^^ Object of type `Bar` may not iterable because its `__iter__` method has type `Unknown | None`, and some members of the union do not conform to the iteration protocol
-15 |     pass
+15 |     reveal_type(y)  # revealed: Unknown
+   |
+
+```
+
+```
+info: revealed-type
+  --> /src/mdtest_snippet.py:15:5
+   |
+13 | # error: [not-iterable]
+14 | for y in Bar():
+15 |     reveal_type(y)  # revealed: Unknown
+   |     -------------- info: Revealed type is `Unknown`
    |
 
 ```

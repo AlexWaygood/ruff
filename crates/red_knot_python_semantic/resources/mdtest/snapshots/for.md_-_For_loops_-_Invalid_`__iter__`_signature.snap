@@ -12,25 +12,43 @@ mdtest path: crates/red_knot_python_semantic/resources/mdtest/loops/for.md
 ## mdtest_snippet.py
 
 ```
-1 | class Foo:
-2 |     def __iter__(self, extra_arg: str) -> int:
-3 |         return 42
-4 | 
-5 | # error: [not-iterable]
-6 | for x in Foo():
-7 |     pass
+ 1 | from typing_extensions import reveal_type
+ 2 | 
+ 3 | class Iterator:
+ 4 |     def __next__(self) -> int:
+ 5 |         return 42
+ 6 | 
+ 7 | class Foo:
+ 8 |     def __iter__(self, extra_arg: str) -> Iterator:
+ 9 |         return Iterator()
+10 | 
+11 | # error: [not-iterable]
+12 | for x in Foo():
+13 |     reveal_type(x)  # revealed: int
 ```
 
 # Diagnostics
 
 ```
 error: lint:not-iterable
- --> /src/mdtest_snippet.py:6:10
-  |
-5 | # error: [not-iterable]
-6 | for x in Foo():
-  |          ^^^^^ Object of type `Foo` is not iterable because its `__iter__` method has an invalid signature (expected `def __iter__(self): ...`)
-7 |     pass
-  |
+  --> /src/mdtest_snippet.py:12:10
+   |
+11 | # error: [not-iterable]
+12 | for x in Foo():
+   |          ^^^^^ Object of type `Foo` is not iterable because its `__iter__` method has an invalid signature (expected `def __iter__(self): ...`)
+13 |     reveal_type(x)  # revealed: int
+   |
+
+```
+
+```
+info: revealed-type
+  --> /src/mdtest_snippet.py:13:5
+   |
+11 | # error: [not-iterable]
+12 | for x in Foo():
+13 |     reveal_type(x)  # revealed: int
+   |     -------------- info: Revealed type is `int`
+   |
 
 ```

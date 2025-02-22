@@ -12,51 +12,81 @@ mdtest path: crates/red_knot_python_semantic/resources/mdtest/loops/for.md
 ## mdtest_snippet.py
 
 ```
- 1 | from typing import ClassVar
+ 1 | from typing_extensions import ClassVar, reveal_type
  2 | 
  3 | def _(flag: bool):
- 4 |     class MaybeCallable:
- 5 |         if flag:
- 6 |             def __call__(self, *args, **kwargs) -> int:
- 7 |                 return 42
- 8 | 
- 9 |     class Foo:
-10 |         __iter__: ClassVar[MaybeCallable] = MaybeCallable()
-11 | 
-12 |     # error: [not-iterable]
-13 |     for x in Foo():
-14 |         pass
+ 4 |     class Iterator:
+ 5 |         def __next__(self) -> int:
+ 6 |             return 42
+ 7 | 
+ 8 |     class MaybeCallable:
+ 9 |         if flag:
+10 |             def __call__(self, *args, **kwargs) -> Iterator:
+11 |                 return 42
+12 | 
+13 |     class Foo:
+14 |         __iter__: ClassVar[MaybeCallable] = MaybeCallable()
 15 | 
-16 |     class Bar:
-17 |         __iter__ = MaybeCallable()
-18 | 
-19 |     # error: [not-iterable]
-20 |     for y in Bar():
-21 |         pass
+16 |     # error: [not-iterable]
+17 |     for x in Foo():
+18 |         reveal_type(x)  # revealed: int
+19 | 
+20 |     class Bar:
+21 |         __iter__ = MaybeCallable()
+22 | 
+23 |     # error: [not-iterable]
+24 |     for y in Bar():
+25 |         reveal_type(y)  # revealed: Unknown | int
 ```
 
 # Diagnostics
 
 ```
 error: lint:not-iterable
-  --> /src/mdtest_snippet.py:13:14
+  --> /src/mdtest_snippet.py:17:14
    |
-12 |     # error: [not-iterable]
-13 |     for x in Foo():
+16 |     # error: [not-iterable]
+17 |     for x in Foo():
    |              ^^^^^ Object of type `Foo` may not be iterable because its `__iter__` attribute (with type `MaybeCallable`) may not be callable
-14 |         pass
+18 |         reveal_type(x)  # revealed: int
+   |
+
+```
+
+```
+info: revealed-type
+  --> /src/mdtest_snippet.py:18:9
+   |
+16 |     # error: [not-iterable]
+17 |     for x in Foo():
+18 |         reveal_type(x)  # revealed: int
+   |         -------------- info: Revealed type is `int`
+19 |
+20 |     class Bar:
    |
 
 ```
 
 ```
 error: lint:not-iterable
-  --> /src/mdtest_snippet.py:20:14
+  --> /src/mdtest_snippet.py:24:14
    |
-19 |     # error: [not-iterable]
-20 |     for y in Bar():
+23 |     # error: [not-iterable]
+24 |     for y in Bar():
    |              ^^^^^ Object of type `Bar` may not iterable because its `__iter__` method has type `Unknown | MaybeCallable`, and some members of the union do not conform to the iteration protocol
-21 |         pass
+25 |         reveal_type(y)  # revealed: Unknown | int
+   |
+
+```
+
+```
+info: revealed-type
+  --> /src/mdtest_snippet.py:25:9
+   |
+23 |     # error: [not-iterable]
+24 |     for y in Bar():
+25 |         reveal_type(y)  # revealed: Unknown | int
+   |         -------------- info: Revealed type is `Unknown | int`
    |
 
 ```

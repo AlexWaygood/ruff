@@ -309,21 +309,21 @@ def _(flag: bool):
 <!-- snapshot-diagnostics -->
 
 ```py
-from typing import ClassVar
+from typing_extensions import ClassVar, reveal_type
 
 class Foo:
     __iter__: ClassVar[None] = None
 
 # error: [not-iterable]
 for x in Foo():
-    pass
+    reveal_type(x)  # revealed: Unknown
 
 class Bar:
     __iter__ = None
 
 # error: [not-iterable]
 for y in Bar():
-    pass
+    reveal_type(y)  # revealed: Unknown
 ```
 
 ## `__iter__` set to a custom callable with possibly unbound `__call__`
@@ -331,12 +331,16 @@ for y in Bar():
 <!-- snapshot-diagnostics -->
 
 ```py
-from typing import ClassVar
+from typing_extensions import ClassVar, reveal_type
 
 def _(flag: bool):
+    class Iterator:
+        def __next__(self) -> int:
+            return 42
+
     class MaybeCallable:
         if flag:
-            def __call__(self, *args, **kwargs) -> int:
+            def __call__(self, *args, **kwargs) -> Iterator:
                 return 42
 
     class Foo:
@@ -344,14 +348,14 @@ def _(flag: bool):
 
     # error: [not-iterable]
     for x in Foo():
-        pass
+        reveal_type(x)  # revealed: int
 
     class Bar:
         __iter__ = MaybeCallable()
 
     # error: [not-iterable]
     for y in Bar():
-        pass
+        reveal_type(y)  # revealed: Unknown | int
 ```
 
 ## Invalid `__iter__` signature
@@ -359,11 +363,17 @@ def _(flag: bool):
 <!-- snapshot-diagnostics -->
 
 ```py
-class Foo:
-    def __iter__(self, extra_arg: str) -> int:
+from typing_extensions import reveal_type
+
+class Iterator:
+    def __next__(self) -> int:
         return 42
+
+class Foo:
+    def __iter__(self, extra_arg: str) -> Iterator:
+        return Iterator()
 
 # error: [not-iterable]
 for x in Foo():
-    pass
+    reveal_type(x)  # revealed: int
 ```
