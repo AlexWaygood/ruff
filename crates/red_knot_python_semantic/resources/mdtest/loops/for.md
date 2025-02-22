@@ -303,3 +303,67 @@ def _(flag: bool):
     for x in Foo():
         reveal_type(x)  # revealed: str
 ```
+
+## `__iter__` set to `None`
+
+<!-- snapshot-diagnostics -->
+
+```py
+from typing import ClassVar
+
+class Foo:
+    __iter__: ClassVar[None] = None
+
+# error: [not-iterable]
+for x in Foo():
+    pass
+
+class Bar:
+    __iter__ = None
+
+# error: [not-iterable]
+for y in Bar():
+    pass
+```
+
+## `__iter__` set to a custom callable with possibly unbound `__call__`
+
+<!-- snapshot-diagnostics -->
+
+```py
+from typing import ClassVar
+
+def _(flag: bool):
+    class MaybeCallable:
+        if flag:
+            def __call__(self, *args, **kwargs) -> int:
+                return 42
+
+    class Foo:
+        __iter__: ClassVar[MaybeCallable] = MaybeCallable()
+
+    # error: [not-iterable]
+    for x in Foo():
+        pass
+
+    class Bar:
+        __iter__ = MaybeCallable()
+
+    # error: [not-iterable]
+    for y in Bar():
+        pass
+```
+
+## Invalid `__iter__` signature
+
+<!-- snapshot-diagnostics -->
+
+```py
+class Foo:
+    def __iter__(self, extra_arg: str) -> int:
+        return 42
+
+# error: [not-iterable]
+for x in Foo():
+    pass
+```

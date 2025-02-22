@@ -1,0 +1,36 @@
+---
+source: crates/red_knot_test/src/lib.rs
+expression: snapshot
+---
+---
+mdtest name: for.md - For loops - Invalid `__iter__` signature
+mdtest path: crates/red_knot_python_semantic/resources/mdtest/loops/for.md
+---
+
+# Python source files
+
+## mdtest_snippet.py
+
+```
+1 | class Foo:
+2 |     def __iter__(self, extra_arg: str) -> int:
+3 |         return 42
+4 | 
+5 | # error: [not-iterable]
+6 | for x in Foo():
+7 |     pass
+```
+
+# Diagnostics
+
+```
+error: lint:not-iterable
+ --> /src/mdtest_snippet.py:6:10
+  |
+5 | # error: [not-iterable]
+6 | for x in Foo():
+  |          ^^^^^ Object of type `Foo` is not iterable because its `__iter__` method has an invalid signature (expected `def __iter__(self): ...`)
+7 |     pass
+  |
+
+```

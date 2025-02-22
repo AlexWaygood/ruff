@@ -1,0 +1,62 @@
+---
+source: crates/red_knot_test/src/lib.rs
+expression: snapshot
+---
+---
+mdtest name: for.md - For loops - `__iter__` set to a custom callable with possibly unbound `__call__`
+mdtest path: crates/red_knot_python_semantic/resources/mdtest/loops/for.md
+---
+
+# Python source files
+
+## mdtest_snippet.py
+
+```
+ 1 | from typing import ClassVar
+ 2 | 
+ 3 | def _(flag: bool):
+ 4 |     class MaybeCallable:
+ 5 |         if flag:
+ 6 |             def __call__(self, *args, **kwargs) -> int:
+ 7 |                 return 42
+ 8 | 
+ 9 |     class Foo:
+10 |         __iter__: ClassVar[MaybeCallable] = MaybeCallable()
+11 | 
+12 |     # error: [not-iterable]
+13 |     for x in Foo():
+14 |         pass
+15 | 
+16 |     class Bar:
+17 |         __iter__ = MaybeCallable()
+18 | 
+19 |     # error: [not-iterable]
+20 |     for y in Bar():
+21 |         pass
+```
+
+# Diagnostics
+
+```
+error: lint:not-iterable
+  --> /src/mdtest_snippet.py:13:14
+   |
+12 |     # error: [not-iterable]
+13 |     for x in Foo():
+   |              ^^^^^ Object of type `Foo` may not be iterable because its `__iter__` attribute (with type `MaybeCallable`) may not be callable
+14 |         pass
+   |
+
+```
+
+```
+error: lint:not-iterable
+  --> /src/mdtest_snippet.py:20:14
+   |
+19 |     # error: [not-iterable]
+20 |     for y in Bar():
+   |              ^^^^^ Object of type `Bar` may not iterable because its `__iter__` method has type `Unknown | MaybeCallable`, and some members of the union do not conform to the iteration protocol
+21 |         pass
+   |
+
+```

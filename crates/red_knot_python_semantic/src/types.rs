@@ -2364,9 +2364,10 @@ impl<'db> Type<'db> {
             }
             // If `__iter__` exists but can't be called or doesn't have the expected signature,
             // return not iterable over falling back to `__getitem__`.
-            Err(CallDunderError::Call(_)) => {
-                return Err(IterateError::NotIterable {
+            Err(CallDunderError::Call(error)) => {
+                return Err(IterateError::DunderIterCallError {
                     not_iterable_type: self,
+                    error: error.clone(),
                 })
             }
             Err(CallDunderError::MethodNotAvailable) => {
@@ -3670,7 +3671,7 @@ pub enum TypeVarBoundOrConstraints<'db> {
 }
 
 /// Error returned if a type isn't iterable.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum IterateError<'db> {
     /// The type isn't iterable because it doesn't implement the new-style or old-style iteration protocol
     ///
@@ -3680,6 +3681,11 @@ enum IterateError<'db> {
     /// a positive-integer argument.
     NeitherProtocolSatisfied {
         not_iterable_type: Type<'db>,
+    },
+
+    DunderIterCallError {
+        not_iterable_type: Type<'db>,
+        error: CallError<'db>,
     },
 
     NotIterable {
@@ -3706,6 +3712,48 @@ impl<'db> IterateError<'db> {
                         not_iterable_type.display(context.db())
                     ),
                 );
+            }
+
+            Self::DunderIterCallError {not_iterable_type, error} => match error {
+                CallError::NotCallable { not_callable_ty } => context.report_lint(
+                    &NOT_ITERABLE,
+                    iterable_node,
+                    format_args!(
+                        "Object of type `{not_iterable_type}` is not iterable because its `__iter__` attribute \
+                        has type `{dunder_iter_type}`, which is not callable",
+                        not_iterable_type = not_iterable_type.display(context.db()),
+                        dunder_iter_type = not_callable_ty.display(context.db()),
+                    ),
+                ),
+                CallError::PossiblyUnboundDunderCall { called_type, .. } => context.report_lint(
+                    &NOT_ITERABLE,
+                    iterable_node,
+                    format_args!(
+                        "Object of type `{not_iterable_type}` may not be iterable because its `__iter__` attribute \
+                        (with type `{dunder_iter_type}`) may not be callable",
+                        not_iterable_type = not_iterable_type.display(context.db()),
+                        dunder_iter_type = called_type.display(context.db()),
+                    )
+                ),
+                CallError::BindingError { .. } => context.report_lint(
+                    &NOT_ITERABLE,
+                    iterable_node,
+                    format_args!(
+                        "Object of type `{not_iterable_type}` is not iterable because its `__iter__` method \
+                        has an invalid signature (expected `def __iter__(self): ...`)",
+                        not_iterable_type = not_iterable_type.display(context.db()),
+                    ),
+                ),
+                CallError::Union(UnionCallError { called_ty, .. }) => context.report_lint(
+                    &NOT_ITERABLE,
+                    iterable_node,
+                    format_args!(
+                        "Object of type `{not_iterable_type}` may not iterable because its `__iter__` method \
+                        has type `{dunder_iter_type}`, and some members of the union do not conform to the iteration protocol",
+                        not_iterable_type = not_iterable_type.display(context.db()),
+                        dunder_iter_type = called_ty.display(context.db()),
+                    ),
+                ),
             }
 
             Self::NeitherProtocolSatisfied { not_iterable_type } => {
@@ -3760,6 +3808,7 @@ impl<'db> IterateError<'db> {
         match self {
             IterateError::NotIterable { .. } => None,
             IterateError::NeitherProtocolSatisfied { .. } => None,
+            IterateError::DunderIterCallError { .. } => None,
             IterateError::PossiblyUnboundDunder { element_type, .. } => Some(*element_type),
         }
     }
