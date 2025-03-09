@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
     module_resolver::file_to_module,
     semantic_index::{
@@ -138,8 +140,7 @@ impl<'db> Class<'db> {
     /// attribute on a class at runtime.
     ///
     /// [method resolution order]: https://docs.python.org/3/glossary.html#term-method-resolution-order
-    #[salsa::tracked(return_ref)]
-    pub(super) fn try_mro(self, db: &'db dyn Db) -> Result<Mro<'db>, MroError<'db>> {
+    pub(super) fn try_mro(self, db: &'db dyn Db) -> Result<Mro<'db>, Cow<'db, MroError<'db>>> {
         Mro::of_class(db, self)
     }
 

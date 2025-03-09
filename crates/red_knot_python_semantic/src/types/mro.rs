@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::VecDeque;
 
 use rustc_hash::FxHashSet;
@@ -10,12 +11,13 @@ use crate::Db;
 /// The inferred method resolution order of a given class.
 ///
 /// See [`Class::iter_mro`] for more details.
-#[derive(PartialEq, Eq, Clone, Debug, salsa::Update)]
+#[derive(Debug)]
 pub(super) enum Mro<'db> {
+    Object,
     NoBases,
     FromError,
     SingleBase(ClassBase<'db>),
-    Resolved(Box<[ClassBase<'db>]>),
+    Resolved(&'db [ClassBase<'db>]),
 }
 
 impl<'db> Mro<'db> {
@@ -29,7 +31,10 @@ impl<'db> Mro<'db> {
     ///
     /// (We emit a diagnostic warning about the runtime `TypeError` in
     /// [`super::infer::TypeInferenceBuilder::infer_region_scope`].)
-    pub(super) fn of_class(db: &'db dyn Db, class: Class<'db>) -> Result<Self, MroError<'db>> {
+    pub(super) fn of_class(
+        db: &'db dyn Db,
+        class: Class<'db>,
+    ) -> Result<Self, Cow<'db, MroError<'db>>> {
         let class_bases = class.explicit_bases(db);
 
         if !class_bases.is_empty() && class.inheritance_cycle(db).is_some() {
@@ -42,7 +47,7 @@ impl<'db> Mro<'db> {
         match class_bases {
             // `builtins.object` is the special case:
             // the only class in Python that has an MRO with length <2
-            [] if class.is_object(db) => Ok(Self::Resolved(Box::from([ClassBase::Class(class)]))),
+            [] if class.is_object(db) => Ok(Self::Object),
 
             // All other classes in Python have an MRO with length >=2.
             // Even if a class has no explicit base classes,
@@ -66,61 +71,70 @@ impl<'db> Mro<'db> {
             // and the `c3_merge` function requires lots of allocations.
             [single_base] => ClassBase::try_from_type(db, *single_base)
                 .map(Self::SingleBase)
-                .ok_or_else(|| MroError::invalid_bases([(0, *single_base)])),
+                .ok_or_else(|| Cow::Owned(MroError::invalid_bases([(0, *single_base)]))),
 
             // The class has multiple explicit bases.
             //
             // We'll fallback to a full implementation of the C3-merge algorithm to determine
             // what MRO Python will give this class at runtime
             // (if an MRO is indeed resolvable at all!)
-            multiple_bases => {
-                let mut valid_bases = vec![];
-                let mut invalid_bases = vec![];
-
-                for (i, base) in multiple_bases.iter().enumerate() {
-                    match ClassBase::try_from_type(db, *base) {
-                        Some(valid_base) => valid_bases.push(valid_base),
-                        None => invalid_bases.push((i, *base)),
-                    }
-                }
-
-                if !invalid_bases.is_empty() {
-                    return Err(MroError::invalid_bases(invalid_bases));
-                }
-
-                let mut seqs = vec![VecDeque::from([ClassBase::Class(class)])];
-                for base in &valid_bases {
-                    seqs.push(match base {
-                        ClassBase::Dynamic(_) => VecDeque::from([*base, ClassBase::object(db)]),
-                        ClassBase::Class(base_class) => base_class.iter_mro(db).collect(),
-                    });
-                }
-                seqs.push(valid_bases.iter().copied().collect());
-
-                c3_merge(seqs).ok_or_else(|| {
-                    let mut seen_bases = FxHashSet::default();
-                    let mut duplicate_bases = vec![];
-                    for (index, base) in valid_bases
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, base)| Some((index, base.into_class()?)))
-                    {
-                        if !seen_bases.insert(base) {
-                            duplicate_bases.push((index, base));
-                        }
-                    }
-
-                    if duplicate_bases.is_empty() {
-                        MroError::UnresolvableMro {
-                            bases_list: valid_bases.into_boxed_slice(),
-                        }
-                    } else {
-                        MroError::DuplicateBases(duplicate_bases.into_boxed_slice())
-                    }
-                })
-            }
+            _ => mro_of_class_with_multiple_bases(db, class)
+                .as_deref()
+                .map(Self::Resolved)
+                .map_err(Cow::Borrowed),
         }
     }
+}
+
+#[salsa::tracked(return_ref)]
+fn mro_of_class_with_multiple_bases<'db>(
+    db: &'db dyn Db,
+    class: Class<'db>,
+) -> Result<Box<[ClassBase<'db>]>, MroError<'db>> {
+    let mut valid_bases = vec![];
+    let mut invalid_bases = vec![];
+
+    for (i, base) in class.explicit_bases(db).iter().enumerate() {
+        match ClassBase::try_from_type(db, *base) {
+            Some(valid_base) => valid_bases.push(valid_base),
+            None => invalid_bases.push((i, *base)),
+        }
+    }
+
+    if !invalid_bases.is_empty() {
+        return Err(MroError::invalid_bases(invalid_bases));
+    }
+
+    let mut seqs = vec![VecDeque::from([ClassBase::Class(class)])];
+    for base in &valid_bases {
+        seqs.push(match base {
+            ClassBase::Dynamic(_) => VecDeque::from([*base, ClassBase::object(db)]),
+            ClassBase::Class(base_class) => base_class.iter_mro(db).collect(),
+        });
+    }
+    seqs.push(valid_bases.iter().copied().collect());
+
+    c3_merge(seqs).ok_or_else(|| {
+        let mut seen_bases = FxHashSet::default();
+        let mut duplicate_bases = vec![];
+        for (index, base) in valid_bases
+            .iter()
+            .enumerate()
+            .filter_map(|(index, base)| Some((index, base.into_class()?)))
+        {
+            if !seen_bases.insert(base) {
+                duplicate_bases.push((index, base));
+            }
+        }
+
+        if duplicate_bases.is_empty() {
+            MroError::UnresolvableMro {
+                bases_list: valid_bases.into_boxed_slice(),
+            }
+        } else {
+            MroError::DuplicateBases(duplicate_bases.into_boxed_slice())
+        }
+    })
 }
 
 /// Iterator that yields elements of a class's MRO.
@@ -174,6 +188,7 @@ impl<'db> MroIterator<'db> {
         debug_assert!(self.first_element_yielded);
         self.subsequent_elements
             .get_or_insert_with(|| match self.class.try_mro(self.db) {
+                Ok(Mro::Object) => MroInnerIterator::ZeroElements,
                 Ok(Mro::NoBases) => {
                     MroInnerIterator::SingleElement(Some(ClassBase::object(self.db)))
                 }
@@ -185,12 +200,12 @@ impl<'db> MroIterator<'db> {
                 Ok(Mro::SingleBase(ClassBase::Dynamic(dynamic_type))) => {
                     MroInnerIterator::DynamicMro {
                         db: self.db,
-                        dynamic_type: Some(*dynamic_type),
+                        dynamic_type: Some(dynamic_type),
                         object_yielded: false,
                     }
                 }
                 Ok(Mro::Resolved(mro)) => {
-                    let mut middle_mro = mro.into_iter();
+                    let mut middle_mro = mro.iter();
                     middle_mro.next();
                     MroInnerIterator::Slice(middle_mro)
                 }
@@ -216,6 +231,7 @@ impl<'db> Iterator for MroIterator<'db> {
 impl std::iter::FusedIterator for MroIterator<'_> {}
 
 enum MroInnerIterator<'db> {
+    ZeroElements,
     SingleElement(Option<ClassBase<'db>>),
     Delegated(Box<MroIterator<'db>>),
     Slice(std::slice::Iter<'db, ClassBase<'db>>),
@@ -231,6 +247,7 @@ impl<'db> Iterator for MroInnerIterator<'db> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
+            Self::ZeroElements => None,
             Self::SingleElement(element) => element.take(),
             Self::Delegated(mro_iterator) => mro_iterator.next(),
             Self::Slice(resolved_mro) => resolved_mro.next().copied(),
@@ -253,7 +270,7 @@ impl<'db> Iterator for MroInnerIterator<'db> {
 impl std::iter::FusedIterator for MroInnerIterator<'_> {}
 
 /// Possible ways in which attempting to resolve the MRO of a class might fail.
-#[derive(Debug, PartialEq, Eq, salsa::Update)]
+#[derive(Debug, Clone, PartialEq, Eq, salsa::Update)]
 pub(super) enum MroError<'db> {
     /// The class inherits from one or more invalid bases.
     ///
@@ -293,7 +310,7 @@ impl<'db> MroError<'db> {
 ///
 /// [C3-merge algorithm]: https://docs.python.org/3/howto/mro.html#python-2-3-mro
 /// [method resolution order]: https://docs.python.org/3/glossary.html#term-method-resolution-order
-fn c3_merge(mut sequences: Vec<VecDeque<ClassBase>>) -> Option<Mro> {
+fn c3_merge(mut sequences: Vec<VecDeque<ClassBase>>) -> Option<Box<[ClassBase]>> {
     // Most MROs aren't that long...
     let mut mro = Vec::with_capacity(8);
 
@@ -301,7 +318,7 @@ fn c3_merge(mut sequences: Vec<VecDeque<ClassBase>>) -> Option<Mro> {
         sequences.retain(|sequence| !sequence.is_empty());
 
         if sequences.is_empty() {
-            return Some(Mro::Resolved(mro.into_boxed_slice()));
+            return Some(mro.into_boxed_slice());
         }
 
         // If the candidate exists "deeper down" in the inheritance hierarchy,
