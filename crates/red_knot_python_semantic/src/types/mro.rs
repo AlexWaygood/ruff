@@ -2,8 +2,9 @@ use std::collections::VecDeque;
 
 use rustc_hash::FxHashSet;
 
+use crate::types::class::Class;
 use crate::types::class_base::ClassBase;
-use crate::types::{Class, Type};
+use crate::types::{DynamicType, Type};
 use crate::Db;
 
 /// The inferred method resolution order of a given class.
@@ -65,7 +66,7 @@ impl<'db> Mro<'db> {
             // and the `c3_merge` function requires lots of allocations.
             [single_base] => ClassBase::try_from_type(db, *single_base)
                 .map(Self::SingleBase)
-                .ok_or_else(|| MroError::InvalidBases(Box::from([(0, *single_base)]))),
+                .ok_or_else(|| MroError::invalid_bases([(0, *single_base)])),
 
             // The class has multiple explicit bases.
             //
@@ -84,12 +85,15 @@ impl<'db> Mro<'db> {
                 }
 
                 if !invalid_bases.is_empty() {
-                    return Err(MroError::InvalidBases(invalid_bases.into_boxed_slice()));
+                    return Err(MroError::invalid_bases(invalid_bases));
                 }
 
                 let mut seqs = vec![VecDeque::from([ClassBase::Class(class)])];
                 for base in &valid_bases {
-                    seqs.push(base.mro(db).collect());
+                    seqs.push(match base {
+                        ClassBase::Dynamic(_) => VecDeque::from([*base, ClassBase::object(db)]),
+                        ClassBase::Class(base_class) => base_class.iter_mro(db).collect(),
+                    });
                 }
                 seqs.push(valid_bases.iter().copied().collect());
 
@@ -146,16 +150,12 @@ pub(super) struct MroIterator<'db> {
     /// Whether or not we've already yielded the first element of the MRO
     first_element_yielded: bool,
 
-    /// Whether or not we've already yielded the last element of the MRO
-    /// (which is always `object`).
-    last_element_yielded: bool,
-
-    /// Iterator over all elements of the MRO except the first and the last.
+    /// Iterator over all elements of the MRO except the first.
     ///
     /// The full MRO is expensive to materialize, so this field is `None`
     /// unless we actually *need* to iterate past the first element of the MRO,
     /// at which point it is lazily materialized.
-    middle_elemenets: Option<Box<dyn Iterator<Item = ClassBase<'db>> + 'db>>,
+    subsequent_elements: Option<MroInnerIterator<'db>>,
 }
 
 impl<'db> MroIterator<'db> {
@@ -164,30 +164,40 @@ impl<'db> MroIterator<'db> {
             db,
             class,
             first_element_yielded: false,
-            last_element_yielded: false,
-            middle_elemenets: None,
+            subsequent_elements: None,
         }
     }
 
     /// Materialize the full MRO of the class.
     /// Return an iterator over that MRO which skips the first element of the MRO.
-    fn mro_middle_elements(&mut self) -> impl Iterator<Item = ClassBase<'db>> + '_ {
+    fn full_mro_except_first_element(&mut self) -> &mut MroInnerIterator<'db> {
         debug_assert!(self.first_element_yielded);
-        self.middle_elemenets.get_or_insert_with(|| {
-            debug_assert!(!self.last_element_yielded);
-            match self.class.try_mro(self.db) {
-                Ok(Mro::NoBases) => Box::new(std::iter::empty()),
-                Ok(Mro::FromError) | Err(_) => Box::new(std::iter::once(ClassBase::unknown())),
+        self.subsequent_elements
+            .get_or_insert_with(|| match self.class.try_mro(self.db) {
+                Ok(Mro::NoBases) => {
+                    MroInnerIterator::SingleElement(Some(ClassBase::object(self.db)))
+                }
+                Ok(Mro::FromError) | Err(_) => MroInnerIterator::DynamicMro {
+                    db: self.db,
+                    dynamic_type: Some(DynamicType::Unknown),
+                    object_yielded: false,
+                },
+                Ok(Mro::SingleBase(ClassBase::Dynamic(dynamic_type))) => {
+                    MroInnerIterator::DynamicMro {
+                        db: self.db,
+                        dynamic_type: Some(*dynamic_type),
+                        object_yielded: false,
+                    }
+                }
                 Ok(Mro::Resolved(mro)) => {
-                    self.last_element_yielded = true;
-                    Box::new(mro.into_iter().skip(1).copied())
+                    let mut middle_mro = mro.into_iter();
+                    middle_mro.next();
+                    MroInnerIterator::Slice(middle_mro)
                 }
-                Ok(Mro::SingleBase(base)) => {
-                    self.last_element_yielded = true;
-                    Box::new(base.mro(self.db))
+                Ok(Mro::SingleBase(ClassBase::Class(base_class))) => {
+                    MroInnerIterator::Delegated(Box::new(base_class.iter_mro(self.db)))
                 }
-            }
-        })
+            })
     }
 }
 
@@ -199,18 +209,48 @@ impl<'db> Iterator for MroIterator<'db> {
             self.first_element_yielded = true;
             return Some(ClassBase::Class(self.class));
         }
-        if let Some(element) = self.mro_middle_elements().next() {
-            return Some(element);
-        }
-        if self.last_element_yielded {
-            return None;
-        }
-        self.last_element_yielded = true;
-        Some(ClassBase::object(self.db))
+        self.full_mro_except_first_element().next()
     }
 }
 
 impl std::iter::FusedIterator for MroIterator<'_> {}
+
+enum MroInnerIterator<'db> {
+    SingleElement(Option<ClassBase<'db>>),
+    Delegated(Box<MroIterator<'db>>),
+    Slice(std::slice::Iter<'db, ClassBase<'db>>),
+    DynamicMro {
+        db: &'db dyn Db,
+        dynamic_type: Option<DynamicType>,
+        object_yielded: bool,
+    },
+}
+
+impl<'db> Iterator for MroInnerIterator<'db> {
+    type Item = ClassBase<'db>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::SingleElement(element) => element.take(),
+            Self::Delegated(mro_iterator) => mro_iterator.next(),
+            Self::Slice(resolved_mro) => resolved_mro.next().copied(),
+            Self::DynamicMro {
+                dynamic_type,
+                object_yielded,
+                db,
+            } => dynamic_type.take().map(ClassBase::Dynamic).or_else(|| {
+                if *object_yielded {
+                    None
+                } else {
+                    *object_yielded = true;
+                    Some(ClassBase::object(*db))
+                }
+            }),
+        }
+    }
+}
+
+impl std::iter::FusedIterator for MroInnerIterator<'_> {}
 
 /// Possible ways in which attempting to resolve the MRO of a class might fail.
 #[derive(Debug, PartialEq, Eq, salsa::Update)]
@@ -240,6 +280,12 @@ pub(super) enum MroError<'db> {
     ///
     /// See [`c3_merge`] for more details.
     UnresolvableMro { bases_list: Box<[ClassBase<'db>]> },
+}
+
+impl<'db> MroError<'db> {
+    fn invalid_bases(bases: impl IntoIterator<Item = (usize, Type<'db>)>) -> Self {
+        Self::InvalidBases(bases.into_iter().collect())
+    }
 }
 
 /// Implementation of the [C3-merge algorithm] for calculating a Python class's

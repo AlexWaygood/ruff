@@ -1,6 +1,5 @@
 use crate::types::{todo_type, Class, DynamicType, KnownClass, KnownInstanceType, Type};
 use crate::Db;
-use itertools::Either;
 
 /// Enumeration of the possible kinds of types we allow in class bases.
 ///
@@ -153,17 +152,6 @@ impl<'db> ClassBase<'db> {
         match self {
             Self::Class(class) => Some(class),
             Self::Dynamic(_) => None,
-        }
-    }
-
-    /// Iterate over the MRO of this base
-    pub(super) fn mro(
-        self,
-        db: &'db dyn Db,
-    ) -> Either<impl Iterator<Item = ClassBase<'db>>, impl Iterator<Item = ClassBase<'db>>> {
-        match self {
-            ClassBase::Dynamic(_) => Either::Left([self, ClassBase::object(db)].into_iter()),
-            ClassBase::Class(class) => Either::Right(class.iter_mro(db)),
         }
     }
 }
