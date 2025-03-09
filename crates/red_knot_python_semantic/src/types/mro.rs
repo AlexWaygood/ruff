@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::ops::Deref;
 
 use rustc_hash::FxHashSet;
 
@@ -11,7 +10,12 @@ use crate::Db;
 ///
 /// See [`Class::iter_mro`] for more details.
 #[derive(PartialEq, Eq, Clone, Debug, salsa::Update)]
-pub(super) struct Mro<'db>(Box<[ClassBase<'db>]>);
+pub(super) enum Mro<'db> {
+    NoBases,
+    FromError,
+    SingleBase(ClassBase<'db>),
+    Resolved(Box<[ClassBase<'db>]>),
+}
 
 impl<'db> Mro<'db> {
     /// Attempt to resolve the MRO of a given class
@@ -25,34 +29,19 @@ impl<'db> Mro<'db> {
     /// (We emit a diagnostic warning about the runtime `TypeError` in
     /// [`super::infer::TypeInferenceBuilder::infer_region_scope`].)
     pub(super) fn of_class(db: &'db dyn Db, class: Class<'db>) -> Result<Self, MroError<'db>> {
-        Self::of_class_impl(db, class).map_err(|error_kind| MroError {
-            kind: error_kind,
-            fallback_mro: Self::from_error(db, class),
-        })
-    }
-
-    pub(super) fn from_error(db: &'db dyn Db, class: Class<'db>) -> Self {
-        Self::from([
-            ClassBase::Class(class),
-            ClassBase::unknown(),
-            ClassBase::object(db),
-        ])
-    }
-
-    fn of_class_impl(db: &'db dyn Db, class: Class<'db>) -> Result<Self, MroErrorKind<'db>> {
         let class_bases = class.explicit_bases(db);
 
         if !class_bases.is_empty() && class.inheritance_cycle(db).is_some() {
             // We emit errors for cyclically defined classes elsewhere.
             // It's important that we don't even try to infer the MRO for a cyclically defined class,
             // or we'll end up in an infinite loop.
-            return Ok(Mro::from_error(db, class));
+            return Ok(Self::FromError);
         }
 
         match class_bases {
             // `builtins.object` is the special case:
             // the only class in Python that has an MRO with length <2
-            [] if class.is_object(db) => Ok(Self::from([ClassBase::Class(class)])),
+            [] if class.is_object(db) => Ok(Self::Resolved(Box::from([ClassBase::Class(class)]))),
 
             // All other classes in Python have an MRO with length >=2.
             // Even if a class has no explicit base classes,
@@ -67,21 +56,16 @@ impl<'db> Mro<'db> {
             // >>> Foo.__mro__
             // (<class '__main__.Foo'>, <class 'object'>)
             // ```
-            [] => Ok(Self::from([ClassBase::Class(class), ClassBase::object(db)])),
+            [] => Ok(Self::NoBases),
 
             // Fast path for a class that has only a single explicit base.
             //
             // This *could* theoretically be handled by the final branch below,
             // but it's a common case (i.e., worth optimizing for),
             // and the `c3_merge` function requires lots of allocations.
-            [single_base] => ClassBase::try_from_type(db, *single_base).map_or_else(
-                || Err(MroErrorKind::InvalidBases(Box::from([(0, *single_base)]))),
-                |single_base| {
-                    Ok(std::iter::once(ClassBase::Class(class))
-                        .chain(single_base.mro(db))
-                        .collect())
-                },
-            ),
+            [single_base] => ClassBase::try_from_type(db, *single_base)
+                .map(Self::SingleBase)
+                .ok_or_else(|| MroError::InvalidBases(Box::from([(0, *single_base)]))),
 
             // The class has multiple explicit bases.
             //
@@ -100,7 +84,7 @@ impl<'db> Mro<'db> {
                 }
 
                 if !invalid_bases.is_empty() {
-                    return Err(MroErrorKind::InvalidBases(invalid_bases.into_boxed_slice()));
+                    return Err(MroError::InvalidBases(invalid_bases.into_boxed_slice()));
                 }
 
                 let mut seqs = vec![VecDeque::from([ClassBase::Class(class)])];
@@ -123,41 +107,15 @@ impl<'db> Mro<'db> {
                     }
 
                     if duplicate_bases.is_empty() {
-                        MroErrorKind::UnresolvableMro {
+                        MroError::UnresolvableMro {
                             bases_list: valid_bases.into_boxed_slice(),
                         }
                     } else {
-                        MroErrorKind::DuplicateBases(duplicate_bases.into_boxed_slice())
+                        MroError::DuplicateBases(duplicate_bases.into_boxed_slice())
                     }
                 })
             }
         }
-    }
-}
-
-impl<'db, const N: usize> From<[ClassBase<'db>; N]> for Mro<'db> {
-    fn from(value: [ClassBase<'db>; N]) -> Self {
-        Self(Box::from(value))
-    }
-}
-
-impl<'db> From<Vec<ClassBase<'db>>> for Mro<'db> {
-    fn from(value: Vec<ClassBase<'db>>) -> Self {
-        Self(value.into_boxed_slice())
-    }
-}
-
-impl<'db> Deref for Mro<'db> {
-    type Target = [ClassBase<'db>];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<'db> FromIterator<ClassBase<'db>> for Mro<'db> {
-    fn from_iter<T: IntoIterator<Item = ClassBase<'db>>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
     }
 }
 
@@ -188,12 +146,16 @@ pub(super) struct MroIterator<'db> {
     /// Whether or not we've already yielded the first element of the MRO
     first_element_yielded: bool,
 
-    /// Iterator over all elements of the MRO except the first.
+    /// Whether or not we've already yielded the last element of the MRO
+    /// (which is always `object`).
+    last_element_yielded: bool,
+
+    /// Iterator over all elements of the MRO except the first and the last.
     ///
     /// The full MRO is expensive to materialize, so this field is `None`
     /// unless we actually *need* to iterate past the first element of the MRO,
     /// at which point it is lazily materialized.
-    subsequent_elements: Option<std::slice::Iter<'db, ClassBase<'db>>>,
+    middle_elemenets: Option<Box<dyn Iterator<Item = ClassBase<'db>> + 'db>>,
 }
 
 impl<'db> MroIterator<'db> {
@@ -202,23 +164,30 @@ impl<'db> MroIterator<'db> {
             db,
             class,
             first_element_yielded: false,
-            subsequent_elements: None,
+            last_element_yielded: false,
+            middle_elemenets: None,
         }
     }
 
     /// Materialize the full MRO of the class.
     /// Return an iterator over that MRO which skips the first element of the MRO.
-    fn full_mro_except_first_element(&mut self) -> impl Iterator<Item = ClassBase<'db>> + '_ {
-        self.subsequent_elements
-            .get_or_insert_with(|| {
-                let mut full_mro_iter = match self.class.try_mro(self.db) {
-                    Ok(mro) => mro.iter(),
-                    Err(error) => error.fallback_mro().iter(),
-                };
-                full_mro_iter.next();
-                full_mro_iter
-            })
-            .copied()
+    fn mro_middle_elements(&mut self) -> impl Iterator<Item = ClassBase<'db>> + '_ {
+        debug_assert!(self.first_element_yielded);
+        self.middle_elemenets.get_or_insert_with(|| {
+            debug_assert!(!self.last_element_yielded);
+            match self.class.try_mro(self.db) {
+                Ok(Mro::NoBases) => Box::new(std::iter::empty()),
+                Ok(Mro::FromError) | Err(_) => Box::new(std::iter::once(ClassBase::unknown())),
+                Ok(Mro::Resolved(mro)) => {
+                    self.last_element_yielded = true;
+                    Box::new(mro.into_iter().skip(1).copied())
+                }
+                Ok(Mro::SingleBase(base)) => {
+                    self.last_element_yielded = true;
+                    Box::new(base.mro(self.db))
+                }
+            }
+        })
     }
 }
 
@@ -230,34 +199,22 @@ impl<'db> Iterator for MroIterator<'db> {
             self.first_element_yielded = true;
             return Some(ClassBase::Class(self.class));
         }
-        self.full_mro_except_first_element().next()
+        if let Some(element) = self.mro_middle_elements().next() {
+            return Some(element);
+        }
+        if self.last_element_yielded {
+            return None;
+        }
+        self.last_element_yielded = true;
+        Some(ClassBase::object(self.db))
     }
 }
 
 impl std::iter::FusedIterator for MroIterator<'_> {}
 
-#[derive(Debug, PartialEq, Eq, salsa::Update)]
-pub(super) struct MroError<'db> {
-    kind: MroErrorKind<'db>,
-    fallback_mro: Mro<'db>,
-}
-
-impl<'db> MroError<'db> {
-    /// Return an [`MroErrorKind`] variant describing why we could not resolve the MRO for this class.
-    pub(super) fn reason(&self) -> &MroErrorKind<'db> {
-        &self.kind
-    }
-
-    /// Return the fallback MRO we should infer for this class during type inference
-    /// (since accurate resolution of its "true" MRO was impossible)
-    pub(super) fn fallback_mro(&self) -> &Mro<'db> {
-        &self.fallback_mro
-    }
-}
-
 /// Possible ways in which attempting to resolve the MRO of a class might fail.
 #[derive(Debug, PartialEq, Eq, salsa::Update)]
-pub(super) enum MroErrorKind<'db> {
+pub(super) enum MroError<'db> {
     /// The class inherits from one or more invalid bases.
     ///
     /// To avoid excessive complexity in our implementation,
@@ -298,7 +255,7 @@ fn c3_merge(mut sequences: Vec<VecDeque<ClassBase>>) -> Option<Mro> {
         sequences.retain(|sequence| !sequence.is_empty());
 
         if sequences.is_empty() {
-            return Some(Mro::from(mro));
+            return Some(Mro::Resolved(mro.into_boxed_slice()));
         }
 
         // If the candidate exists "deeper down" in the inheritance hierarchy,

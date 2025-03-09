@@ -65,7 +65,7 @@ use crate::types::diagnostic::{
     POSSIBLY_UNBOUND_ATTRIBUTE, POSSIBLY_UNBOUND_IMPORT, UNDEFINED_REVEAL, UNRESOLVED_ATTRIBUTE,
     UNRESOLVED_IMPORT, UNSUPPORTED_OPERATOR,
 };
-use crate::types::mro::MroErrorKind;
+use crate::types::mro::MroError;
 use crate::types::unpacker::{UnpackResult, Unpacker};
 use crate::types::{
     class::MetaclassErrorKind, todo_type, Class, DynamicType, FunctionType, InstanceType,
@@ -686,8 +686,8 @@ impl<'db> TypeInferenceBuilder<'db> {
             // (3) Check that the class's MRO is resolvable
             match class.try_mro(self.db()).as_ref() {
                 Err(mro_error) => {
-                    match mro_error.reason() {
-                        MroErrorKind::DuplicateBases(duplicates) => {
+                    match mro_error {
+                        MroError::DuplicateBases(duplicates) => {
                             let base_nodes = class_node.bases();
                             for (index, duplicate) in duplicates {
                                 self.context.report_lint(
@@ -697,7 +697,7 @@ impl<'db> TypeInferenceBuilder<'db> {
                                 );
                             }
                         }
-                        MroErrorKind::InvalidBases(bases) => {
+                        MroError::InvalidBases(bases) => {
                             let base_nodes = class_node.bases();
                             for (index, base_ty) in bases {
                                 self.context.report_lint(
@@ -710,7 +710,7 @@ impl<'db> TypeInferenceBuilder<'db> {
                                 );
                             }
                         }
-                        MroErrorKind::UnresolvableMro { bases_list } => self.context.report_lint(
+                        MroError::UnresolvableMro { bases_list } => self.context.report_lint(
                             &INCONSISTENT_MRO,
                             class_node,
                             format_args!(
