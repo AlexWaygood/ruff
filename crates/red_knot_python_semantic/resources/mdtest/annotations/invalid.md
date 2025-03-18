@@ -18,6 +18,7 @@ def _(
     f: Literal[b"foo"],
     g: tuple[int, str],
     h: Never,
+    z: Literal[42],
 ):
     def foo(): ...
     def invalid(
@@ -31,6 +32,7 @@ def _(
         p: h,  # error: [invalid-type-form]
         q: typing,  # error: [invalid-type-form]
         r: foo,  # error: [invalid-type-form]
+        s: z,  # error: [invalid-type-form]
     ):
         reveal_type(i)  # revealed: Unknown
         reveal_type(j)  # revealed: Unknown
@@ -42,6 +44,7 @@ def _(
         reveal_type(p)  # revealed: Unknown
         reveal_type(q)  # revealed: Unknown
         reveal_type(r)  # revealed: Unknown
+        reveal_type(s)  # revealed: Unknown
 ```
 
 ## Invalid AST nodes
@@ -69,6 +72,7 @@ def _(
     p: bar(),  # error: [invalid-type-form] "Function calls are not allowed in type expressions"
     q: int | f"foo",  # error: [invalid-type-form] "F-strings are not allowed in type expressions"
     r: [1, 2, 3][1:2],  # error: [invalid-type-form] "Slices are not allowed in type expressions"
+    s: ...,  # error: [invalid-type-form] "Ellipsis literals are not allowed in this context in a type expression"
 ):
     reveal_type(a)  # revealed: Unknown
     reveal_type(b)  # revealed: Unknown

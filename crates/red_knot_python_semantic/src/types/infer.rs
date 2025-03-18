@@ -6164,6 +6164,15 @@ impl<'db> TypeInferenceBuilder<'db> {
                 )
             }
 
+            // TODO: add a subdiagnostic linking to type-expression grammar
+            // and stating that it is only valid in `tuple[]` or `typing.Callable[]`
+            ast::Expr::EllipsisLiteral(_) => self.report_invalid_type_expression(
+                expression,
+                format_args!(
+                    "Ellipsis literals are not allowed in this context in a type expression"
+                ),
+            ),
+
             ast::Expr::BoolOp(bool_op) => {
                 self.infer_boolean_expression(bool_op);
                 self.report_invalid_type_expression(
@@ -6313,10 +6322,6 @@ impl<'db> TypeInferenceBuilder<'db> {
             // =================================================================================
             ast::Expr::IpyEscapeCommand(_) => todo!("Implement Ipy escape command support"),
 
-            ast::Expr::EllipsisLiteral(_) => {
-                todo_type!("ellipsis literal in type expression")
-            }
-
             ast::Expr::Tuple(tuple) => {
                 self.infer_tuple_expression(tuple);
                 Type::unknown()
@@ -6391,7 +6396,11 @@ impl<'db> TypeInferenceBuilder<'db> {
                 let mut return_todo = false;
 
                 for element in elements {
-                    let element_ty = self.infer_type_expression(element);
+                    let element_ty = if element.is_ellipsis_literal_expr() {
+                        todo_type!("`...` in `tuple[]`")
+                    } else {
+                        self.infer_type_expression(element)
+                    };
                     return_todo |= element_could_alter_type_of_whole_tuple(element, element_ty);
                     element_types.push(element_ty);
                 }
