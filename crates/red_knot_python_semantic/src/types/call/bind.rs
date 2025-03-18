@@ -460,7 +460,7 @@ impl<'db> Binding<'db> {
         }
 
         Self {
-            return_ty: signature.return_ty.unwrap_or(Type::unknown()),
+            return_ty: signature.return_type.unwrap_or(Type::unknown()),
             parameter_tys: parameter_tys
                 .into_iter()
                 .map(|opt_ty| opt_ty.unwrap_or(Type::unknown()))

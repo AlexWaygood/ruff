@@ -225,8 +225,8 @@ impl<'db> Class<'db> {
             .find_keyword("metaclass")?
             .value;
         let class_definition = semantic_index(db, self.file(db)).definition(class_stmt);
-        let metaclass_ty = definition_expression_type(db, class_definition, metaclass_node);
-        Some(metaclass_ty)
+        let metaclass_type = definition_expression_type(db, class_definition, metaclass_node);
+        Some(metaclass_type)
     }
 
     /// Return the metaclass of this class, or `type[Unknown]` if the metaclass cannot be inferred.
@@ -267,9 +267,9 @@ impl<'db> Class<'db> {
             (KnownClass::Type.to_class_literal(db), self)
         };
 
-        let mut candidate = if let Type::ClassLiteral(metaclass_ty) = metaclass {
+        let mut candidate = if let Type::ClassLiteral(metaclass_type) = metaclass {
             MetaclassCandidate {
-                metaclass: metaclass_ty.class,
+                metaclass: metaclass_type.class,
                 explicit_metaclass_of: class_metaclass_was_from,
             }
         } else {
@@ -281,7 +281,7 @@ impl<'db> Class<'db> {
             // TODO: Other keyword arguments?
             let arguments = CallArguments::positional([name, bases, namespace]);
 
-            let return_ty_result = match metaclass.try_call(db, &arguments) {
+            let return_type_result = match metaclass.try_call(db, &arguments) {
                 Ok(bindings) => Ok(bindings.return_type(db)),
 
                 Err(CallError(CallErrorKind::NotCallable, bindings)) => Err(MetaclassError {
@@ -299,7 +299,7 @@ impl<'db> Class<'db> {
                 }),
             };
 
-            return return_ty_result.map(|ty| ty.to_meta_type(db));
+            return return_type_result.map(|ty| ty.to_meta_type(db));
         };
 
         // Reconcile all base classes' metaclasses with the candidate metaclass.
@@ -512,40 +512,40 @@ impl<'db> Class<'db> {
                     //     self.name: <annotation>
                     //     self.name: <annotation> = …
 
-                    let annotation_ty = infer_expression_type(db, *annotation);
+                    let annotation_type = infer_expression_type(db, *annotation);
 
                     // TODO: check if there are conflicting declarations
-                    return Some(annotation_ty);
+                    return Some(annotation_type);
                 }
                 AttributeAssignment::Unannotated { value } => {
                     // We found an un-annotated attribute assignment of the form:
                     //
                     //     self.name = <value>
 
-                    let inferred_ty = infer_expression_type(db, *value);
+                    let inferred_type = infer_expression_type(db, *value);
 
-                    union_of_inferred_types = union_of_inferred_types.add(inferred_ty);
+                    union_of_inferred_types = union_of_inferred_types.add(inferred_type);
                 }
                 AttributeAssignment::Iterable { iterable } => {
                     // We found an attribute assignment like:
                     //
                     //     for self.name in <iterable>:
 
-                    let iterable_ty = infer_expression_type(db, *iterable);
+                    let iterable_type = infer_expression_type(db, *iterable);
                     // TODO: Potential diagnostics resulting from the iterable are currently not reported.
-                    let inferred_ty = iterable_ty.iterate(db);
+                    let inferred_type = iterable_type.iterate(db);
 
-                    union_of_inferred_types = union_of_inferred_types.add(inferred_ty);
+                    union_of_inferred_types = union_of_inferred_types.add(inferred_type);
                 }
                 AttributeAssignment::ContextManager { context_manager } => {
                     // We found an attribute assignment like:
                     //
                     //     with <context_manager> as self.name:
 
-                    let context_ty = infer_expression_type(db, *context_manager);
-                    let inferred_ty = context_ty.enter(db);
+                    let context_type = infer_expression_type(db, *context_manager);
+                    let inferred_type = context_type.enter(db);
 
-                    union_of_inferred_types = union_of_inferred_types.add(inferred_ty);
+                    union_of_inferred_types = union_of_inferred_types.add(inferred_type);
                 }
                 AttributeAssignment::Unpack {
                     attribute_expression_id,
@@ -557,9 +557,9 @@ impl<'db> Class<'db> {
                     //     (.., self.name, ..) = <value>
                     //     [.., self.name, ..] = <value>
 
-                    let inferred_ty =
+                    let inferred_type =
                         infer_unpack_types(db, *unpack).expression_type(*attribute_expression_id);
-                    union_of_inferred_types = union_of_inferred_types.add(inferred_ty);
+                    union_of_inferred_types = union_of_inferred_types.add(inferred_type);
                 }
             }
         }
@@ -584,7 +584,7 @@ impl<'db> Class<'db> {
             let declared_and_qualifiers = symbol_from_declarations(db, declarations);
             match declared_and_qualifiers {
                 Ok(SymbolAndQualifiers {
-                    symbol: declared @ Symbol::Type(declared_ty, declaredness),
+                    symbol: declared @ Symbol::Type(declared_type, declaredness),
                     qualifiers,
                 }) => {
                     // The attribute is declared in the class body.
@@ -596,7 +596,7 @@ impl<'db> Class<'db> {
                     if has_binding {
                         // The attribute is declared and bound in the class body.
 
-                        if let Some(implicit_ty) =
+                        if let Some(implicit_type) =
                             Self::implicit_instance_attribute(db, body_scope, name)
                         {
                             if declaredness == Boundness::Bound {
@@ -606,7 +606,7 @@ impl<'db> Class<'db> {
                                 declared.with_qualifiers(qualifiers)
                             } else {
                                 Symbol::Type(
-                                    UnionType::from_elements(db, [declared_ty, implicit_ty]),
+                                    UnionType::from_elements(db, [declared_type, implicit_type]),
                                     declaredness,
                                 )
                                 .with_qualifiers(qualifiers)
@@ -630,11 +630,11 @@ impl<'db> Class<'db> {
                         if declaredness == Boundness::Bound {
                             declared.with_qualifiers(qualifiers)
                         } else {
-                            if let Some(implicit_ty) =
+                            if let Some(implicit_type) =
                                 Self::implicit_instance_attribute(db, body_scope, name)
                             {
                                 Symbol::Type(
-                                    UnionType::from_elements(db, [declared_ty, implicit_ty]),
+                                    UnionType::from_elements(db, [declared_type, implicit_type]),
                                     declaredness,
                                 )
                                 .with_qualifiers(qualifiers)

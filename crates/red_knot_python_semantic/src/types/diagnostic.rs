@@ -1238,9 +1238,8 @@ pub(crate) fn report_base_with_incompatible_slots(context: &InferContext, node: 
     );
 }
 
-pub(crate) fn report_invalid_arguments_to_annotated<'db>(
-    db: &'db dyn Db,
-    context: &InferContext<'db>,
+pub(crate) fn report_invalid_arguments_to_annotated(
+    context: &InferContext,
     subscript: &ast::ExprSubscript,
 ) {
     context.report_lint(
@@ -1248,7 +1247,7 @@ pub(crate) fn report_invalid_arguments_to_annotated<'db>(
         subscript,
         format_args!(
             "Special form `{}` expected at least 2 arguments (one type and at least one metadata element)",
-            KnownInstanceType::Annotated.repr(db)
+            KnownInstanceType::Annotated.repr(context.db())
         ),
     );
 }

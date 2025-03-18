@@ -24,7 +24,7 @@ enum SlotsKind {
 
 impl SlotsKind {
     fn from(db: &dyn Db, base: Class) -> Self {
-        let Symbol::Type(slots_ty, bound) = base.own_class_member(db, "__slots__").symbol else {
+        let Symbol::Type(slots_type, bound) = base.own_class_member(db, "__slots__").symbol else {
             return Self::NotSpecified;
         };
 
@@ -32,7 +32,7 @@ impl SlotsKind {
             return Self::Dynamic;
         };
 
-        match slots_ty {
+        match slots_type {
             // __slots__ = ("a", "b")
             Type::Tuple(tuple) => {
                 if tuple.elements(db).is_empty() {

@@ -112,8 +112,8 @@ impl KnownConstraintFunction {
                 Some(builder.build())
             }
             Type::ClassLiteral(class_literal) => Some(constraint_fn(class_literal.class())),
-            Type::SubclassOf(subclass_of_ty) => {
-                subclass_of_ty.subclass_of().into_class().map(constraint_fn)
+            Type::SubclassOf(subclass_of_type) => {
+                subclass_of_type.subclass_of().into_class().map(constraint_fn)
             }
             _ => None,
         }
@@ -320,14 +320,14 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
             .tuple_windows::<(&ruff_python_ast::Expr, &ruff_python_ast::Expr)>();
         let mut constraints = NarrowingConstraints::default();
 
-        let mut last_rhs_ty: Option<Type> = None;
+        let mut last_rhs_type: Option<Type> = None;
 
         for (op, (left, right)) in std::iter::zip(&**ops, comparator_tuples) {
-            let lhs_ty = last_rhs_ty.unwrap_or_else(|| {
+            let lhs_type = last_rhs_type.unwrap_or_else(|| {
                 inference.expression_type(left.scoped_expression_id(self.db, scope))
             });
-            let rhs_ty = inference.expression_type(right.scoped_expression_id(self.db, scope));
-            last_rhs_ty = Some(rhs_ty);
+            let rhs_type = inference.expression_type(right.scoped_expression_id(self.db, scope));
+            last_rhs_type = Some(rhs_type);
 
             match left {
                 ast::Expr::Name(ast::ExprName {
@@ -342,9 +342,9 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
 
                     match if is_positive { *op } else { op.negate() } {
                         ast::CmpOp::IsNot => {
-                            if rhs_ty.is_singleton(self.db) {
+                            if rhs_type.is_singleton(self.db) {
                                 let ty = IntersectionBuilder::new(self.db)
-                                    .add_negative(rhs_ty)
+                                    .add_negative(rhs_type)
                                     .build();
                                 constraints.insert(symbol, ty);
                             } else {
@@ -352,18 +352,18 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
                             }
                         }
                         ast::CmpOp::Is => {
-                            constraints.insert(symbol, rhs_ty);
+                            constraints.insert(symbol, rhs_type);
                         }
                         ast::CmpOp::NotEq => {
-                            if rhs_ty.is_single_valued(self.db) {
+                            if rhs_type.is_single_valued(self.db) {
                                 let ty = IntersectionBuilder::new(self.db)
-                                    .add_negative(rhs_ty)
+                                    .add_negative(rhs_type)
                                     .build();
                                 constraints.insert(symbol, ty);
                             }
                         }
-                        ast::CmpOp::Eq if lhs_ty.is_literal_string() => {
-                            constraints.insert(symbol, rhs_ty);
+                        ast::CmpOp::Eq if lhs_type.is_literal_string() => {
+                            constraints.insert(symbol, rhs_type);
                         }
                         _ => {
                             // TODO other comparison types
@@ -380,7 +380,7 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
                             range: _,
                         },
                 }) if keywords.is_empty() => {
-                    let Type::ClassLiteral(ClassLiteralType { class: rhs_class }) = rhs_ty else {
+                    let Type::ClassLiteral(ClassLiteralType { class: rhs_class }) = rhs_type else {
                         continue;
                     };
 
@@ -427,12 +427,12 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
         let scope = self.scope();
         let inference = infer_expression_types(self.db, expression);
 
-        let callable_ty =
+        let callable_type =
             inference.expression_type(expr_call.func.scoped_expression_id(self.db, scope));
 
         // TODO: add support for PEP 604 union types on the right hand side of `isinstance`
         // and `issubclass`, for example `isinstance(x, str | (int | float))`.
-        match callable_ty {
+        match callable_type {
             Type::FunctionLiteral(function_type) if expr_call.arguments.keywords.is_empty() => {
                 let function = function_type.known(self.db)?.into_constraint_function()?;
 
@@ -444,11 +444,11 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
 
                 let symbol = self.symbols().symbol_id_by_name(id).unwrap();
 
-                let class_info_ty =
+                let class_info_type =
                     inference.expression_type(class_info.scoped_expression_id(self.db, scope));
 
                 function
-                    .generate_constraint(self.db, class_info_ty)
+                    .generate_constraint(self.db, class_info_type)
                     .map(|constraint| {
                         let mut constraints = NarrowingConstraints::default();
                         constraints.insert(symbol, constraint.negate_if(self.db, !is_positive));

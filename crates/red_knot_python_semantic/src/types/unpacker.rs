@@ -42,45 +42,49 @@ impl<'db> Unpacker<'db> {
             "Unpacking target must be a list or tuple expression"
         );
 
-        let value_ty = infer_expression_types(self.db(), value.expression())
+        let value_type = infer_expression_types(self.db(), value.expression())
             .expression_type(value.scoped_expression_id(self.db(), self.scope));
 
-        let value_ty = match value {
+        let value_type = match value {
             UnpackValue::Assign(expression) => {
                 if self.context.in_stub()
                     && expression.node_ref(self.db()).is_ellipsis_literal_expr()
                 {
                     Type::unknown()
                 } else {
-                    value_ty
+                    value_type
                 }
             }
-            UnpackValue::Iterable(_) => value_ty.try_iterate(self.db()).unwrap_or_else(|err| {
+            UnpackValue::Iterable(_) => value_type.try_iterate(self.db()).unwrap_or_else(|err| {
                 err.report_diagnostic(&self.context, value.as_any_node_ref(self.db()));
                 err.fallback_element_type(self.db())
             }),
-            UnpackValue::ContextManager(_) => value_ty.try_enter(self.db()).unwrap_or_else(|err| {
-                err.report_diagnostic(&self.context, value.as_any_node_ref(self.db()));
-                err.fallback_enter_type(self.db())
-            }),
+            UnpackValue::ContextManager(_) => {
+                value_type.try_enter(self.db()).unwrap_or_else(|err| {
+                    err.report_diagnostic(&self.context, value.as_any_node_ref(self.db()));
+                    err.fallback_enter_type(self.db())
+                })
+            }
         };
 
-        self.unpack_inner(target, value.as_any_node_ref(self.db()), value_ty);
+        self.unpack_inner(target, value.as_any_node_ref(self.db()), value_type);
     }
 
     fn unpack_inner(
         &mut self,
         target: &ast::Expr,
         value_expr: AnyNodeRef<'db>,
-        value_ty: Type<'db>,
+        value_type: Type<'db>,
     ) {
         match target {
             ast::Expr::Name(_) | ast::Expr::Attribute(_) => {
-                self.targets
-                    .insert(target.scoped_expression_id(self.db(), self.scope), value_ty);
+                self.targets.insert(
+                    target.scoped_expression_id(self.db(), self.scope),
+                    value_type,
+                );
             }
             ast::Expr::Starred(ast::ExprStarred { value, .. }) => {
-                self.unpack_inner(value, value_expr, value_ty);
+                self.unpack_inner(value, value_expr, value_type);
             }
             ast::Expr::List(ast::ExprList { elts, .. })
             | ast::Expr::Tuple(ast::ExprTuple { elts, .. }) => {
@@ -97,16 +101,16 @@ impl<'db> Unpacker<'db> {
                 //   index 1 in the first and second tuple respectively which will be `int | str`.
                 let mut target_types = vec![vec![]; elts.len()];
 
-                let unpack_types = match value_ty {
-                    Type::Union(union_ty) => union_ty.elements(self.db()),
-                    _ => std::slice::from_ref(&value_ty),
+                let unpack_types = match value_type {
+                    Type::Union(union) => union.elements(self.db()),
+                    _ => std::slice::from_ref(&value_type),
                 };
 
                 for ty in unpack_types.iter().copied() {
                     // Deconstruct certain types to delegate the inference back to the tuple type
                     // for correct handling of starred expressions.
                     let ty = match ty {
-                        Type::StringLiteral(string_literal_ty) => {
+                        Type::StringLiteral(string_literal_type) => {
                             // We could go further and deconstruct to an array of `StringLiteral`
                             // with each individual character, instead of just an array of
                             // `LiteralString`, but there would be a cost and it's not clear that
@@ -114,16 +118,16 @@ impl<'db> Unpacker<'db> {
                             TupleType::from_elements(
                                 self.db(),
                                 std::iter::repeat(Type::LiteralString)
-                                    .take(string_literal_ty.python_len(self.db())),
+                                    .take(string_literal_type.python_len(self.db())),
                             )
                         }
                         _ => ty,
                     };
 
-                    if let Some(tuple_ty) = ty.into_tuple() {
-                        let tuple_ty_elements = self.tuple_ty_elements(target, elts, tuple_ty);
+                    if let Some(tuple_type) = ty.into_tuple() {
+                        let elements = self.tuple_type_elements(target, elts, tuple_type);
 
-                        let length_mismatch = match elts.len().cmp(&tuple_ty_elements.len()) {
+                        let length_mismatch = match elts.len().cmp(&elements.len()) {
                             Ordering::Less => {
                                 self.context.report_lint(
                                     &INVALID_ASSIGNMENT,
@@ -131,7 +135,7 @@ impl<'db> Unpacker<'db> {
                                     format_args!(
                                         "Too many values to unpack (expected {}, got {})",
                                         elts.len(),
-                                        tuple_ty_elements.len()
+                                        elements.len()
                                     ),
                                 );
                                 true
@@ -143,7 +147,7 @@ impl<'db> Unpacker<'db> {
                                     format_args!(
                                         "Not enough values to unpack (expected {}, got {})",
                                         elts.len(),
-                                        tuple_ty_elements.len()
+                                        elements.len()
                                     ),
                                 );
                                 true
@@ -151,7 +155,7 @@ impl<'db> Unpacker<'db> {
                             Ordering::Equal => false,
                         };
 
-                        for (index, ty) in tuple_ty_elements.iter().enumerate() {
+                        for (index, ty) in elements.iter().enumerate() {
                             if let Some(element_types) = target_types.get_mut(index) {
                                 if length_mismatch {
                                     element_types.push(Type::unknown());
@@ -177,11 +181,11 @@ impl<'db> Unpacker<'db> {
 
                 for (index, element) in elts.iter().enumerate() {
                     // SAFETY: `target_types` is initialized with the same length as `elts`.
-                    let element_ty = match target_types[index].as_slice() {
+                    let element_type = match target_types[index].as_slice() {
                         [] => Type::unknown(),
                         types => UnionType::from_elements(self.db(), types),
                     };
-                    self.unpack_inner(element, value_expr, element_ty);
+                    self.unpack_inner(element, value_expr, element_type);
                 }
             }
             _ => {}
@@ -190,19 +194,19 @@ impl<'db> Unpacker<'db> {
 
     /// Returns the [`Type`] elements inside the given [`TupleType`] taking into account that there
     /// can be a starred expression in the `elements`.
-    fn tuple_ty_elements(
+    fn tuple_type_elements(
         &self,
         expr: &ast::Expr,
         targets: &[ast::Expr],
-        tuple_ty: TupleType<'db>,
+        tuple_type: TupleType<'db>,
     ) -> Cow<'_, [Type<'db>]> {
         // If there is a starred expression, it will consume all of the types at that location.
         let Some(starred_index) = targets.iter().position(ast::Expr::is_starred_expr) else {
             // Otherwise, the types will be unpacked 1-1 to the targets.
-            return Cow::Borrowed(tuple_ty.elements(self.db()).as_ref());
+            return Cow::Borrowed(tuple_type.elements(self.db()).as_ref());
         };
 
-        if tuple_ty.len(self.db()) >= targets.len() - 1 {
+        if tuple_type.len(self.db()) >= targets.len() - 1 {
             // This branch is only taken when there are enough elements in the tuple type to
             // combine for the starred expression. So, the arithmetic and indexing operations are
             // safe to perform.
@@ -211,7 +215,7 @@ impl<'db> Unpacker<'db> {
             // Insert all the elements before the starred expression.
             element_types.extend_from_slice(
                 // SAFETY: Safe because of the length check above.
-                &tuple_ty.elements(self.db())[..starred_index],
+                &tuple_type.elements(self.db())[..starred_index],
             );
 
             // The number of target expressions that are remaining after the starred expression.
@@ -223,11 +227,11 @@ impl<'db> Unpacker<'db> {
             // expression, in an exclusive manner. For example, in `(a, *b, c) = (1, 2, 3, 4)`, the
             // starred expression `b` will consume the elements `Literal[2]` and `Literal[3]` and
             // the index value would be 3.
-            let starred_end_index = tuple_ty.len(self.db()) - remaining;
+            let starred_end_index = tuple_type.len(self.db()) - remaining;
 
             // SAFETY: Safe because of the length check above.
             let _starred_element_types =
-                &tuple_ty.elements(self.db())[starred_index..starred_end_index];
+                &tuple_type.elements(self.db())[starred_index..starred_end_index];
             // TODO: Combine the types into a list type. If the
             // starred_element_types is empty, then it should be `List[Any]`.
             // combine_types(starred_element_types);
@@ -236,7 +240,7 @@ impl<'db> Unpacker<'db> {
             // Insert the types remaining that aren't consumed by the starred expression.
             element_types.extend_from_slice(
                 // SAFETY: Safe because of the length check above.
-                &tuple_ty.elements(self.db())[starred_end_index..],
+                &tuple_type.elements(self.db())[starred_end_index..],
             );
 
             Cow::Owned(element_types)
@@ -247,7 +251,7 @@ impl<'db> Unpacker<'db> {
                 format_args!(
                     "Not enough values to unpack (expected {} or more, got {})",
                     targets.len() - 1,
-                    tuple_ty.len(self.db())
+                    tuple_type.len(self.db())
                 ),
             );
 
