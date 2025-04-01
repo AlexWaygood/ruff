@@ -9,8 +9,8 @@ use ruff_python_literal::escape::AsciiEscape;
 use crate::types::class_base::ClassBase;
 use crate::types::signatures::{Parameter, Parameters, Signature};
 use crate::types::{
-    CallableType, ClassLiteralType, InstanceType, IntersectionType, KnownClass, StringLiteralType,
-    Type, UnionType,
+    ClassLiteralType, InstanceType, IntersectionType, KnownClass, StringLiteralType, Type,
+    UnionType,
 };
 use crate::Db;
 use rustc_hash::FxHashMap;
@@ -89,10 +89,8 @@ impl Display for DisplayRepresentation<'_> {
             },
             Type::KnownInstance(known_instance) => f.write_str(known_instance.repr(self.db)),
             Type::FunctionLiteral(function) => f.write_str(function.name(self.db)),
-            Type::Callable(CallableType::General(callable)) => {
-                callable.signature(self.db).display(self.db).fmt(f)
-            }
-            Type::Callable(CallableType::BoundMethod(bound_method)) => {
+            Type::Callable(callable) => callable.signature(self.db).display(self.db).fmt(f),
+            Type::BoundMethod(bound_method) => {
                 write!(
                     f,
                     "<bound method `{method}` of `{instance}`>",
@@ -100,14 +98,14 @@ impl Display for DisplayRepresentation<'_> {
                     instance = bound_method.self_instance(self.db).display(self.db)
                 )
             }
-            Type::Callable(CallableType::MethodWrapperDunderGet(function)) => {
+            Type::MethodWrapperDunderGet(function) => {
                 write!(
                     f,
                     "<method-wrapper `__get__` of `{function}`>",
                     function = function.name(self.db)
                 )
             }
-            Type::Callable(CallableType::WrapperDescriptorDunderGet) => {
+            Type::WrapperDescriptorDunderGet => {
                 f.write_str("<wrapper-descriptor `__get__` of `function` objects>")
             }
             Type::Union(union) => union.display(self.db).fmt(f),
@@ -422,9 +420,7 @@ struct DisplayMaybeParenthesizedType<'db> {
 
 impl Display for DisplayMaybeParenthesizedType<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if let Type::Callable(CallableType::General(_) | CallableType::MethodWrapperDunderGet(_)) =
-            self.ty
-        {
+        if let Type::Callable(_) | Type::MethodWrapperDunderGet(_) = self.ty {
             write!(f, "({})", self.ty.display(self.db))
         } else {
             self.ty.display(self.db).fmt(f)
