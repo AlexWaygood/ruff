@@ -143,7 +143,7 @@ same.
 def f3(a1: int, /, *args1: int, **kwargs2: int) -> None: ...
 def f4(a2: int, /, *args2: int, **kwargs1: int) -> None: ...
 
-static_assert(is_equivalent_to(CallableTypeOf[f3], CallableTypeOf[f4]))
+static_assert(not is_equivalent_to(CallableTypeOf[f3], CallableTypeOf[f4]))
 ```
 
 Putting it all together, the following two callables are equivalent:
@@ -186,7 +186,7 @@ When the return types are not equivalent or absent in one or both of the callabl
 def f3(): ...
 def f4() -> None: ...
 
-static_assert(not is_equivalent_to(Callable[[], int], Callable[[], None]))
+static_assert(not is_equivalent_to(Callable[[], int], Callable[[], None]))  # revealed: int
 static_assert(not is_equivalent_to(CallableTypeOf[f3], CallableTypeOf[f3]))
 static_assert(not is_equivalent_to(CallableTypeOf[f3], CallableTypeOf[f4]))
 static_assert(not is_equivalent_to(CallableTypeOf[f4], CallableTypeOf[f3]))
@@ -228,6 +228,7 @@ static_assert(not is_equivalent_to(CallableTypeOf[f9], CallableTypeOf[f10]))
 static_assert(not is_equivalent_to(CallableTypeOf[f10], CallableTypeOf[f11]))
 static_assert(not is_equivalent_to(CallableTypeOf[f11], CallableTypeOf[f10]))
 static_assert(not is_equivalent_to(CallableTypeOf[f11], CallableTypeOf[f11]))
+reveal_type(f9)
 ```
 
 When the default value for a parameter is present only in one of the callable type:
