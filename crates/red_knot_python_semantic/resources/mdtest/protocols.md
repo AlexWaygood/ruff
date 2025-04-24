@@ -329,6 +329,24 @@ class SubclassOfMyProtocol(MyProtocol): ...
 reveal_type(SubclassOfMyProtocol())  # revealed: SubclassOfMyProtocol
 ```
 
+## The meta-type of a protocol-instance type
+
+Just as `type[N]` is the meta-type of a nominal-instance type `N`, so `type[P]` is the meta-type of
+a protocol-instance type `P`:
+
+```py
+from typing import Protocol
+
+class MyProtocol(Protocol):
+    x: int
+
+def f(x: MyProtocol):
+    reveal_type(x.__class__)  # type[MyProtocol]
+    reveal_type(type(x))  # type[MyProtocol]
+```
+
+*Unlike* with nominal types, however, a protocol class `R` is not assignable to a variable
+
 And as a corollary, `type[MyProtocol]` can also be called:
 
 ```py
