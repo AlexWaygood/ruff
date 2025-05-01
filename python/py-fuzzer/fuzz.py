@@ -133,9 +133,9 @@ class FuzzResult:
         )
         print(f"{msg:<60} {progress:>15}", flush=True)
 
-        new = "new " if self.only_new_bugs else ""
-
         if self.maybe_bug:
+            new = "new " if self.only_new_bugs else ""
+
             match self.executable:
                 case Executable.RUFF:
                     panic_message = f"The following code triggers a {new}parser bug:"
