@@ -179,8 +179,8 @@ impl Ty {
                     .expect_class_literal()
                     .default_specialization(db),
             ),
-            Ty::AlwaysTruthy => Type::AlwaysTruthy,
-            Ty::AlwaysFalsy => Type::AlwaysFalsy,
+            Ty::AlwaysTruthy => KnownClass::AlwaysTruthy.to_instance(db),
+            Ty::AlwaysFalsy => KnownClass::AlwaysFalsy.to_instance(db),
             Ty::BuiltinsFunction(name) => builtins_symbol(db, name).symbol.expect_type(),
             Ty::BuiltinsBoundMethod { class, method } => {
                 let builtins_class = builtins_symbol(db, class).symbol.expect_type();

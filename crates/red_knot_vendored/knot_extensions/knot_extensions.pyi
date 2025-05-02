@@ -1,12 +1,18 @@
-from typing import Any, LiteralString, _SpecialForm
+from typing import Any, Literal, LiteralString, Protocol, _SpecialForm
 
 # Special operations
 def static_assert(condition: object, msg: LiteralString | None = None) -> None: ...
 
 # Types
 Unknown = object()
-AlwaysTruthy = object()
-AlwaysFalsy = object()
+
+class AlwaysTruthy(Protocol):
+    """Represents all possible runtime objects with a `__bool__` method which always returns `True`."""
+    def __bool__(self) -> Literal[True]: ...
+
+class AlwaysFalsy(Protocol):
+    """Represents all possible runtime objects with a `__bool__` method which always returns `False`."""
+    def __bool__(self) -> Literal[False]: ...
 
 # Special forms
 Not: _SpecialForm

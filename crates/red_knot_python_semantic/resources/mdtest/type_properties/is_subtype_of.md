@@ -303,6 +303,7 @@ static_assert(is_subtype_of(bool, Literal[False] | AlwaysTruthy))
 static_assert(is_subtype_of(bool, Literal[True] | AlwaysFalsy))
 # error: [static-assert-error]
 static_assert(is_subtype_of(LiteralString, Literal[""] | AlwaysTruthy))
+# error: [static-assert-error]
 static_assert(not is_subtype_of(Literal[True] | AlwaysFalsy, Literal[False] | AlwaysTruthy))
 
 # TODO: No errors
@@ -312,10 +313,9 @@ static_assert(not is_subtype_of(Literal[True] | AlwaysFalsy, Literal[False] | Al
 static_assert(is_subtype_of(Intersection[LiteralString, Not[Literal[""]]], AlwaysTruthy))
 # error: [static-assert-error]
 static_assert(is_subtype_of(Intersection[LiteralString, Not[Literal["", "a"]]], AlwaysTruthy))
+
 # `LiteralString & ~AlwaysFalsy` -> `LiteralString & ~Literal[""]`
-# error: [static-assert-error]
 static_assert(is_subtype_of(Intersection[LiteralString, Not[Literal[""]]], Not[AlwaysFalsy]))
-# error: [static-assert-error]
 static_assert(is_subtype_of(Intersection[LiteralString, Not[Literal["", "a"]]], Not[AlwaysFalsy]))
 ```
 

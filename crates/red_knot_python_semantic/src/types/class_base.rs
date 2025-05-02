@@ -110,9 +110,7 @@ impl<'db> ClassBase<'db> {
             | Type::SubclassOf(_)
             | Type::TypeVar(_)
             | Type::BoundSuper(_)
-            | Type::ProtocolInstance(_)
-            | Type::AlwaysFalsy
-            | Type::AlwaysTruthy => None,
+            | Type::ProtocolInstance(_) => None,
             Type::KnownInstance(known_instance) => match known_instance {
                 KnownInstanceType::TypeVar(_)
                 | KnownInstanceType::TypeAliasType(_)
@@ -137,9 +135,7 @@ impl<'db> ClassBase<'db> {
                 | KnownInstanceType::Not
                 | KnownInstanceType::Intersection
                 | KnownInstanceType::TypeOf
-                | KnownInstanceType::CallableTypeOf
-                | KnownInstanceType::AlwaysTruthy
-                | KnownInstanceType::AlwaysFalsy => None,
+                | KnownInstanceType::CallableTypeOf => None,
                 KnownInstanceType::Unknown => Some(Self::unknown()),
                 KnownInstanceType::Any => Some(Self::any()),
                 // TODO: Classes inheriting from `typing.Type` et al. also have `Generic` in their MRO

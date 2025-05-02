@@ -2804,9 +2804,7 @@ impl<'db> TypeInferenceBuilder<'db> {
             | Type::WrapperDescriptor(_)
             | Type::DataclassDecorator(_)
             | Type::DataclassTransformer(_)
-            | Type::TypeVar(..)
-            | Type::AlwaysTruthy
-            | Type::AlwaysFalsy => {
+            | Type::TypeVar(..) => {
                 match object_ty.class_member(db, attribute.into()) {
                     meta_attr @ SymbolAndQualifiers { .. } if meta_attr.is_class_var() => {
                         if emit_diagnostics {
@@ -5420,8 +5418,6 @@ impl<'db> TypeInferenceBuilder<'db> {
                 | Type::PropertyInstance(_)
                 | Type::Union(_)
                 | Type::Intersection(_)
-                | Type::AlwaysTruthy
-                | Type::AlwaysFalsy
                 | Type::StringLiteral(_)
                 | Type::LiteralString
                 | Type::BytesLiteral(_)
@@ -5700,8 +5696,6 @@ impl<'db> TypeInferenceBuilder<'db> {
                 | Type::KnownInstance(_)
                 | Type::PropertyInstance(_)
                 | Type::Intersection(_)
-                | Type::AlwaysTruthy
-                | Type::AlwaysFalsy
                 | Type::IntLiteral(_)
                 | Type::StringLiteral(_)
                 | Type::LiteralString
@@ -5726,8 +5720,6 @@ impl<'db> TypeInferenceBuilder<'db> {
                 | Type::KnownInstance(_)
                 | Type::PropertyInstance(_)
                 | Type::Intersection(_)
-                | Type::AlwaysTruthy
-                | Type::AlwaysFalsy
                 | Type::IntLiteral(_)
                 | Type::StringLiteral(_)
                 | Type::LiteralString
@@ -5888,8 +5880,8 @@ impl<'db> TypeInferenceBuilder<'db> {
                         (Truthiness::Ambiguous, _) => IntersectionBuilder::new(db)
                             .add_positive(ty)
                             .add_negative(match op {
-                                ast::BoolOp::And => Type::AlwaysTruthy,
-                                ast::BoolOp::Or => Type::AlwaysFalsy,
+                                ast::BoolOp::And => KnownClass::AlwaysTruthy.to_instance(db),
+                                ast::BoolOp::Or => KnownClass::AlwaysFalsy.to_instance(db),
                             })
                             .build(),
                     }
@@ -8126,11 +8118,7 @@ impl<'db> TypeInferenceBuilder<'db> {
                 self.infer_type_expression(arguments_slice);
                 Type::Dynamic(DynamicType::SubscriptedGeneric)
             }
-            KnownInstanceType::NoReturn
-            | KnownInstanceType::Never
-            | KnownInstanceType::Any
-            | KnownInstanceType::AlwaysTruthy
-            | KnownInstanceType::AlwaysFalsy => {
+            KnownInstanceType::NoReturn | KnownInstanceType::Never | KnownInstanceType::Any => {
                 self.infer_type_expression(arguments_slice);
 
                 if let Some(builder) = self.context.report_lint(&INVALID_TYPE_FORM, subscript) {

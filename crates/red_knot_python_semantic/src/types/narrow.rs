@@ -374,9 +374,9 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
         let symbol = self.expect_expr_name_symbol(id);
 
         let ty = if is_positive {
-            Type::AlwaysFalsy.negate(self.db)
+            KnownClass::AlwaysFalsy.to_instance(self.db).negate(self.db)
         } else {
-            Type::AlwaysTruthy.negate(self.db)
+            KnownClass::AlwaysTruthy.to_instance(self.db).negate(self.db)
         };
 
         NarrowingConstraints::from_iter([(symbol, ty)])

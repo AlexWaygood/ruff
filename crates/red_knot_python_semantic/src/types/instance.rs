@@ -30,6 +30,14 @@ impl<'db> Type<'db> {
         db: &'db dyn Db,
         protocol: ProtocolInstanceType<'db>,
     ) -> bool {
+        // TODO: remove this special-casing once we consider the types of the protocol members
+        // as well as whether each member *exists* on `self`.
+        match protocol.known_class(db) {
+            Some(KnownClass::AlwaysTruthy) => return self.bool(db).is_always_true(),
+            Some(KnownClass::AlwaysFalsy) => return self.bool(db).is_always_false(),
+            _ => {}
+        }
+
         // TODO: this should consider the types of the protocol members
         // as well as whether each member *exists* on `self`.
         protocol
@@ -132,6 +140,13 @@ impl<'db> ProtocolInstanceType<'db> {
         self.0
     }
 
+    pub(super) fn known_class(self, db: &'db dyn Db) -> Option<KnownClass> {
+        match self.0 {
+            Protocol::FromClass(class) => class.known(db),
+            Protocol::Synthesized(_) => None,
+        }
+    }
+
     /// Return the meta-type of this protocol-instance type.
     pub(super) fn to_meta_type(self, db: &'db dyn Db) -> Type<'db> {
         match self.0 {
@@ -188,6 +203,11 @@ impl<'db> ProtocolInstanceType<'db> {
     ///
     /// TODO: consider the types of the members as well as their existence
     pub(super) fn is_subtype_of(self, db: &'db dyn Db, other: Self) -> bool {
+        match (self.known_class(db), other.known_class(db)) {
+            (Some(KnownClass::AlwaysTruthy), Some(KnownClass::AlwaysFalsy)) => return false,
+            (Some(KnownClass::AlwaysFalsy), Some(KnownClass::AlwaysTruthy)) => return false,
+            _ => {}
+        }
         self.0
             .protocol_members(db)
             .is_superset(other.0.protocol_members(db))
@@ -218,9 +238,17 @@ impl<'db> ProtocolInstanceType<'db> {
     ///
     /// TODO: a protocol `X` is disjoint from a protocol `Y` if `X` and `Y`
     /// have a member with the same name but disjoint types
-    #[expect(clippy::unused_self)]
-    pub(super) fn is_disjoint_from(self, _db: &'db dyn Db, _other: Self) -> bool {
-        false
+    pub(super) fn is_disjoint_from(self, db: &'db dyn Db, other: Self) -> bool {
+        matches!(
+            (self.known_class(db), other.known_class(db)),
+            (
+                Some(KnownClass::AlwaysTruthy),
+                Some(KnownClass::AlwaysFalsy)
+            ) | (
+                Some(KnownClass::AlwaysFalsy),
+                Some(KnownClass::AlwaysTruthy)
+            )
+        )
     }
 }
 

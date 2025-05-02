@@ -502,11 +502,6 @@ pub enum Type<'db> {
     Union(UnionType<'db>),
     /// The set of objects in all of the types in the intersection
     Intersection(IntersectionType<'db>),
-    /// Represents objects whose `__bool__` method is deterministic:
-    /// - `AlwaysTruthy`: `__bool__` always returns `True`
-    /// - `AlwaysFalsy`: `__bool__` always returns `False`
-    AlwaysTruthy,
-    AlwaysFalsy,
     /// An integer literal
     IntLiteral(i64),
     /// A boolean literal, either `True` or `False`.
@@ -595,9 +590,7 @@ impl<'db> Type<'db> {
                 | DynamicType::SubscriptedGeneric,
             ) => true,
 
-            Self::AlwaysFalsy
-            | Self::AlwaysTruthy
-            | Self::Never
+            Self::Never
             | Self::BooleanLiteral(_)
             | Self::BytesLiteral(_)
             | Self::FunctionLiteral(_)
@@ -912,8 +905,6 @@ impl<'db> Type<'db> {
             Type::LiteralString
             | Type::NominalInstance(_)
             | Type::PropertyInstance(_)
-            | Type::AlwaysFalsy
-            | Type::AlwaysTruthy
             | Type::BooleanLiteral(_)
             | Type::SliceLiteral(_)
             | Type::BytesLiteral(_)
@@ -1079,13 +1070,30 @@ impl<'db> Type<'db> {
             // be specialized to `Never`.)
             (_, Type::TypeVar(_)) => false,
 
-            // Note that the definition of `Type::AlwaysFalsy` depends on the return value of `__bool__`.
-            // If `__bool__` always returns True or False, it can be treated as a subtype of `AlwaysTruthy` or `AlwaysFalsy`, respectively.
-            (left, Type::AlwaysFalsy) => left.bool(db).is_always_false(),
-            (left, Type::AlwaysTruthy) => left.bool(db).is_always_true(),
-            // Currently, the only supertype of `AlwaysFalsy` and `AlwaysTruthy` is the universal set (object instance).
-            (Type::AlwaysFalsy | Type::AlwaysTruthy, _) => {
-                target.is_equivalent_to(db, Type::object(db))
+            (Type::NominalInstance(_) | Type::ProtocolInstance(_), Type::Callable(_)) => {
+                let call_symbol = self.member(db, "__call__").symbol;
+                match call_symbol {
+                    Symbol::Type(Type::BoundMethod(call_function), _) => call_function
+                        .into_callable_type(db)
+                        .is_subtype_of(db, target),
+                    _ => false,
+                }
+            }
+            (Type::ProtocolInstance(left), Type::ProtocolInstance(right)) => {
+                left.is_subtype_of(db, right)
+            }
+            // A protocol instance can never be a subtype of a nominal type, with the *sole* exception of `object`.
+            (Type::ProtocolInstance(_), _) => false,
+            (_, Type::ProtocolInstance(protocol)) => self.satisfies_protocol(db, protocol),
+
+            (Type::Callable(self_callable), Type::Callable(other_callable)) => {
+                self_callable.is_subtype_of(db, other_callable)
+            }
+
+            (Type::Callable(_), _) => {
+                // TODO: Implement subtyping between callable types and other types like
+                // function literals, bound methods, class literals, `type[]`, etc.)
+                false
             }
 
             // No literal type is a subtype of any other literal type, unless they are the same
@@ -1159,34 +1167,8 @@ impl<'db> Type<'db> {
                 .to_instance(db)
                 .is_subtype_of(db, target),
 
-            (Type::Callable(self_callable), Type::Callable(other_callable)) => {
-                self_callable.is_subtype_of(db, other_callable)
-            }
-
             (Type::DataclassDecorator(_) | Type::DataclassTransformer(_), _) => {
                 // TODO: Implement subtyping using an equivalent `Callable` type.
-                false
-            }
-
-            (Type::NominalInstance(_) | Type::ProtocolInstance(_), Type::Callable(_)) => {
-                let call_symbol = self.member(db, "__call__").symbol;
-                match call_symbol {
-                    Symbol::Type(Type::BoundMethod(call_function), _) => call_function
-                        .into_callable_type(db)
-                        .is_subtype_of(db, target),
-                    _ => false,
-                }
-            }
-            (Type::ProtocolInstance(left), Type::ProtocolInstance(right)) => {
-                left.is_subtype_of(db, right)
-            }
-            // A protocol instance can never be a subtype of a nominal type, with the *sole* exception of `object`.
-            (Type::ProtocolInstance(_), _) => false,
-            (_, Type::ProtocolInstance(protocol)) => self.satisfies_protocol(db, protocol),
-
-            (Type::Callable(_), _) => {
-                // TODO: Implement subtyping between callable types and other types like
-                // function literals, bound methods, class literals, `type[]`, etc.)
                 false
             }
 
@@ -1796,16 +1778,6 @@ impl<'db> Type<'db> {
                 Type::SubclassOf(_),
             ) => true,
 
-            (Type::AlwaysTruthy, ty) | (ty, Type::AlwaysTruthy) => {
-                // `Truthiness::Ambiguous` may include `AlwaysTrue` as a subset, so it's not guaranteed to be disjoint.
-                // Thus, they are only disjoint if `ty.bool() == AlwaysFalse`.
-                ty.bool(db).is_always_false()
-            }
-            (Type::AlwaysFalsy, ty) | (ty, Type::AlwaysFalsy) => {
-                // Similarly, they are only disjoint if `ty.bool() == AlwaysTrue`.
-                ty.bool(db).is_always_true()
-            }
-
             (Type::ProtocolInstance(left), Type::ProtocolInstance(right)) => {
                 left.is_disjoint_from(db, right)
             }
@@ -2069,8 +2041,6 @@ impl<'db> Type<'db> {
             | Type::BytesLiteral(_)
             | Type::SliceLiteral(_)
             | Type::KnownInstance(_)
-            | Type::AlwaysFalsy
-            | Type::AlwaysTruthy
             | Type::PropertyInstance(_) => true,
 
             Type::ProtocolInstance(protocol) => protocol.is_fully_static(),
@@ -2241,7 +2211,6 @@ impl<'db> Type<'db> {
                 //
                 false
             }
-            Type::AlwaysTruthy | Type::AlwaysFalsy => false,
         }
     }
 
@@ -2304,8 +2273,6 @@ impl<'db> Type<'db> {
             | Type::Union(..)
             | Type::Intersection(..)
             | Type::LiteralString
-            | Type::AlwaysTruthy
-            | Type::AlwaysFalsy
             | Type::Callable(_)
             | Type::PropertyInstance(_)
             | Type::DataclassDecorator(_)
@@ -2449,8 +2416,6 @@ impl<'db> Type<'db> {
             | Type::DataclassTransformer(_)
             | Type::ModuleLiteral(_)
             | Type::KnownInstance(_)
-            | Type::AlwaysTruthy
-            | Type::AlwaysFalsy
             | Type::IntLiteral(_)
             | Type::BooleanLiteral(_)
             | Type::StringLiteral(_)
@@ -2578,7 +2543,6 @@ impl<'db> Type<'db> {
             Type::SliceLiteral(_) => KnownClass::Slice.to_instance(db).instance_member(db, name),
             Type::Tuple(_) => KnownClass::Tuple.to_instance(db).instance_member(db, name),
 
-            Type::AlwaysTruthy | Type::AlwaysFalsy => Type::object(db).instance_member(db, name),
             Type::ModuleLiteral(_) => KnownClass::ModuleType
                 .to_instance(db)
                 .instance_member(db, name),
@@ -3010,10 +2974,6 @@ impl<'db> Type<'db> {
 
             Type::ModuleLiteral(module) => module.static_member(db, name_str).into(),
 
-            Type::AlwaysFalsy | Type::AlwaysTruthy => {
-                self.class_member_with_policy(db, name, policy)
-            }
-
             _ if policy.no_instance_fallback() => self.invoke_descriptor_protocol(
                 db,
                 name_str,
@@ -3286,10 +3246,7 @@ impl<'db> Type<'db> {
             | Type::DataclassDecorator(_)
             | Type::DataclassTransformer(_)
             | Type::ModuleLiteral(_)
-            | Type::SliceLiteral(_)
-            | Type::AlwaysTruthy => Truthiness::AlwaysTrue,
-
-            Type::AlwaysFalsy => Truthiness::AlwaysFalse,
+            | Type::SliceLiteral(_) => Truthiness::AlwaysTrue,
 
             Type::ClassLiteral(class) => class
                 .metaclass_instance_type(db)
@@ -4183,8 +4140,6 @@ impl<'db> Type<'db> {
             Type::KnownInstance(_) => Signatures::not_callable(self),
 
             Type::PropertyInstance(_)
-            | Type::AlwaysFalsy
-            | Type::AlwaysTruthy
             | Type::IntLiteral(_)
             | Type::StringLiteral(_)
             | Type::BytesLiteral(_)
@@ -4641,9 +4596,7 @@ impl<'db> Type<'db> {
             | Type::Tuple(_)
             | Type::TypeVar(_)
             | Type::LiteralString
-            | Type::BoundSuper(_)
-            | Type::AlwaysTruthy
-            | Type::AlwaysFalsy => None,
+            | Type::BoundSuper(_) => None,
         }
     }
 
@@ -4687,8 +4640,6 @@ impl<'db> Type<'db> {
             Type::SubclassOf(_)
             | Type::BooleanLiteral(_)
             | Type::BytesLiteral(_)
-            | Type::AlwaysTruthy
-            | Type::AlwaysFalsy
             | Type::SliceLiteral(_)
             | Type::IntLiteral(_)
             | Type::LiteralString
@@ -4717,8 +4668,6 @@ impl<'db> Type<'db> {
                 KnownInstanceType::LiteralString => Ok(Type::LiteralString),
                 KnownInstanceType::Any => Ok(Type::any()),
                 KnownInstanceType::Unknown => Ok(Type::unknown()),
-                KnownInstanceType::AlwaysTruthy => Ok(Type::AlwaysTruthy),
-                KnownInstanceType::AlwaysFalsy => Ok(Type::AlwaysFalsy),
 
                 // We treat `typing.Type` exactly the same as `builtins.type`:
                 KnownInstanceType::Type => Ok(KnownClass::Type.to_instance(db)),
@@ -4952,7 +4901,6 @@ impl<'db> Type<'db> {
                 SubclassOfInner::try_from_type(db, todo_type!("Intersection meta-type"))
                     .expect("Type::Todo should be a valid `SubclassOfInner`"),
             ),
-            Type::AlwaysTruthy | Type::AlwaysFalsy => KnownClass::Type.to_instance(db),
             Type::BoundSuper(_) => KnownClass::Super.to_class_literal(db),
             Type::ProtocolInstance(protocol) => protocol.to_meta_type(db),
         }
@@ -5055,8 +5003,6 @@ impl<'db> Type<'db> {
 
             Type::Dynamic(_)
             | Type::Never
-            | Type::AlwaysTruthy
-            | Type::AlwaysFalsy
             | Type::WrapperDescriptor(_)
             | Type::MethodWrapper(MethodWrapperKind::StrStartswith(_))
             | Type::DataclassDecorator(_)
@@ -5150,8 +5096,6 @@ impl<'db> Type<'db> {
 
             Type::Dynamic(_)
             | Type::Never
-            | Type::AlwaysTruthy
-            | Type::AlwaysFalsy
             | Type::WrapperDescriptor(_)
             | Type::MethodWrapper(MethodWrapperKind::StrStartswith(_))
             | Type::DataclassDecorator(_)
@@ -5270,11 +5214,7 @@ impl<'db> Type<'db> {
             Self::Union(_) | Self::Intersection(_) => None,
 
             // These types have no definition
-            Self::Dynamic(_)
-            | Self::Never
-            | Self::Callable(_)
-            | Self::AlwaysTruthy
-            | Self::AlwaysFalsy => None,
+            Self::Dynamic(_) | Self::Never | Self::Callable(_) => None,
         }
     }
 

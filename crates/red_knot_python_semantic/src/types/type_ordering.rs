@@ -146,12 +146,6 @@ pub(super) fn union_or_intersection_elements_ordering<'db>(
         (Type::TypeVar(_), _) => Ordering::Less,
         (_, Type::TypeVar(_)) => Ordering::Greater,
 
-        (Type::AlwaysTruthy, _) => Ordering::Less,
-        (_, Type::AlwaysTruthy) => Ordering::Greater,
-
-        (Type::AlwaysFalsy, _) => Ordering::Less,
-        (_, Type::AlwaysFalsy) => Ordering::Greater,
-
         (Type::BoundSuper(left), Type::BoundSuper(right)) => {
             (match (left.pivot_class(db), right.pivot_class(db)) {
                 (ClassBase::Class(left), ClassBase::Class(right)) => left.cmp(right),
@@ -189,12 +183,6 @@ pub(super) fn union_or_intersection_elements_ordering<'db>(
 
                 (KnownInstanceType::Tuple, _) => Ordering::Less,
                 (_, KnownInstanceType::Tuple) => Ordering::Greater,
-
-                (KnownInstanceType::AlwaysFalsy, _) => Ordering::Less,
-                (_, KnownInstanceType::AlwaysFalsy) => Ordering::Greater,
-
-                (KnownInstanceType::AlwaysTruthy, _) => Ordering::Less,
-                (_, KnownInstanceType::AlwaysTruthy) => Ordering::Greater,
 
                 (KnownInstanceType::Annotated, _) => Ordering::Less,
                 (_, KnownInstanceType::Annotated) => Ordering::Greater,

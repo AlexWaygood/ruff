@@ -55,7 +55,10 @@ impl<'db> Type<'db> {
     /// Return `true` if this type can be a supertype of some literals of `kind` and not others.
     fn splits_literals(self, db: &'db dyn Db, kind: LiteralKind) -> bool {
         match (self, kind) {
-            (Type::AlwaysFalsy | Type::AlwaysTruthy, _) => true,
+            (Type::ProtocolInstance(instance), _) => matches!(
+                instance.known_class(db),
+                Some(KnownClass::AlwaysTruthy | KnownClass::AlwaysFalsy)
+            ),
             (Type::StringLiteral(_), LiteralKind::String) => true,
             (Type::BytesLiteral(_), LiteralKind::Bytes) => true,
             (Type::IntLiteral(_), LiteralKind::Int) => true,
@@ -553,30 +556,25 @@ struct InnerIntersectionBuilder<'db> {
 impl<'db> InnerIntersectionBuilder<'db> {
     /// Adds a positive type to this intersection.
     fn add_positive(&mut self, db: &'db dyn Db, mut new_positive: Type<'db>) {
+        let always_truthy = KnownClass::AlwaysTruthy.to_instance(db);
+        let always_falsy = KnownClass::AlwaysFalsy.to_instance(db);
+
         match new_positive {
-            // `LiteralString & AlwaysTruthy` -> `LiteralString & ~Literal[""]`
-            Type::AlwaysTruthy if self.positive.contains(&Type::LiteralString) => {
-                self.add_negative(db, Type::string_literal(db, ""));
-            }
-            // `LiteralString & AlwaysFalsy` -> `Literal[""]`
-            Type::AlwaysFalsy if self.positive.swap_remove(&Type::LiteralString) => {
-                self.add_positive(db, Type::string_literal(db, ""));
-            }
             // `AlwaysTruthy & LiteralString` -> `LiteralString & ~Literal[""]`
-            Type::LiteralString if self.positive.swap_remove(&Type::AlwaysTruthy) => {
+            Type::LiteralString if self.positive.swap_remove(&always_truthy) => {
                 self.add_positive(db, Type::LiteralString);
                 self.add_negative(db, Type::string_literal(db, ""));
             }
             // `AlwaysFalsy & LiteralString` -> `Literal[""]`
-            Type::LiteralString if self.positive.swap_remove(&Type::AlwaysFalsy) => {
+            Type::LiteralString if self.positive.swap_remove(&always_falsy) => {
                 self.add_positive(db, Type::string_literal(db, ""));
             }
             // `LiteralString & ~AlwaysTruthy` -> `LiteralString & AlwaysFalsy` -> `Literal[""]`
-            Type::LiteralString if self.negative.swap_remove(&Type::AlwaysTruthy) => {
+            Type::LiteralString if self.negative.swap_remove(&always_truthy) => {
                 self.add_positive(db, Type::string_literal(db, ""));
             }
             // `LiteralString & ~AlwaysFalsy` -> `LiteralString & ~Literal[""]`
-            Type::LiteralString if self.negative.swap_remove(&Type::AlwaysFalsy) => {
+            Type::LiteralString if self.negative.swap_remove(&always_falsy) => {
                 self.add_positive(db, Type::LiteralString);
                 self.add_negative(db, Type::string_literal(db, ""));
             }
@@ -590,43 +588,50 @@ impl<'db> InnerIntersectionBuilder<'db> {
                 }
             }
             _ => {
-                let known_instance = new_positive
+                if new_positive == always_truthy {
+                    if self.positive.contains(&Type::LiteralString) {
+                        // `LiteralString & AlwaysTruthy` -> `LiteralString & ~Literal[""]`
+                        self.add_negative(db, Type::string_literal(db, ""));
+                        return;
+                    }
+                } else if new_positive == always_falsy
+                    && self.positive.swap_remove(&Type::LiteralString)
+                {
+                    // `LiteralString & AlwaysFalsy` -> `Literal[""]`
+                    self.add_positive(db, Type::string_literal(db, ""));
+                    return;
+                }
+
+                let known_class = new_positive
                     .into_nominal_instance()
                     .and_then(|instance| instance.class().known(db));
 
-                if known_instance == Some(KnownClass::Object) {
+                if known_class == Some(KnownClass::Object) {
                     // `object & T` -> `T`; it is always redundant to add `object` to an intersection
                     return;
                 }
 
-                let addition_is_bool_instance = known_instance == Some(KnownClass::Bool);
+                let addition_is_bool_instance = known_class == Some(KnownClass::Bool);
 
                 for (index, existing_positive) in self.positive.iter().enumerate() {
-                    match existing_positive {
+                    if existing_positive == &always_truthy && addition_is_bool_instance {
                         // `AlwaysTruthy & bool` -> `Literal[True]`
-                        Type::AlwaysTruthy if addition_is_bool_instance => {
-                            new_positive = Type::BooleanLiteral(true);
-                        }
+                        new_positive = Type::BooleanLiteral(true);
+                    } else if existing_positive == &always_falsy && addition_is_bool_instance {
                         // `AlwaysFalsy & bool` -> `Literal[False]`
-                        Type::AlwaysFalsy if addition_is_bool_instance => {
+                        new_positive = Type::BooleanLiteral(false);
+                    } else if existing_positive.is_bool(db) {
+                        if new_positive == always_truthy {
+                            // `bool & AlwaysTruthy` -> `Literal[True]`
+                            new_positive = Type::BooleanLiteral(true);
+                        } else if new_positive == always_falsy {
+                            // `bool & AlwaysFalsy` -> `Literal[False]`
                             new_positive = Type::BooleanLiteral(false);
+                        } else {
+                            continue;
                         }
-                        Type::NominalInstance(instance)
-                            if instance.class().is_known(db, KnownClass::Bool) =>
-                        {
-                            match new_positive {
-                                // `bool & AlwaysTruthy` -> `Literal[True]`
-                                Type::AlwaysTruthy => {
-                                    new_positive = Type::BooleanLiteral(true);
-                                }
-                                // `bool & AlwaysFalsy` -> `Literal[False]`
-                                Type::AlwaysFalsy => {
-                                    new_positive = Type::BooleanLiteral(false);
-                                }
-                                _ => continue,
-                            }
-                        }
-                        _ => continue,
+                    } else {
+                        continue;
                     }
                     self.positive.swap_remove_index(index);
                     break;
@@ -634,21 +639,18 @@ impl<'db> InnerIntersectionBuilder<'db> {
 
                 if addition_is_bool_instance {
                     for (index, existing_negative) in self.negative.iter().enumerate() {
-                        match existing_negative {
+                        if let Type::BooleanLiteral(bool_value) = existing_negative {
                             // `bool & ~Literal[False]` -> `Literal[True]`
                             // `bool & ~Literal[True]` -> `Literal[False]`
-                            Type::BooleanLiteral(bool_value) => {
-                                new_positive = Type::BooleanLiteral(!bool_value);
-                            }
+                            new_positive = Type::BooleanLiteral(!bool_value);
+                        } else if existing_negative == &always_truthy {
                             // `bool & ~AlwaysTruthy` -> `Literal[False]`
-                            Type::AlwaysTruthy => {
-                                new_positive = Type::BooleanLiteral(false);
-                            }
+                            new_positive = Type::BooleanLiteral(false);
+                        } else if existing_negative == &always_falsy {
                             // `bool & ~AlwaysFalsy` -> `Literal[True]`
-                            Type::AlwaysFalsy => {
-                                new_positive = Type::BooleanLiteral(true);
-                            }
-                            _ => continue,
+                            new_positive = Type::BooleanLiteral(true);
+                        } else {
+                            continue;
                         }
                         self.negative.swap_remove_index(index);
                         break;
@@ -733,25 +735,41 @@ impl<'db> InnerIntersectionBuilder<'db> {
                 // simplify the representation.
                 self.add_positive(db, ty);
             }
-            // `bool & ~AlwaysTruthy` -> `bool & Literal[False]`
             // `bool & ~Literal[True]` -> `bool & Literal[False]`
-            Type::AlwaysTruthy | Type::BooleanLiteral(true) if contains_bool() => {
+            Type::BooleanLiteral(true) if contains_bool() => {
                 self.add_positive(db, Type::BooleanLiteral(false));
             }
-            // `LiteralString & ~AlwaysTruthy` -> `LiteralString & Literal[""]`
-            Type::AlwaysTruthy if self.positive.contains(&Type::LiteralString) => {
-                self.add_positive(db, Type::string_literal(db, ""));
-            }
-            // `bool & ~AlwaysFalsy` -> `bool & Literal[True]`
             // `bool & ~Literal[False]` -> `bool & Literal[True]`
-            Type::AlwaysFalsy | Type::BooleanLiteral(false) if contains_bool() => {
+            Type::BooleanLiteral(false) if contains_bool() => {
                 self.add_positive(db, Type::BooleanLiteral(true));
             }
-            // `LiteralString & ~AlwaysFalsy` -> `LiteralString & ~Literal[""]`
-            Type::AlwaysFalsy if self.positive.contains(&Type::LiteralString) => {
-                self.add_negative(db, Type::string_literal(db, ""));
-            }
             _ => {
+                if let Type::ProtocolInstance(protocol) = new_negative {
+                    match protocol.known_class(db) {
+                        Some(KnownClass::AlwaysTruthy) if contains_bool() => {
+                            // `bool & ~AlwaysTruthy` -> `bool & Literal[False]`
+                            self.add_positive(db, Type::BooleanLiteral(false));
+                            return;
+                        }
+                        Some(KnownClass::AlwaysTruthy) if self.positive.contains(&Type::LiteralString) => {
+                            // `LiteralString & ~AlwaysTruthy` -> `LiteralString & Literal[""]`
+                            self.add_positive(db, Type::string_literal(db, ""));
+                            return;
+                        }
+                        Some(KnownClass::AlwaysFalsy) if contains_bool() => {
+                            // `bool & ~AlwaysFalsy` -> `bool & Literal[True]`
+                            self.add_positive(db, Type::BooleanLiteral(true));
+                            return;
+                        }
+                        Some(KnownClass::AlwaysFalsy) if self.positive.contains(&Type::LiteralString) => {
+                            // `LiteralString & ~AlwaysFalsy` -> `LiteralString & ~Literal[""]`
+                            self.add_negative(db, Type::string_literal(db, ""));
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
+
                 let mut to_remove = SmallVec::<[usize; 1]>::new();
                 for (index, existing_negative) in self.negative.iter().enumerate() {
                     // ~S & ~T = ~T    if S <: T
@@ -941,8 +959,6 @@ mod tests {
 
     #[test_case(Type::BooleanLiteral(true))]
     #[test_case(Type::BooleanLiteral(false))]
-    #[test_case(Type::AlwaysTruthy)]
-    #[test_case(Type::AlwaysFalsy)]
     fn build_intersection_simplify_split_bool(t_splitter: Type) {
         let db = setup_db();
         let bool_value = t_splitter.bool(&db) == Truthiness::AlwaysTrue;

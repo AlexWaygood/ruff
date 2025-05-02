@@ -1939,6 +1939,9 @@ pub enum KnownClass {
     BaseExceptionGroup,
     Classmethod,
     Super,
+    // knot_extensions
+    AlwaysTruthy,
+    AlwaysFalsy,
     // enum
     Enum,
     // abc
@@ -2015,9 +2018,10 @@ impl<'db> KnownClass {
             | Self::Super
             | Self::WrapperDescriptorType
             | Self::UnionType
+            | Self::AlwaysTruthy
             | Self::MethodWrapperType => Truthiness::AlwaysTrue,
 
-            Self::NoneType => Truthiness::AlwaysFalse,
+            Self::NoneType | Self::AlwaysFalsy => Truthiness::AlwaysFalse,
 
             Self::Any
             | Self::BaseException
@@ -2075,7 +2079,7 @@ impl<'db> KnownClass {
     /// 2. It's probably more performant.
     const fn is_protocol(self) -> bool {
         match self {
-            Self::SupportsIndex => true,
+            Self::SupportsIndex | Self::AlwaysFalsy | Self::AlwaysTruthy => true,
 
             Self::Any
             | Self::Bool
@@ -2199,6 +2203,8 @@ impl<'db> KnownClass {
                 }
             }
             Self::NotImplementedType => "_NotImplementedType",
+            Self::AlwaysTruthy => "AlwaysTruthy",
+            Self::AlwaysFalsy => "AlwaysFalsy",
         }
     }
 
@@ -2385,6 +2391,7 @@ impl<'db> KnownClass {
             | Self::DefaultDict
             | Self::Deque
             | Self::OrderedDict => KnownModule::Collections,
+            Self::AlwaysTruthy | Self::AlwaysFalsy => KnownModule::KnotExtensions,
         }
     }
 
@@ -2443,6 +2450,8 @@ impl<'db> KnownClass {
             | Self::ABCMeta
             | Self::Super
             | Self::NamedTuple
+            | Self::AlwaysFalsy
+            | Self::AlwaysTruthy
             | Self::NewType => false,
         }
     }
@@ -2504,6 +2513,8 @@ impl<'db> KnownClass {
             | Self::Super
             | Self::UnionType
             | Self::NamedTuple
+            | Self::AlwaysFalsy
+            | Self::AlwaysTruthy
             | Self::NewType => false,
         }
     }
@@ -2573,6 +2584,8 @@ impl<'db> KnownClass {
                 Self::EllipsisType
             }
             "_NotImplementedType" => Self::NotImplementedType,
+            "AlwaysTruthy" => Self::AlwaysTruthy,
+            "AlwaysFalsy" => Self::AlwaysFalsy,
             _ => return None,
         };
 
@@ -2623,6 +2636,8 @@ impl<'db> KnownClass {
             | Self::Super
             | Self::NotImplementedType
             | Self::UnionType
+            | Self::AlwaysTruthy
+            | Self::AlwaysFalsy
             | Self::WrapperDescriptorType => module == self.canonical_module(db),
             Self::NoneType => matches!(module, KnownModule::Typeshed | KnownModule::Types),
             Self::SpecialForm
