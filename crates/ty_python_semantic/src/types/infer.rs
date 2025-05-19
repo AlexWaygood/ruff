@@ -2859,8 +2859,12 @@ impl<'db> TypeInferenceBuilder<'db> {
 
     fn infer_nested_match_pattern(&mut self, pattern: &ast::Pattern) {
         match pattern {
-            ast::Pattern::MatchValue(match_value) => {
-                self.infer_expression(&match_value.value);
+            ast::Pattern::MatchValue(ast::PatternMatchValue { value, .. }) => {
+                if self.index.is_standalone_expression(&**value) {
+                    self.infer_standalone_expression(value);
+                } else {
+                    self.infer_expression(value);
+                }
             }
             ast::Pattern::MatchSequence(match_sequence) => {
                 for pattern in &match_sequence.patterns {
@@ -2893,7 +2897,11 @@ impl<'db> TypeInferenceBuilder<'db> {
                 for keyword in &arguments.keywords {
                     self.infer_nested_match_pattern(&keyword.pattern);
                 }
-                self.infer_expression(cls);
+                if self.index.is_standalone_expression(&**cls) {
+                    self.infer_standalone_expression(cls);
+                } else {
+                    self.infer_expression(cls);
+                }
             }
             ast::Pattern::MatchAs(match_as) => {
                 if let Some(pattern) = &match_as.pattern {

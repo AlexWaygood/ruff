@@ -2,7 +2,7 @@ use crate::Db;
 use crate::semantic_index::ast_ids::HasScopedExpressionId;
 use crate::semantic_index::expression::Expression;
 use crate::semantic_index::predicate::{
-    PatternPredicate, PatternPredicateKind, Predicate, PredicateNode,
+    ClassPatternPredicate, PatternPredicate, PatternPredicateKind, Predicate, PredicateNode,
 };
 use crate::semantic_index::symbol::{ScopeId, ScopedSymbolId, SymbolTable};
 use crate::semantic_index::symbol_table;
@@ -324,7 +324,9 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
             PatternPredicateKind::Singleton(singleton) => {
                 self.evaluate_match_pattern_singleton(subject, *singleton)
             }
-            PatternPredicateKind::Class(cls) => self.evaluate_match_pattern_class(subject, *cls),
+            PatternPredicateKind::Class(class_pattern) => {
+                self.evaluate_match_pattern_class(subject, class_pattern)
+            }
             PatternPredicateKind::Value(expr) => self.evaluate_match_pattern_value(subject, *expr),
             PatternPredicateKind::Or(predicates) => {
                 self.evaluate_match_pattern_or(subject, predicates)
@@ -787,12 +789,46 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
     fn evaluate_match_pattern_class(
         &mut self,
         subject: Expression<'db>,
-        cls: Expression<'db>,
+        class_pattern: &ClassPatternPredicate<'db>,
     ) -> Option<NarrowingConstraints<'db>> {
         let symbol = self.expect_expr_name_symbol(&subject.node_ref(self.db).as_name_expr()?.id);
-        let ty = infer_same_file_expression_type(self.db, cls).to_instance(self.db)?;
 
-        Some(NarrowingConstraints::from_iter([(symbol, ty)]))
+        let class_constraint =
+            infer_same_file_expression_type(self.db, class_pattern.class).to_instance(self.db)?;
+
+        let narrowing_protocol = Type::synthesized_protocol(
+            self.db,
+            class_pattern
+                .keywords
+                .iter()
+                .filter_map(|(keyword, pattern)| {
+                    let pattern_type = match pattern {
+                        PatternPredicateKind::Class(ClassPatternPredicate { class, .. }) => {
+                            infer_same_file_expression_type(self.db, *class).to_instance(self.db)?
+                        }
+                        PatternPredicateKind::Value(value) => {
+                            infer_same_file_expression_type(self.db, *value)
+                        }
+                        PatternPredicateKind::Singleton(singleton) => match singleton {
+                            ast::Singleton::None => Type::none(self.db),
+                            ast::Singleton::True => Type::BooleanLiteral(true),
+                            ast::Singleton::False => Type::BooleanLiteral(false),
+                        },
+                        PatternPredicateKind::Or(_) | PatternPredicateKind::Unsupported => {
+                            return None;
+                        }
+                    };
+                    Some((&**keyword, pattern_type))
+                }),
+        );
+
+        Some(NarrowingConstraints::from_iter([(
+            symbol,
+            IntersectionBuilder::new(self.db)
+                .add_positive(class_constraint)
+                .add_positive(narrowing_protocol)
+                .build(),
+        )]))
     }
 
     fn evaluate_match_pattern_value(
@@ -808,7 +844,7 @@ impl<'db> NarrowingConstraintsBuilder<'db> {
     fn evaluate_match_pattern_or(
         &mut self,
         subject: Expression<'db>,
-        predicates: &Vec<PatternPredicateKind<'db>>,
+        predicates: &[PatternPredicateKind<'db>],
     ) -> Option<NarrowingConstraints<'db>> {
         let db = self.db;
 

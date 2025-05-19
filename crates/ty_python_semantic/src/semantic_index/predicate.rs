@@ -9,7 +9,7 @@
 
 use ruff_db::files::File;
 use ruff_index::{IndexVec, newtype_index};
-use ruff_python_ast::Singleton;
+use ruff_python_ast as ast;
 
 use crate::db::Db;
 use crate::semantic_index::expression::Expression;
@@ -68,11 +68,17 @@ pub(crate) enum PredicateNode<'db> {
 /// Pattern kinds for which we support type narrowing and/or static visibility analysis.
 #[derive(Debug, Clone, Hash, PartialEq, salsa::Update)]
 pub(crate) enum PatternPredicateKind<'db> {
-    Singleton(Singleton),
+    Singleton(ast::Singleton),
     Value(Expression<'db>),
-    Or(Vec<PatternPredicateKind<'db>>),
-    Class(Expression<'db>),
+    Or(Box<[PatternPredicateKind<'db>]>),
+    Class(ClassPatternPredicate<'db>),
     Unsupported,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, salsa::Update)]
+pub(crate) struct ClassPatternPredicate<'db> {
+    pub(crate) class: Expression<'db>,
+    pub(crate) keywords: Box<[(ast::name::Name, PatternPredicateKind<'db>)]>,
 }
 
 #[salsa::tracked(debug)]

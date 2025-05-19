@@ -51,6 +51,8 @@ use crate::semantic_index::visibility_constraints::{
 use crate::unpack::{Unpack, UnpackKind, UnpackPosition, UnpackValue};
 use crate::{Db, Program};
 
+use super::predicate::ClassPatternPredicate;
+
 mod except_handlers;
 
 #[derive(Clone, Debug, Default)]
@@ -716,8 +718,19 @@ impl<'db> SemanticIndexBuilder<'db> {
                 PatternPredicateKind::Singleton(singleton.value)
             }
             ast::Pattern::MatchClass(pattern) => {
-                let cls = self.add_standalone_expression(&pattern.cls);
-                PatternPredicateKind::Class(cls)
+                let class = self.add_standalone_expression(&pattern.cls);
+                let keywords = pattern
+                    .arguments
+                    .keywords
+                    .iter()
+                    .map(|keyword| {
+                        (
+                            keyword.attr.id().clone(),
+                            self.predicate_kind(&keyword.pattern),
+                        )
+                    })
+                    .collect();
+                PatternPredicateKind::Class(ClassPatternPredicate { class, keywords })
             }
             ast::Pattern::MatchOr(pattern) => {
                 let predicates = pattern
