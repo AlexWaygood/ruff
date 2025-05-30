@@ -330,6 +330,13 @@ pub(crate) enum SearchPathValidationError {
     /// The path provided by the user was not a directory
     NotADirectory(SystemPathBuf),
 
+    /// Two search paths overlap.
+    OverlappingSearchPaths {
+        first_search_path: SystemPathBuf,
+        second_search_path: SystemPathBuf,
+        relative_module_name: ModuleName,
+    },
+
     /// The path provided by the user is a directory,
     /// but no `stdlib/` subdirectory exists.
     /// (This is only relevant for stdlib search paths.)
@@ -357,7 +364,7 @@ impl fmt::Display for SearchPathValidationError {
         match self {
             Self::NotADirectory(path) => write!(f, "{path} does not point to a directory"),
             Self::NoStdlibSubdirectory(path) => {
-                write!(f, "The directory at {path} has no `stdlib/` subdirectory")
+                write!(f, "The directory at '{path}' has no `stdlib/` subdirectory")
             }
             Self::FailedToReadVersionsFile { path, error } => {
                 write!(
@@ -366,8 +373,23 @@ impl fmt::Display for SearchPathValidationError {
                 )
             }
             Self::VersionsParseError(underlying_error) => underlying_error.fmt(f),
-            SearchPathValidationError::SitePackagesDiscovery(error) => {
+            Self::SitePackagesDiscovery(error) => {
                 write!(f, "Failed to discover the site-packages directory: {error}")
+            }
+            Self::OverlappingSearchPaths {
+                first_search_path: parent_dir,
+                second_search_path: child_dir,
+                relative_module_name,
+            } => {
+                let mut relative_module_name = relative_module_name.clone();
+                relative_module_name.extend(&ModuleName::new_static("foo").unwrap());
+                write!(
+                    f,
+                    "Search paths '{parent_dir}' and '{child_dir}' overlap, \
+                    causing import resolution ambiguity. \
+                    A Python file at '{child_dir}/foo.py' could be resolved as a `foo` module \
+                    or as a `{relative_module_name}` module."
+                )
             }
         }
     }

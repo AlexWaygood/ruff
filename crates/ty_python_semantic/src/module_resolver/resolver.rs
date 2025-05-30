@@ -194,19 +194,19 @@ impl SearchPaths {
         let system = db.system();
         let files = db.files();
 
-        let mut static_paths = vec![];
+        let mut static_paths = StaticPaths::default();
 
         for path in extra_paths {
             let path = canonicalize(path, system);
             files.try_add_root(db.upcast(), &path, FileRootKind::LibrarySearchPath);
             tracing::debug!("Adding extra search-path '{path}'");
 
-            static_paths.push(SearchPath::extra(system, path)?);
+            static_paths.push(SearchPath::extra(system, path)?)?;
         }
 
         for src_root in src_roots {
             tracing::debug!("Adding first-party search path '{src_root}'");
-            static_paths.push(SearchPath::first_party(system, src_root.to_path_buf())?);
+            static_paths.push(SearchPath::first_party(system, src_root.to_path_buf())?)?;
         }
 
         let (typeshed_versions, stdlib_path) = if let Some(typeshed) = typeshed {
@@ -237,7 +237,7 @@ impl SearchPaths {
             )
         };
 
-        static_paths.push(stdlib_path);
+        static_paths.push(stdlib_path)?;
 
         let site_packages_paths = match python_path {
             PythonPath::SysPrefix(sys_prefix, origin) => {
@@ -324,6 +324,8 @@ impl SearchPaths {
             site_packages.push(SearchPath::site_packages(system, path)?);
         }
 
+        let mut static_paths = static_paths.into_inner();
+
         // TODO vendor typeshed's third-party stubs as well as the stdlib and fallback to them as a final step
 
         // Filter out module resolution paths that point to the same directory on disk (the same invariant maintained by [`sys.path` at runtime]).
@@ -370,6 +372,42 @@ impl SearchPaths {
 
     pub(super) fn typeshed_versions(&self) -> &TypeshedVersions {
         &self.typeshed_versions
+    }
+}
+
+#[derive(Debug, Default)]
+struct StaticPaths {
+    paths: Vec<SearchPath>,
+}
+
+impl StaticPaths {
+    fn push(&mut self, search_path: SearchPath) -> Result<(), SearchPathValidationError> {
+        if let Some(search_path) = search_path.as_system_path() {
+            for existing in self.paths.iter().filter_map(SearchPath::as_system_path) {
+                let Ok(relative_path) = existing
+                    .strip_prefix(search_path)
+                    .or_else(|_| search_path.strip_prefix(existing))
+                else {
+                    continue;
+                };
+
+                if let Some(relative_module_name) =
+                    ModuleName::from_components(relative_path.components().map(|c| c.as_str()))
+                {
+                    return Err(SearchPathValidationError::OverlappingSearchPaths {
+                        first_search_path: search_path.to_path_buf(),
+                        second_search_path: existing.to_path_buf(),
+                        relative_module_name,
+                    });
+                }
+            }
+        }
+        self.paths.push(search_path);
+        Ok(())
+    }
+
+    fn into_inner(self) -> Vec<SearchPath> {
+        self.paths
     }
 }
 

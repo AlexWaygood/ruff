@@ -518,7 +518,7 @@ fn new_non_project_file() -> anyhow::Result<()> {
         context.set_options(Options {
             environment: Some(EnvironmentOptions {
                 extra_paths: Some(vec![RelativePathBuf::cli(
-                    context.join_root_path("site_packages"),
+                    context.join_root_path("site-packages"),
                 )]),
                 ..EnvironmentOptions::default()
             }),
@@ -534,7 +534,7 @@ fn new_non_project_file() -> anyhow::Result<()> {
     case.assert_indexed_project_files([bar_file]);
 
     // Add a file to site packages
-    let black_path = case.root_path().join("site_packages/black.py");
+    let black_path = case.root_path().join("site-packages/black.py");
     std::fs::write(black_path.as_std_path(), "print('Hello')")?;
 
     let changes = case.stop_watch(event_for_file("black.py"));
@@ -1019,7 +1019,7 @@ fn search_path() -> anyhow::Result<()> {
         context.set_options(Options {
             environment: Some(EnvironmentOptions {
                 extra_paths: Some(vec![RelativePathBuf::cli(
-                    context.join_root_path("site_packages"),
+                    context.join_root_path("site-packages"),
                 )]),
                 ..EnvironmentOptions::default()
             }),
@@ -1028,7 +1028,7 @@ fn search_path() -> anyhow::Result<()> {
         Ok(())
     })?;
 
-    let site_packages = case.root_path().join("site_packages");
+    let site_packages = case.root_path().join("site-packages");
 
     assert_eq!(
         resolve_module(case.db(), &ModuleName::new("a").unwrap()),
@@ -1051,7 +1051,7 @@ fn search_path() -> anyhow::Result<()> {
 fn add_search_path() -> anyhow::Result<()> {
     let mut case = setup([("bar.py", "import sub.a")])?;
 
-    let site_packages = case.project_path("site_packages");
+    let site_packages = case.project_path("site-packages");
     std::fs::create_dir_all(site_packages.as_std_path())?;
 
     assert!(resolve_module(case.db().upcast(), &ModuleName::new_static("a").unwrap()).is_none());
@@ -1059,7 +1059,7 @@ fn add_search_path() -> anyhow::Result<()> {
     // Register site-packages as a search path.
     case.update_options(Options {
         environment: Some(EnvironmentOptions {
-            extra_paths: Some(vec![RelativePathBuf::cli("site_packages")]),
+            extra_paths: Some(vec![RelativePathBuf::cli("site-packages")]),
             ..EnvironmentOptions::default()
         }),
         ..Options::default()
@@ -1084,7 +1084,7 @@ fn remove_search_path() -> anyhow::Result<()> {
         context.set_options(Options {
             environment: Some(EnvironmentOptions {
                 extra_paths: Some(vec![RelativePathBuf::cli(
-                    context.join_root_path("site_packages"),
+                    context.join_root_path("site-packages"),
                 )]),
                 ..EnvironmentOptions::default()
             }),
@@ -1095,7 +1095,7 @@ fn remove_search_path() -> anyhow::Result<()> {
     })?;
 
     // Remove site packages from the search path settings.
-    let site_packages = case.root_path().join("site_packages");
+    let site_packages = case.root_path().join("site-packages");
 
     case.update_options(Options {
         environment: None,

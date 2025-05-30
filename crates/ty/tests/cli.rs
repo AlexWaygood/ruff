@@ -405,7 +405,7 @@ fn cli_arguments_are_relative_to_the_current_directory() -> anyhow::Result<()> {
             "#,
         ),
         (
-            "libs/utils.py",
+            "my-libs/utils.py",
             r#"
             def add(a: int, b: int) -> int:
                 return a + b
@@ -443,7 +443,7 @@ fn cli_arguments_are_relative_to_the_current_directory() -> anyhow::Result<()> {
     WARN ty is pre-release software and not ready for production use. Expect to encounter bugs, missing features, and fatal errors.
     ");
 
-    assert_cmd_snapshot!(case.command().current_dir(case.root().join("child")).arg("--extra-search-path").arg("../libs"), @r"
+    assert_cmd_snapshot!(case.command().current_dir(case.root().join("child")).arg("--extra-search-path").arg("../my-libs"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -477,11 +477,11 @@ fn paths_in_configuration_files_are_relative_to_the_project_root() -> anyhow::Re
             r#"
             [tool.ty.environment]
             python-version = "3.11"
-            extra-paths = ["libs"]
+            extra-paths = ["my-libs"]
             "#,
         ),
         (
-            "libs/utils.py",
+            "my-libs/utils.py",
             r#"
             def add(a: int, b: int) -> int:
                 return a + b
@@ -1755,6 +1755,25 @@ fn config_file_override() -> anyhow::Result<()> {
 
     ----- stderr -----
     WARN ty is pre-release software and not ready for production use. Expect to encounter bugs, missing features, and fatal errors.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn test_overlapping_typeshed_path() -> anyhow::Result<()> {
+    let case = TestCase::with_files([("foo.py", "1 + 2"), ("typeshed/stdlib/VERSIONS", "")])?;
+
+    assert_cmd_snapshot!(case.command().arg("--typeshed=./typeshed"),@r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    WARN ty is pre-release software and not ready for production use. Expect to encounter bugs, missing features, and fatal errors.
+    ty failed
+      Cause: Invalid search path settings
+      Cause: Search paths '<temp_dir>/typeshed/stdlib' and '<temp_dir>/' overlap, causing import resolution ambiguity. A Python file at '<temp_dir>/foo.py' could be resolved as a `foo` module or as a `typeshed.stdlib.foo` module.
     ");
 
     Ok(())
