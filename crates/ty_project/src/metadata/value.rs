@@ -32,6 +32,10 @@ impl ValueSource {
             ValueSource::Cli => None,
         }
     }
+
+    pub const fn is_cli(&self) -> bool {
+        matches!(self, ValueSource::Cli)
+    }
 }
 
 thread_local! {

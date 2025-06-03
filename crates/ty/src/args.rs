@@ -175,7 +175,9 @@ impl CheckCommand {
                 python_platform: self
                     .python_platform
                     .map(|platform| RangedValue::cli(platform.into())),
-                python: self.python.map(RelativePathBuf::cli),
+                python: self
+                    .python
+                    .map(|python| RangedValue::cli(RelativePathBuf::cli(python))),
                 typeshed: self.typeshed.map(RelativePathBuf::cli),
                 extra_paths: self.extra_search_path.map(|extra_search_paths| {
                     extra_search_paths
