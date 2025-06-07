@@ -206,10 +206,6 @@ impl KnownModule {
     pub const fn is_inspect(self) -> bool {
         matches!(self, Self::Inspect)
     }
-
-    pub const fn is_enum(self) -> bool {
-        matches!(self, Self::Enum)
-    }
 }
 
 impl std::fmt::Display for KnownModule {

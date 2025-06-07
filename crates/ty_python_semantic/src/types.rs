@@ -831,20 +831,6 @@ impl<'db> Type<'db> {
         }
     }
 
-    #[track_caller]
-    pub fn expect_class_type(self, db: &'db dyn Db) -> ClassType<'db> {
-        self.to_class_type(db)
-            .expect("Expected a Type::GenericAlias or Type::ClassLiteral variant")
-    }
-
-    pub fn is_class_type(&self, db: &'db dyn Db) -> bool {
-        match self {
-            Type::ClassLiteral(class) if class.generic_context(db).is_none() => true,
-            Type::GenericAlias(_) => true,
-            _ => false,
-        }
-    }
-
     pub const fn is_property_instance(&self) -> bool {
         matches!(self, Type::PropertyInstance(..))
     }
@@ -860,12 +846,6 @@ impl<'db> Type<'db> {
         }
     }
 
-    #[track_caller]
-    pub fn expect_module_literal(self) -> ModuleLiteralType<'db> {
-        self.into_module_literal()
-            .expect("Expected a Type::ModuleLiteral variant")
-    }
-
     pub const fn into_union(self) -> Option<UnionType<'db>> {
         match self {
             Type::Union(union_type) => Some(union_type),
@@ -876,23 +856,6 @@ impl<'db> Type<'db> {
     #[track_caller]
     pub fn expect_union(self) -> UnionType<'db> {
         self.into_union().expect("Expected a Type::Union variant")
-    }
-
-    pub const fn is_union(&self) -> bool {
-        matches!(self, Type::Union(..))
-    }
-
-    pub const fn into_intersection(self) -> Option<IntersectionType<'db>> {
-        match self {
-            Type::Intersection(intersection_type) => Some(intersection_type),
-            _ => None,
-        }
-    }
-
-    #[track_caller]
-    pub fn expect_intersection(self) -> IntersectionType<'db> {
-        self.into_intersection()
-            .expect("Expected a Type::Intersection variant")
     }
 
     pub const fn into_function_literal(self) -> Option<FunctionType<'db>> {
@@ -926,13 +889,6 @@ impl<'db> Type<'db> {
             || self.is_literal_string()
     }
 
-    pub const fn into_int_literal(self) -> Option<i64> {
-        match self {
-            Type::IntLiteral(value) => Some(value),
-            _ => None,
-        }
-    }
-
     pub fn into_string_literal(self) -> Option<StringLiteralType<'db>> {
         match self {
             Type::StringLiteral(string_literal) => Some(string_literal),
@@ -944,21 +900,11 @@ impl<'db> Type<'db> {
         matches!(self, Type::StringLiteral(..))
     }
 
-    #[track_caller]
-    pub fn expect_int_literal(self) -> i64 {
-        self.into_int_literal()
-            .expect("Expected a Type::IntLiteral variant")
-    }
-
     pub const fn into_tuple(self) -> Option<TupleType<'db>> {
         match self {
             Type::Tuple(tuple_type) => Some(tuple_type),
             _ => None,
         }
-    }
-
-    pub const fn is_boolean_literal(&self) -> bool {
-        matches!(self, Type::BooleanLiteral(..))
     }
 
     pub const fn is_literal_string(&self) -> bool {
@@ -7964,10 +7910,6 @@ impl<'db> TupleType<'db> {
                 .iter()
                 .zip(other_elements)
                 .all(|(self_ty, other_ty)| self_ty.is_gradual_equivalent_to(db, *other_ty))
-    }
-
-    pub fn get(&self, db: &'db dyn Db, index: usize) -> Option<Type<'db>> {
-        self.elements(db).get(index).copied()
     }
 
     pub fn len(&self, db: &'db dyn Db) -> usize {
