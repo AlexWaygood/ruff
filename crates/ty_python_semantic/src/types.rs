@@ -1,5 +1,5 @@
 use infer::nearest_enclosing_class;
-use itertools::Either;
+use itertools::{Either, Itertools};
 use ruff_db::parsed::parsed_module;
 
 use std::slice::Iter;
@@ -3258,7 +3258,7 @@ impl<'db> Type<'db> {
     /// Use [`try_bool`](Self::try_bool) for type checking or implicit `bool` calls.
     pub(crate) fn bool(&self, db: &'db dyn Db) -> Truthiness {
         self.try_bool_impl(db, true)
-            .unwrap_or_else(|err| err.fallback_truthiness())
+            .unwrap_or_else(|err| err.fallback_truthiness(db))
     }
 
     /// Resolves the boolean value of a type.
@@ -3296,6 +3296,9 @@ impl<'db> Type<'db> {
             }
         };
 
+        let is_valid_return_type =
+            |ty: Type<'db>| ty.is_assignable_to(db, KnownClass::Bool.to_instance(db));
+
         let try_dunder_bool = || {
             // We only check the `__bool__` method for truth testing, even though at
             // runtime there is a fallback to `__len__`, since `__bool__` takes precedence
@@ -3304,64 +3307,57 @@ impl<'db> Type<'db> {
             match self.try_call_dunder(db, "__bool__", CallArgumentTypes::none()) {
                 Ok(outcome) => {
                     let return_type = outcome.return_type(db);
-                    if !return_type.is_assignable_to(db, KnownClass::Bool.to_instance(db)) {
+                    if is_valid_return_type(return_type) {
+                        Ok(type_to_truthiness(return_type))
+                    } else {
                         // The type has a `__bool__` method, but it doesn't return a
                         // boolean.
-                        return Err(BoolError::IncorrectReturnType {
-                            return_type,
-                            not_boolable_type: *self,
-                        });
+                        Err(BoolError::IncorrectReturnType(Box::new(outcome)))
                     }
-                    Ok(type_to_truthiness(return_type))
                 }
 
                 Err(CallDunderError::PossiblyUnbound(outcome)) => {
-                    let return_type = outcome.return_type(db);
-                    if !return_type.is_assignable_to(db, KnownClass::Bool.to_instance(db)) {
+                    if is_valid_return_type(outcome.return_type(db)) {
+                        // Don't trust possibly unbound `__bool__` method.
+                        Ok(Truthiness::Ambiguous)
+                    } else {
                         // The type has a `__bool__` method, but it doesn't return a
                         // boolean.
-                        return Err(BoolError::IncorrectReturnType {
-                            return_type: outcome.return_type(db),
-                            not_boolable_type: *self,
-                        });
+                        Err(BoolError::IncorrectReturnType(outcome))
                     }
+                }
 
-                    // Don't trust possibly unbound `__bool__` method.
-                    Ok(Truthiness::Ambiguous)
+                Err(CallDunderError::CallError(kind, bindings)) => {
+                    if is_valid_return_type(bindings.return_type(db)) {
+                        Err(BoolError::CallError(kind, bindings))
+                    } else {
+                        Err(BoolError::IncorrectReturnType(bindings))
+                    }
                 }
 
                 Err(CallDunderError::MethodNotAvailable) => Ok(Truthiness::Ambiguous),
-                Err(CallDunderError::CallError(CallErrorKind::BindingError, bindings)) => {
-                    Err(BoolError::IncorrectArguments {
-                        truthiness: type_to_truthiness(bindings.return_type(db)),
-                        not_boolable_type: *self,
-                    })
-                }
-                Err(CallDunderError::CallError(CallErrorKind::NotCallable, _)) => {
-                    Err(BoolError::NotCallable {
-                        not_boolable_type: *self,
-                    })
-                }
-                Err(CallDunderError::CallError(CallErrorKind::PossiblyNotCallable, _)) => {
-                    Err(BoolError::Other {
-                        not_boolable_type: *self,
-                    })
-                }
             }
         };
 
         let try_union = |union: UnionType<'db>| {
+            let union_elements = union.elements(db);
             let mut truthiness = None;
-            let mut all_not_callable = true;
-            let mut has_errors = false;
+            let mut not_callable_count: usize = 0;
+            let mut any_binding_errors = false;
+            let mut error_bindings = vec![];
 
-            for element in union.elements(db) {
+            for element in union_elements {
                 let element_truthiness = match element.try_bool_impl(db, allow_short_circuit) {
                     Ok(truthiness) => truthiness,
                     Err(err) => {
-                        has_errors = true;
-                        all_not_callable &= matches!(err, BoolError::NotCallable { .. });
-                        err.fallback_truthiness()
+                        if let BoolError::CallError(kind, _) = &err {
+                            not_callable_count +=
+                                usize::from(matches!(kind, CallErrorKind::NotCallable));
+                            any_binding_errors |= matches!(kind, CallErrorKind::BindingError);
+                        }
+                        let fallback_truthiness = err.fallback_truthiness(db);
+                        error_bindings.push(err.into_bindings());
+                        fallback_truthiness
                     }
                 };
 
@@ -3376,18 +3372,23 @@ impl<'db> Type<'db> {
                 }
             }
 
-            if has_errors {
-                if all_not_callable {
-                    return Err(BoolError::NotCallable {
-                        not_boolable_type: *self,
-                    });
-                }
-                return Err(BoolError::Union {
-                    union,
-                    truthiness: truthiness.unwrap_or(Truthiness::Ambiguous),
-                });
+            if error_bindings.is_empty() {
+                return Ok(truthiness.unwrap_or(Truthiness::Ambiguous));
             }
-            Ok(truthiness.unwrap_or(Truthiness::Ambiguous))
+
+            let bindings = Box::new(Bindings::from_union(Type::Union(union), error_bindings));
+
+            let error = if not_callable_count == union_elements.len() {
+                BoolError::CallError(CallErrorKind::NotCallable, bindings)
+            } else if !is_valid_return_type(bindings.return_type(db)) {
+                BoolError::IncorrectReturnType(bindings)
+            } else if any_binding_errors {
+                BoolError::CallError(CallErrorKind::BindingError, bindings)
+            } else {
+                BoolError::CallError(CallErrorKind::PossiblyNotCallable, bindings)
+            };
+
+            Err(error)
         };
 
         let truthiness = match self {
@@ -3421,9 +3422,9 @@ impl<'db> Type<'db> {
 
             Type::SubclassOf(subclass_of_ty) => match subclass_of_ty.subclass_of() {
                 SubclassOfInner::Dynamic(_) => Truthiness::Ambiguous,
-                SubclassOfInner::Class(class) => {
-                    Type::from(class).try_bool_impl(db, allow_short_circuit)?
-                }
+                SubclassOfInner::Class(class) => class
+                    .metaclass_instance_type(db)
+                    .try_bool_impl(db, allow_short_circuit)?,
             },
 
             Type::TypeVar(typevar) => match typevar.bound_or_constraints(db) {
@@ -6707,164 +6708,268 @@ impl<'db> IterationError<'db> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(super) enum BoolError<'db> {
-    /// The type has a `__bool__` attribute but it can't be called.
-    NotCallable { not_boolable_type: Type<'db> },
-
-    /// The type has a callable `__bool__` attribute, but it isn't callable
-    /// with the given arguments.
-    IncorrectArguments {
-        not_boolable_type: Type<'db>,
-        truthiness: Truthiness,
-    },
-
-    /// The type has a `__bool__` method, is callable with the given arguments,
+    /// The type has a `__bool__` method which is callable with the given arguments,
     /// but the return type isn't assignable to `bool`.
-    IncorrectReturnType {
-        not_boolable_type: Type<'db>,
-        return_type: Type<'db>,
-    },
+    IncorrectReturnType(Box<Bindings<'db>>),
 
-    /// A union type doesn't implement `__bool__` correctly.
-    Union {
-        union: UnionType<'db>,
-        truthiness: Truthiness,
-    },
-
-    /// Any other reason why the type can't be converted to a bool.
-    /// E.g. because calling `__bool__` returns in a union type and not all variants support `__bool__` or
-    /// because `__bool__` points to a type that has a possibly unbound `__call__` method.
-    Other { not_boolable_type: Type<'db> },
+    CallError(CallErrorKind, Box<Bindings<'db>>),
 }
 
 impl<'db> BoolError<'db> {
-    pub(super) fn fallback_truthiness(&self) -> Truthiness {
+    pub(super) fn fallback_truthiness(&self, db: &'db dyn Db) -> Truthiness {
         match self {
-            BoolError::NotCallable { .. }
-            | BoolError::IncorrectReturnType { .. }
-            | BoolError::Other { .. } => Truthiness::Ambiguous,
-            BoolError::IncorrectArguments { truthiness, .. }
-            | BoolError::Union { truthiness, .. } => *truthiness,
+            BoolError::IncorrectReturnType { .. }
+            | BoolError::CallError(
+                CallErrorKind::NotCallable | CallErrorKind::PossiblyNotCallable,
+                _,
+            ) => Truthiness::Ambiguous,
+
+            BoolError::CallError(CallErrorKind::BindingError, bindings) => {
+                let return_type = bindings.return_type(db);
+                debug_assert!(
+                    return_type.is_assignable_to(db, KnownClass::Bool.to_instance(db)),
+                    "{}",
+                    return_type.display(db)
+                );
+                return_type.bool(db)
+            }
         }
     }
 
-    fn not_boolable_type(&self) -> Type<'db> {
+    fn into_bindings(self) -> Bindings<'db> {
         match self {
-            BoolError::NotCallable {
-                not_boolable_type, ..
-            }
-            | BoolError::IncorrectArguments {
-                not_boolable_type, ..
-            }
-            | BoolError::Other { not_boolable_type }
-            | BoolError::IncorrectReturnType {
-                not_boolable_type, ..
-            } => *not_boolable_type,
-            BoolError::Union { union, .. } => Type::Union(*union),
+            BoolError::IncorrectReturnType(bindings) => *bindings,
+            BoolError::CallError(_, bindings) => *bindings,
         }
     }
 
-    pub(super) fn report_diagnostic(&self, context: &InferContext, condition: impl Ranged) {
-        self.report_diagnostic_impl(context, condition.range());
+    pub(super) fn report_diagnostic(
+        &self,
+        context: &InferContext<'db, '_>,
+        condition: impl Ranged,
+        not_boolable_type: Type<'db>,
+    ) {
+        self.report_diagnostic_impl(context, condition.range(), not_boolable_type);
     }
 
-    fn report_diagnostic_impl(&self, context: &InferContext, condition: TextRange) {
+    fn describe_method(db: &'db dyn Db, accessed_on: Type<'db>) -> String {
+        if matches!(
+            accessed_on,
+            Type::NominalInstance(_) | Type::ClassLiteral(_) | Type::GenericAlias(_)
+        ) {
+            format!("`{}.__bool__`", accessed_on.display(db))
+        } else {
+            format!("The `__bool__` method on `{}`", accessed_on.display(db))
+        }
+    }
+
+    fn annotate_incorrect_parameters(
+        db: &'db dyn Db,
+        non_union_type: Type<'db>,
+        in_union_context: bool,
+        subdiagnostic: &mut SubDiagnostic,
+    ) {
+        let Ok(bool_function) = non_union_type.member(db, "__bool__").into_lookup_result() else {
+            return;
+        };
+        let Some((function_span, parameter_span)) =
+            bool_function.inner_type().parameter_span(db, None)
+        else {
+            return;
+        };
+        subdiagnostic.annotate(Annotation::primary(parameter_span).message("Incorrect parameters"));
+
+        let secondary_annotation = if in_union_context {
+            Annotation::secondary(function_span).message(format_args!(
+                "{} defined here",
+                Self::describe_method(db, non_union_type)
+            ))
+        } else {
+            Annotation::secondary(function_span).message("Method defined here")
+        };
+
+        subdiagnostic.annotate(secondary_annotation);
+    }
+
+    fn annotate_incorrect_returns(
+        db: &'db dyn Db,
+        non_union_type: Type<'db>,
+        in_union_context: bool,
+        subdiagnostic: &mut SubDiagnostic,
+    ) {
+        let Ok(bool_function) = non_union_type.member(db, "__bool__").into_lookup_result() else {
+            return;
+        };
+        let Some(spans) = bool_function.inner_type().function_spans(db) else {
+            return;
+        };
+        let name_span = spans.name;
+        let Some(return_type_span) = spans.return_type else {
+            return;
+        };
+        subdiagnostic
+            .annotate(Annotation::primary(return_type_span).message("Incorrect return type"));
+
+        let secondary_annotation = if in_union_context
+            && matches!(
+                non_union_type,
+                Type::NominalInstance(_) | Type::ClassLiteral(_) | Type::GenericAlias(_)
+            ) {
+            Annotation::secondary(name_span).message(format_args!(
+                "{} defined here",
+                Self::describe_method(db, non_union_type)
+            ))
+        } else {
+            Annotation::secondary(name_span).message("Method defined here")
+        };
+
+        subdiagnostic.annotate(secondary_annotation);
+    }
+
+    #[must_use]
+    fn annotate_bad_bool_methods(
+        db: &'db dyn Db,
+        diagnostic: &mut LintDiagnosticGuard<'_, '_>,
+        not_boolable_type: Type<'db>,
+        error_filter: impl FnOnce(BoolError<'db>) -> bool + Copy,
+        mut subdiagnostic: SubDiagnostic,
+        subdiagnostic_fn: impl FnOnce(&'db dyn Db, Type<'db>, bool, &mut SubDiagnostic) + Copy,
+    ) -> SubDiagnostic {
+        if let Some(union) = not_boolable_type.into_union() {
+            diagnostic.sub(subdiagnostic);
+
+            let bad_elements: Vec<Type<'db>> = union
+                .elements(db)
+                .iter()
+                .copied()
+                .filter(|element| element.try_bool(db).is_err_and(error_filter))
+                .collect();
+
+            assert!(!bad_elements.is_empty());
+
+            let mut subdiagnostic = if bad_elements.len() == 1 {
+                SubDiagnostic::new(
+                    Severity::Info,
+                    format_args!(
+                        "Union element `{}` implements `__bool__` incorrectly",
+                        bad_elements[0].display(db)
+                    ),
+                )
+            } else {
+                SubDiagnostic::new(
+                    Severity::Info,
+                    format_args!(
+                        "Union elements {} implement `__bool__` incorrectly",
+                        bad_elements
+                            .iter()
+                            .map(|element| format!("`{}`", element.display(db)))
+                            .join(", ")
+                    ),
+                )
+            };
+
+            for element in bad_elements {
+                subdiagnostic_fn(db, element, true, &mut subdiagnostic);
+            }
+
+            subdiagnostic
+        } else {
+            subdiagnostic_fn(db, not_boolable_type, false, &mut subdiagnostic);
+            subdiagnostic
+        }
+    }
+
+    fn report_diagnostic_impl(
+        &self,
+        context: &InferContext<'db, '_>,
+        condition: TextRange,
+        not_boolable_type: Type<'db>,
+    ) {
         let Some(builder) = context.report_lint(&UNSUPPORTED_BOOL_CONVERSION, condition) else {
             return;
         };
+
+        let db = context.db();
+        let mut diag = builder.into_diagnostic(format_args!(
+            "Boolean conversion is unsupported for object of type `{}`",
+            not_boolable_type.display(db)
+        ));
+
         match self {
-            Self::IncorrectArguments {
-                not_boolable_type, ..
-            } => {
-                let mut diag = builder.into_diagnostic(format_args!(
-                    "Boolean conversion is unsupported for type `{}`",
-                    not_boolable_type.display(context.db())
-                ));
-                let mut sub = SubDiagnostic::new(
+            Self::CallError(CallErrorKind::BindingError, _) => {
+                let mut subdiagnostic = SubDiagnostic::new(
                     Severity::Info,
-                    "`__bool__` methods must only have a `self` parameter",
+                    "`__bool__` methods must have exactly 1 parameter (`self`)",
                 );
-                if let Some((func_span, parameter_span)) = not_boolable_type
-                    .member(context.db(), "__bool__")
-                    .into_lookup_result()
-                    .ok()
-                    .and_then(|quals| quals.inner_type().parameter_span(context.db(), None))
-                {
-                    sub.annotate(
-                        Annotation::primary(parameter_span).message("Incorrect parameters"),
-                    );
-                    sub.annotate(Annotation::secondary(func_span).message("Method defined here"));
-                }
-                diag.sub(sub);
+                subdiagnostic = Self::annotate_bad_bool_methods(
+                    db,
+                    &mut diag,
+                    not_boolable_type,
+                    |err| matches!(err, BoolError::CallError(CallErrorKind::BindingError, _)),
+                    subdiagnostic,
+                    Self::annotate_incorrect_parameters,
+                );
+                diag.sub(subdiagnostic);
             }
-            Self::IncorrectReturnType {
-                not_boolable_type,
-                return_type,
-            } => {
-                let mut diag = builder.into_diagnostic(format_args!(
-                    "Boolean conversion is unsupported for type `{not_boolable}`",
-                    not_boolable = not_boolable_type.display(context.db()),
+            Self::IncorrectReturnType(_) => {
+                diag.info(format_args!(
+                    "{} does not return a type assignable to `bool`",
+                    Self::describe_method(db, not_boolable_type)
                 ));
-                let mut sub = SubDiagnostic::new(
+                let mut subdiagnostic = SubDiagnostic::new(
                     Severity::Info,
-                    format_args!(
-                        "`{return_type}` is not assignable to `bool`",
-                        return_type = return_type.display(context.db()),
-                    ),
+                    "This leads to a `TypeError` during boolean conversion at runtime",
                 );
-                if let Some((func_span, return_type_span)) = not_boolable_type
-                    .member(context.db(), "__bool__")
-                    .into_lookup_result()
-                    .ok()
-                    .and_then(|quals| quals.inner_type().function_spans(context.db()))
-                    .and_then(|spans| Some((spans.name, spans.return_type?)))
-                {
-                    sub.annotate(
-                        Annotation::primary(return_type_span).message("Incorrect return type"),
-                    );
-                    sub.annotate(Annotation::secondary(func_span).message("Method defined here"));
-                }
-                diag.sub(sub);
+                subdiagnostic = Self::annotate_bad_bool_methods(
+                    db,
+                    &mut diag,
+                    not_boolable_type,
+                    |err| matches!(err, BoolError::IncorrectReturnType(_)),
+                    subdiagnostic,
+                    Self::annotate_incorrect_returns,
+                );
+                diag.sub(subdiagnostic);
             }
-            Self::NotCallable { not_boolable_type } => {
-                let mut diag = builder.into_diagnostic(format_args!(
-                    "Boolean conversion is unsupported for type `{}`",
-                    not_boolable_type.display(context.db())
-                ));
-                let sub = SubDiagnostic::new(
-                    Severity::Info,
-                    format_args!(
-                        "`__bool__` on `{}` must be callable",
-                        not_boolable_type.display(context.db())
-                    ),
-                );
-                // TODO: It would be nice to create an annotation here for
+            Self::CallError(CallErrorKind::NotCallable, _) => {
+                // TODO: It would be nice to create annotations here for
                 // where `__bool__` is defined. At time of writing, I couldn't
                 // figure out a straight-forward way of doing this. ---AG
-                diag.sub(sub);
-            }
-            Self::Union { union, .. } => {
-                let first_error = union
-                    .elements(context.db())
-                    .iter()
-                    .find_map(|element| element.try_bool(context.db()).err())
-                    .unwrap();
-
-                builder.into_diagnostic(format_args!(
-                    "Boolean conversion is unsupported for union `{}` \
-                     because `{}` doesn't implement `__bool__` correctly",
-                    Type::Union(*union).display(context.db()),
-                    first_error.not_boolable_type().display(context.db()),
+                diag.info(format_args!(
+                    "{} is not callable",
+                    Self::describe_method(db, not_boolable_type)
                 ));
             }
-
-            Self::Other { not_boolable_type } => {
-                builder.into_diagnostic(format_args!(
-                    "Boolean conversion is unsupported for type `{}`; \
-                     it incorrectly implements `__bool__`",
-                    not_boolable_type.display(context.db())
-                ));
+            Self::CallError(CallErrorKind::PossiblyNotCallable, _) => {
+                let mut subdiagnostic = SubDiagnostic::new(
+                    Severity::Info,
+                    format_args!(
+                        "{} may not be callable",
+                        Self::describe_method(db, not_boolable_type)
+                    ),
+                );
+                subdiagnostic = Self::annotate_bad_bool_methods(
+                    db,
+                    &mut diag,
+                    not_boolable_type,
+                    |err| {
+                        // If `not_boolable_type` is a union type, we might have produced
+                        // a `PossiblyNotCallable` error due to one of the union elements
+                        // being definitely not callable. So we should accept both variants
+                        // in the error filter here.
+                        matches!(
+                            err,
+                            BoolError::CallError(
+                                CallErrorKind::NotCallable | CallErrorKind::PossiblyNotCallable,
+                                _
+                            )
+                        )
+                    },
+                    subdiagnostic,
+                    |_, _, _, _| {},
+                );
+                diag.sub(subdiagnostic);
             }
         }
     }

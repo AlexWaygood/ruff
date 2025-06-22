@@ -270,7 +270,7 @@ def _(
     if af:
         reveal_type(af)  # revealed: type[AmbiguousClass] & ~AlwaysFalsy
 
-    # error: [unsupported-bool-conversion] "Boolean conversion is unsupported for type `MetaDeferred`"
+    # error: [unsupported-bool-conversion] "Boolean conversion is unsupported for object of type `type[DeferredClass]`"
     if d:
         # TODO: Should be `Unknown`
         reveal_type(d)  # revealed: type[DeferredClass] & ~AlwaysFalsy

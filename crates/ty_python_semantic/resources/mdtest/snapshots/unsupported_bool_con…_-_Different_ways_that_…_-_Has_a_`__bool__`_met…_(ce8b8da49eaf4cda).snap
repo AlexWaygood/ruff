@@ -25,14 +25,14 @@ mdtest path: crates/ty_python_semantic/resources/mdtest/diagnostics/unsupported_
 # Diagnostics
 
 ```
-error[unsupported-bool-conversion]: Boolean conversion is unsupported for type `NotBoolable`
+error[unsupported-bool-conversion]: Boolean conversion is unsupported for object of type `NotBoolable`
  --> src/mdtest_snippet.py:8:8
   |
 7 | # error: [unsupported-bool-conversion]
 8 | 10 and a and True
   |        ^
   |
-info: `__bool__` methods must only have a `self` parameter
+info: `__bool__` methods must have exactly 1 parameter (`self`)
  --> src/mdtest_snippet.py:2:9
   |
 1 | class NotBoolable:

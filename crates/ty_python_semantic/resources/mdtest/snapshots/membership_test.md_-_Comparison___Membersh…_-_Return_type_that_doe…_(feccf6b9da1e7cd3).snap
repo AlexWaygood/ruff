@@ -28,7 +28,7 @@ mdtest path: crates/ty_python_semantic/resources/mdtest/comparison/instances/mem
 # Diagnostics
 
 ```
-error[unsupported-bool-conversion]: Boolean conversion is unsupported for type `NotBoolable`
+error[unsupported-bool-conversion]: Boolean conversion is unsupported for object of type `NotBoolable`
   --> src/mdtest_snippet.py:9:1
    |
  8 | # error: [unsupported-bool-conversion]
@@ -37,13 +37,13 @@ error[unsupported-bool-conversion]: Boolean conversion is unsupported for type `
 10 | # error: [unsupported-bool-conversion]
 11 | 10 not in WithContains()
    |
-info: `__bool__` on `NotBoolable` must be callable
+info: `NotBoolable.__bool__` is not callable
 info: rule `unsupported-bool-conversion` is enabled by default
 
 ```
 
 ```
-error[unsupported-bool-conversion]: Boolean conversion is unsupported for type `NotBoolable`
+error[unsupported-bool-conversion]: Boolean conversion is unsupported for object of type `NotBoolable`
   --> src/mdtest_snippet.py:11:1
    |
  9 | 10 in WithContains()
@@ -51,7 +51,7 @@ error[unsupported-bool-conversion]: Boolean conversion is unsupported for type `
 11 | 10 not in WithContains()
    | ^^^^^^^^^^^^^^^^^^^^^^^^
    |
-info: `__bool__` on `NotBoolable` must be callable
+info: `NotBoolable.__bool__` is not callable
 info: rule `unsupported-bool-conversion` is enabled by default
 
 ```

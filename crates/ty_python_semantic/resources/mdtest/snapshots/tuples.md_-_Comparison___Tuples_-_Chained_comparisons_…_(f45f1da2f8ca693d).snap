@@ -34,7 +34,7 @@ mdtest path: crates/ty_python_semantic/resources/mdtest/comparison/tuples.md
 # Diagnostics
 
 ```
-error[unsupported-bool-conversion]: Boolean conversion is unsupported for type `NotBoolable | Literal[False]`
+error[unsupported-bool-conversion]: Boolean conversion is unsupported for object of type `NotBoolable | Literal[False]`
   --> src/mdtest_snippet.py:15:1
    |
 14 | # error: [unsupported-bool-conversion]
@@ -43,7 +43,8 @@ error[unsupported-bool-conversion]: Boolean conversion is unsupported for type `
 16 |
 17 | a < b  # fine
    |
-info: `__bool__` on `NotBoolable | Literal[False]` must be callable
+info: The `__bool__` method on `NotBoolable | Literal[False]` may not be callable
+info: Union element `NotBoolable` implements `__bool__` incorrectly
 info: rule `unsupported-bool-conversion` is enabled by default
 
 ```

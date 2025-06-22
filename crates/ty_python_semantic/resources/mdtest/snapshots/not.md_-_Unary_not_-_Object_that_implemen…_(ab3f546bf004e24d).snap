@@ -22,14 +22,14 @@ mdtest path: crates/ty_python_semantic/resources/mdtest/unary/not.md
 # Diagnostics
 
 ```
-error[unsupported-bool-conversion]: Boolean conversion is unsupported for type `NotBoolable`
+error[unsupported-bool-conversion]: Boolean conversion is unsupported for object of type `NotBoolable`
  --> src/mdtest_snippet.py:5:1
   |
 4 | # error: [unsupported-bool-conversion]
 5 | not NotBoolable()
   | ^^^^^^^^^^^^^^^^^
   |
-info: `__bool__` on `NotBoolable` must be callable
+info: `NotBoolable.__bool__` is not callable
 info: rule `unsupported-bool-conversion` is enabled by default
 
 ```

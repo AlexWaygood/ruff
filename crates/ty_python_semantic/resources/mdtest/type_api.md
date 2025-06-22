@@ -239,7 +239,7 @@ class InvalidBoolDunder:
     def __bool__(self) -> int:
         return 1
 
-# error: [unsupported-bool-conversion]  "Boolean conversion is unsupported for type `InvalidBoolDunder`"
+# error: [unsupported-bool-conversion]  "Boolean conversion is unsupported for object of type `InvalidBoolDunder`"
 static_assert(InvalidBoolDunder())
 ```
 

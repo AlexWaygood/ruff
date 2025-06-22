@@ -2648,7 +2648,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         let test_ty = self.infer_standalone_expression(test);
 
         if let Err(err) = test_ty.try_bool(self.db()) {
-            err.report_diagnostic(&self.context, &**test);
+            err.report_diagnostic(&self.context, &**test, test_ty);
         }
 
         self.infer_body(body);
@@ -2665,7 +2665,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 let test_ty = self.infer_standalone_expression(test);
 
                 if let Err(err) = test_ty.try_bool(self.db()) {
-                    err.report_diagnostic(&self.context, test);
+                    err.report_diagnostic(&self.context, test, test_ty);
                 }
             }
 
@@ -3041,7 +3041,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 let guard_ty = self.infer_standalone_expression(guard);
 
                 if let Err(err) = guard_ty.try_bool(self.db()) {
-                    err.report_diagnostic(&self.context, guard);
+                    err.report_diagnostic(&self.context, guard, guard_ty);
                 }
             }
 
@@ -4100,7 +4100,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         let test_ty = self.infer_standalone_expression(test);
 
         if let Err(err) = test_ty.try_bool(self.db()) {
-            err.report_diagnostic(&self.context, &**test);
+            err.report_diagnostic(&self.context, &**test, test_ty);
         }
 
         self.infer_body(body);
@@ -4255,7 +4255,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         let test_ty = self.infer_standalone_expression(test);
 
         if let Err(err) = test_ty.try_bool(self.db()) {
-            err.report_diagnostic(&self.context, &**test);
+            err.report_diagnostic(&self.context, &**test, test_ty);
         }
 
         self.infer_optional_expression(msg.as_deref());
@@ -5181,8 +5181,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         let orelse_ty = self.infer_expression(orelse);
 
         match test_ty.try_bool(self.db()).unwrap_or_else(|err| {
-            err.report_diagnostic(&self.context, &**test);
-            err.fallback_truthiness()
+            err.report_diagnostic(&self.context, &**test, test_ty);
+            err.fallback_truthiness(self.db())
         }) {
             Truthiness::AlwaysTrue => body_ty,
             Truthiness::AlwaysFalse => orelse_ty,
@@ -5504,7 +5504,11 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                                                             call_expression,
                                                         ));
 
-                                                    err.report_diagnostic(&self.context, condition);
+                                                    err.report_diagnostic(
+                                                        &self.context,
+                                                        condition,
+                                                        *parameter_ty,
+                                                    );
 
                                                     continue;
                                                 }
@@ -6633,8 +6637,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             (ast::UnaryOp::Not, ty) => ty
                 .try_bool(self.db())
                 .unwrap_or_else(|err| {
-                    err.report_diagnostic(&self.context, unary);
-                    err.fallback_truthiness()
+                    err.report_diagnostic(&self.context, unary, ty);
+                    err.fallback_truthiness(self.db())
                 })
                 .negate()
                 .into_type(self.db()),
@@ -7152,8 +7156,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                     if done { Type::Never } else { ty }
                 } else {
                     let truthiness = ty.try_bool(self.db()).unwrap_or_else(|err| {
-                        err.report_diagnostic(&self.context, range);
-                        err.fallback_truthiness()
+                        err.report_diagnostic(&self.context, range, ty);
+                        err.fallback_truthiness(self.db())
                     });
 
                     if done {
@@ -7886,8 +7890,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 }
 
                 let truthiness = ty.try_bool(db).unwrap_or_else(|err| {
-                    err.report_diagnostic(&self.context, range);
-                    err.fallback_truthiness()
+                    err.report_diagnostic(&self.context, range, ty);
+                    err.fallback_truthiness(db)
                 });
 
                 match op {
@@ -7937,8 +7941,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 .unwrap_or_else(|err| {
                     // TODO: We should, whenever possible, pass the range of the left and right elements
                     //   instead of the range of the whole tuple.
-                    err.report_diagnostic(&self.context, range);
-                    err.fallback_truthiness()
+                    err.report_diagnostic(&self.context, range, pairwise_eq_result);
+                    err.fallback_truthiness(self.db())
                 }) {
                 // - AlwaysTrue : Continue to the next pair for lexicographic comparison
                 Truthiness::AlwaysTrue => continue,
