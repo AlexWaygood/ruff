@@ -946,11 +946,8 @@ impl<'db> Type<'db> {
         matches!(self, Type::ClassLiteral(..))
     }
 
-    pub(crate) const fn into_tuple(self) -> Option<TupleType<'db>> {
-        match self {
-            Type::Tuple(tuple_type) => Some(tuple_type),
-            _ => None,
-        }
+    pub(crate) const fn is_tuple(&self) -> bool {
+        matches!(self, Type::Tuple(..))
     }
 
     /// Turn a class literal (`Type::ClassLiteral` or `Type::GenericAlias`) into a `ClassType`.

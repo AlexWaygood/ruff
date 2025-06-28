@@ -976,23 +976,36 @@ impl<'db> Bindings<'db> {
                             // `tuple(range(42))` => `tuple[int, ...]`
                             // BUT `tuple((1, 2))` => `tuple[Literal[1], Literal[2]]` rather than `tuple[Literal[1, 2], ...]`
                             if let [Some(argument)] = overload.parameter_types() {
-                                let overridden_return =
-                                    argument.into_tuple().map(Type::Tuple).unwrap_or_else(|| {
-                                        // Some awkward special handling is required here because of the fact
-                                        // that calling `try_iterate()` on `Never` returns `Never`,
-                                        // but `tuple[Never, ...]` eagerly simplifies to `tuple[()]`,
-                                        // which will cause us to emit false positives if we index into the tuple.
-                                        // Using `tuple[Unknown, ...]` avoids these false positives.
-                                        let specialization = if argument.is_never() {
-                                            Type::unknown()
-                                        } else {
-                                            argument.try_iterate(db).expect(
-                                                "try_iterate() should not fail on a type \
+                                let overridden_return = if argument.is_tuple() {
+                                    *argument
+                                } else if let Some(tuple) =
+                                    argument.into_nominal_instance().and_then(|instance| {
+                                        instance.as_tuple_type(db, |class| {
+                                            !class
+                                                .own_class_member(db, "__iter__")
+                                                .place
+                                                .is_unbound()
+                                        })
+                                    })
+                                {
+                                    Type::Tuple(tuple)
+                                } else {
+                                    // Some awkward special handling is required here because of the fact
+                                    // that calling `try_iterate()` on `Never` returns `Never`,
+                                    // but `tuple[Never, ...]` eagerly simplifies to `tuple[()]`,
+                                    // which will cause us to emit false positives if we index into the tuple.
+                                    // Using `tuple[Unknown, ...]` avoids these false positives.
+                                    let specialization = if argument.is_never() {
+                                        Type::unknown()
+                                    } else {
+                                        argument.try_iterate(db).expect(
+                                            "try_iterate() should not fail on a type \
                                                     assignable to `Iterable`",
-                                            )
-                                        };
-                                        TupleType::homogeneous(db, specialization)
-                                    });
+                                        )
+                                    };
+                                    TupleType::homogeneous(db, specialization)
+                                };
+
                                 overload.set_return_type(overridden_return);
                             }
                         }

@@ -137,6 +137,16 @@ impl<'db> NominalInstanceType<'db> {
     ) {
         self.class.find_legacy_typevars(db, typevars);
     }
+
+    pub(super) fn as_tuple_type(
+        self,
+        db: &'db dyn Db,
+        check_mro_element: impl Fn(ClassType<'db>) -> bool,
+    ) -> Option<TupleType<'db>> {
+        self.class
+            .tuple_spec(db, check_mro_element)
+            .and_then(|spec| TupleType::new(db, spec))
+    }
 }
 
 impl<'db> From<NominalInstanceType<'db>> for Type<'db> {

@@ -6285,6 +6285,83 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         right_ty: Type<'db>,
         op: ast::Operator,
     ) -> Option<Type<'db>> {
+        fn generic_binary_expression_inference<'db>(
+            db: &'db dyn Db,
+            left_ty: Type<'db>,
+            right_ty: Type<'db>,
+            op: ast::Operator,
+        ) -> Option<Type<'db>> {
+            // We either want to call lhs.__op__ or rhs.__rop__. The full decision tree from
+            // the Python spec [1] is:
+            //
+            //   - If rhs is a (proper) subclass of lhs, and it provides a different
+            //     implementation of __rop__, use that.
+            //   - Otherwise, if lhs implements __op__, use that.
+            //   - Otherwise, if lhs and rhs are different types, and rhs implements __rop__,
+            //     use that.
+            //
+            // [1] https://docs.python.org/3/reference/datamodel.html#object.__radd__
+
+            // Technically we don't have to check left_ty != right_ty here, since if the types
+            // are the same, they will trivially have the same implementation of the reflected
+            // dunder, and so we'll fail the inner check. But the type equality check will be
+            // faster for the common case, and allow us to skip the (two) class member lookups.
+            let left_class = left_ty.to_meta_type(db);
+            let right_class = right_ty.to_meta_type(db);
+            if left_ty != right_ty && right_ty.is_subtype_of(db, left_ty) {
+                let reflected_dunder = op.reflected_dunder();
+                let rhs_reflected = right_class.member(db, reflected_dunder).place;
+                // TODO: if `rhs_reflected` is possibly unbound, we should union the two possible
+                // Bindings together
+                if !rhs_reflected.is_unbound()
+                    && rhs_reflected != left_class.member(db, reflected_dunder).place
+                {
+                    return right_ty
+                        .try_call_dunder(
+                            db,
+                            reflected_dunder,
+                            CallArgumentTypes::positional([left_ty]),
+                        )
+                        .map(|outcome| outcome.return_type(db))
+                        .or_else(|_| {
+                            left_ty
+                                .try_call_dunder(
+                                    db,
+                                    op.dunder(),
+                                    CallArgumentTypes::positional([right_ty]),
+                                )
+                                .map(|outcome| outcome.return_type(db))
+                        })
+                        .ok();
+                }
+            }
+
+            let call_on_left_instance = left_ty
+                .try_call_dunder(db, op.dunder(), CallArgumentTypes::positional([right_ty]))
+                .map(|outcome| outcome.return_type(db))
+                .ok();
+
+            call_on_left_instance.or_else(|| {
+                if left_ty == right_ty {
+                    None
+                } else {
+                    right_ty
+                        .try_call_dunder(
+                            db,
+                            op.reflected_dunder(),
+                            CallArgumentTypes::positional([left_ty]),
+                        )
+                        .map(|outcome| outcome.return_type(db))
+                        .ok()
+                }
+            })
+        }
+
+        fn defines_dunder_add_or_dunder_radd<'db>(db: &'db dyn Db, class: ClassType<'db>) -> bool {
+            !class.own_class_member(db, "__add__").place.is_unbound()
+                || !class.own_class_member(db, "__radd__").place.is_unbound()
+        }
+
         // Check for division by zero; this doesn't change the inferred type for the expression, but
         // may emit a diagnostic
         if !emitted_division_by_zero_diagnostic
@@ -6494,6 +6571,38 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 )))
             }
 
+            (Type::NominalInstance(instance), _, ast::Operator::Add) => {
+                if let Some(tuple) = instance.as_tuple_type(self.db(), |class| {
+                    defines_dunder_add_or_dunder_radd(self.db(), class)
+                }) {
+                    self.infer_binary_expression_type(
+                        node,
+                        emitted_division_by_zero_diagnostic,
+                        Type::Tuple(tuple),
+                        right_ty,
+                        op,
+                    )
+                } else {
+                    generic_binary_expression_inference(self.db(), left_ty, right_ty, op)
+                }
+            }
+
+            (Type::Tuple(_), Type::NominalInstance(instance), ast::Operator::Add) => {
+                if let Some(tuple) = instance.as_tuple_type(self.db(), |class| {
+                    defines_dunder_add_or_dunder_radd(self.db(), class)
+                }) {
+                    self.infer_binary_expression_type(
+                        node,
+                        emitted_division_by_zero_diagnostic,
+                        left_ty,
+                        Type::Tuple(tuple),
+                        op,
+                    )
+                } else {
+                    generic_binary_expression_inference(self.db(), left_ty, right_ty, op)
+                }
+            }
+
             // We've handled all of the special cases that we support for literals, so we need to
             // fall back on looking for dunder methods on one of the operand types.
             (
@@ -6554,76 +6663,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 | Type::TypeVar(_)
                 | Type::TypeIs(_),
                 op,
-            ) => {
-                // We either want to call lhs.__op__ or rhs.__rop__. The full decision tree from
-                // the Python spec [1] is:
-                //
-                //   - If rhs is a (proper) subclass of lhs, and it provides a different
-                //     implementation of __rop__, use that.
-                //   - Otherwise, if lhs implements __op__, use that.
-                //   - Otherwise, if lhs and rhs are different types, and rhs implements __rop__,
-                //     use that.
-                //
-                // [1] https://docs.python.org/3/reference/datamodel.html#object.__radd__
-
-                // Technically we don't have to check left_ty != right_ty here, since if the types
-                // are the same, they will trivially have the same implementation of the reflected
-                // dunder, and so we'll fail the inner check. But the type equality check will be
-                // faster for the common case, and allow us to skip the (two) class member lookups.
-                let left_class = left_ty.to_meta_type(self.db());
-                let right_class = right_ty.to_meta_type(self.db());
-                if left_ty != right_ty && right_ty.is_subtype_of(self.db(), left_ty) {
-                    let reflected_dunder = op.reflected_dunder();
-                    let rhs_reflected = right_class.member(self.db(), reflected_dunder).place;
-                    // TODO: if `rhs_reflected` is possibly unbound, we should union the two possible
-                    // Bindings together
-                    if !rhs_reflected.is_unbound()
-                        && rhs_reflected != left_class.member(self.db(), reflected_dunder).place
-                    {
-                        return right_ty
-                            .try_call_dunder(
-                                self.db(),
-                                reflected_dunder,
-                                CallArgumentTypes::positional([left_ty]),
-                            )
-                            .map(|outcome| outcome.return_type(self.db()))
-                            .or_else(|_| {
-                                left_ty
-                                    .try_call_dunder(
-                                        self.db(),
-                                        op.dunder(),
-                                        CallArgumentTypes::positional([right_ty]),
-                                    )
-                                    .map(|outcome| outcome.return_type(self.db()))
-                            })
-                            .ok();
-                    }
-                }
-
-                let call_on_left_instance = left_ty
-                    .try_call_dunder(
-                        self.db(),
-                        op.dunder(),
-                        CallArgumentTypes::positional([right_ty]),
-                    )
-                    .map(|outcome| outcome.return_type(self.db()))
-                    .ok();
-
-                call_on_left_instance.or_else(|| {
-                    if left_ty == right_ty {
-                        None
-                    } else {
-                        right_ty
-                            .try_call_dunder(
-                                self.db(),
-                                op.reflected_dunder(),
-                                CallArgumentTypes::positional([left_ty]),
-                            )
-                            .map(|outcome| outcome.return_type(self.db()))
-                            .ok()
-                    }
-                })
-            }
+            ) => generic_binary_expression_inference(self.db(), left_ty, right_ty, op),
         }
     }
 
@@ -7659,6 +7699,135 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         value_ty: Type<'db>,
         slice_ty: Type<'db>,
     ) -> Type<'db> {
+        fn generic_subscript_inference<'db>(
+            context: &InferContext<'db, '_>,
+            value_node: &ast::Expr,
+            value_ty: Type<'db>,
+            slice_ty: Type<'db>,
+        ) -> Type<'db> {
+            let db = context.db();
+
+            // If the class defines `__getitem__`, return its return type.
+            //
+            // See: https://docs.python.org/3/reference/datamodel.html#class-getitem-versus-getitem
+            match value_ty.try_call_dunder(
+                db,
+                "__getitem__",
+                CallArgumentTypes::positional([slice_ty]),
+            ) {
+                Ok(outcome) => return outcome.return_type(db),
+                Err(err @ CallDunderError::PossiblyUnbound { .. }) => {
+                    if let Some(builder) =
+                        context.report_lint(&POSSIBLY_UNBOUND_IMPLICIT_CALL, value_node)
+                    {
+                        builder.into_diagnostic(format_args!(
+                            "Method `__getitem__` of type `{}` is possibly unbound",
+                            value_ty.display(db),
+                        ));
+                    }
+
+                    return err.fallback_return_type(db);
+                }
+                Err(CallDunderError::CallError(_, bindings)) => {
+                    if let Some(builder) = context.report_lint(&CALL_NON_CALLABLE, value_node) {
+                        builder.into_diagnostic(format_args!(
+                            "Method `__getitem__` of type `{}` \
+                                is not callable on object of type `{}`",
+                            bindings.callable_type().display(db),
+                            value_ty.display(db),
+                        ));
+                    }
+
+                    return bindings.return_type(db);
+                }
+                Err(CallDunderError::MethodNotAvailable) => {
+                    // try `__class_getitem__`
+                }
+            }
+
+            // Otherwise, if the value is itself a class and defines `__class_getitem__`,
+            // return its return type.
+            //
+            // TODO: lots of classes are only subscriptable at runtime on Python 3.9+,
+            // *but* we should also allow them to be subscripted in stubs
+            // (and in annotations if `from __future__ import annotations` is enabled),
+            // even if the target version is Python 3.8 or lower,
+            // despite the fact that there will be no corresponding `__class_getitem__`
+            // method in these `sys.version_info` branches.
+            if value_ty.is_subtype_of(db, KnownClass::Type.to_instance(db)) {
+                let dunder_class_getitem_method = value_ty.member(db, "__class_getitem__").place;
+
+                match dunder_class_getitem_method {
+                    Place::Unbound => {}
+                    Place::Type(ty, boundness) => {
+                        if boundness == Boundness::PossiblyUnbound {
+                            if let Some(builder) =
+                                context.report_lint(&POSSIBLY_UNBOUND_IMPLICIT_CALL, value_node)
+                            {
+                                builder.into_diagnostic(format_args!(
+                                    "Method `__class_getitem__` of type `{}` \
+                                    is possibly unbound",
+                                    value_ty.display(db),
+                                ));
+                            }
+                        }
+
+                        match ty.try_call(db, &CallArgumentTypes::positional([value_ty, slice_ty]))
+                        {
+                            Ok(bindings) => return bindings.return_type(db),
+                            Err(CallError(_, bindings)) => {
+                                if let Some(builder) =
+                                    context.report_lint(&CALL_NON_CALLABLE, value_node)
+                                {
+                                    builder.into_diagnostic(format_args!(
+                                        "Method `__class_getitem__` of type `{}` \
+                                            is not callable on object of type `{}`",
+                                        bindings.callable_type().display(db),
+                                        value_ty.display(db),
+                                    ));
+                                }
+                                return bindings.return_type(db);
+                            }
+                        }
+                    }
+                }
+
+                if let Type::ClassLiteral(class) = value_ty {
+                    if class.is_known(db, KnownClass::Type) {
+                        return KnownClass::GenericAlias.to_instance(db);
+                    }
+
+                    if class.generic_context(db).is_some() {
+                        // TODO: specialize the generic class using these explicit type
+                        // variable assignments. This branch is only encountered when an
+                        // explicit class specialization appears inside of some other subscript
+                        // expression, e.g. `tuple[list[int], ...]`. We have already inferred
+                        // the type of the outer subscript slice as a value expression, which
+                        // means we can't re-infer the inner specialization here as a type
+                        // expression.
+                        return value_ty;
+                    }
+                }
+
+                // TODO: properly handle old-style generics; get rid of this temporary hack
+                if !value_ty
+                    .into_class_literal()
+                    .is_some_and(|class| class.iter_mro(db, None).contains(&ClassBase::Generic))
+                {
+                    report_non_subscriptable(
+                        context,
+                        value_node.into(),
+                        value_ty,
+                        "__class_getitem__",
+                    );
+                }
+            } else {
+                report_non_subscriptable(context, value_node.into(), value_ty, "__getitem__");
+            }
+
+            Type::unknown()
+        }
+
         match (value_ty, slice_ty, slice_ty.slice_literal(self.db())) {
             (Type::NominalInstance(instance), _, _)
                 if instance.class.is_known(self.db(), KnownClass::VersionInfo) =>
@@ -7668,6 +7837,20 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                     Type::version_info_tuple(self.db()),
                     slice_ty,
                 )
+            }
+
+            (Type::NominalInstance(instance), _, _) => {
+                let tuple_supertype = instance.as_tuple_type(self.db(), |class| {
+                    class
+                        .own_class_member(self.db(), "__getitem__")
+                        .place
+                        .is_unbound()
+                });
+                if let Some(tuple) = tuple_supertype {
+                    self.infer_subscript_expression_types(value_node, Type::Tuple(tuple), slice_ty)
+                } else {
+                    generic_subscript_inference(&self.context, value_node, value_ty, slice_ty)
+                }
             }
 
             (Type::Union(union), _, _) => union.map(self.db(), |element| {
@@ -7870,140 +8053,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 todo_type!("Inference of subscript on special form")
             }
 
-            (value_ty, slice_ty, _) => {
-                // If the class defines `__getitem__`, return its return type.
-                //
-                // See: https://docs.python.org/3/reference/datamodel.html#class-getitem-versus-getitem
-                match value_ty.try_call_dunder(
-                    self.db(),
-                    "__getitem__",
-                    CallArgumentTypes::positional([slice_ty]),
-                ) {
-                    Ok(outcome) => return outcome.return_type(self.db()),
-                    Err(err @ CallDunderError::PossiblyUnbound { .. }) => {
-                        if let Some(builder) = self
-                            .context
-                            .report_lint(&POSSIBLY_UNBOUND_IMPLICIT_CALL, value_node)
-                        {
-                            builder.into_diagnostic(format_args!(
-                                "Method `__getitem__` of type `{}` is possibly unbound",
-                                value_ty.display(self.db()),
-                            ));
-                        }
-
-                        return err.fallback_return_type(self.db());
-                    }
-                    Err(CallDunderError::CallError(_, bindings)) => {
-                        if let Some(builder) =
-                            self.context.report_lint(&CALL_NON_CALLABLE, value_node)
-                        {
-                            builder.into_diagnostic(format_args!(
-                                "Method `__getitem__` of type `{}` \
-                                 is not callable on object of type `{}`",
-                                bindings.callable_type().display(self.db()),
-                                value_ty.display(self.db()),
-                            ));
-                        }
-
-                        return bindings.return_type(self.db());
-                    }
-                    Err(CallDunderError::MethodNotAvailable) => {
-                        // try `__class_getitem__`
-                    }
-                }
-
-                // Otherwise, if the value is itself a class and defines `__class_getitem__`,
-                // return its return type.
-                //
-                // TODO: lots of classes are only subscriptable at runtime on Python 3.9+,
-                // *but* we should also allow them to be subscripted in stubs
-                // (and in annotations if `from __future__ import annotations` is enabled),
-                // even if the target version is Python 3.8 or lower,
-                // despite the fact that there will be no corresponding `__class_getitem__`
-                // method in these `sys.version_info` branches.
-                if value_ty.is_subtype_of(self.db(), KnownClass::Type.to_instance(self.db())) {
-                    let dunder_class_getitem_method =
-                        value_ty.member(self.db(), "__class_getitem__").place;
-
-                    match dunder_class_getitem_method {
-                        Place::Unbound => {}
-                        Place::Type(ty, boundness) => {
-                            if boundness == Boundness::PossiblyUnbound {
-                                if let Some(builder) = self
-                                    .context
-                                    .report_lint(&POSSIBLY_UNBOUND_IMPLICIT_CALL, value_node)
-                                {
-                                    builder.into_diagnostic(format_args!(
-                                        "Method `__class_getitem__` of type `{}` \
-                                        is possibly unbound",
-                                        value_ty.display(self.db()),
-                                    ));
-                                }
-                            }
-
-                            match ty.try_call(
-                                self.db(),
-                                &CallArgumentTypes::positional([value_ty, slice_ty]),
-                            ) {
-                                Ok(bindings) => return bindings.return_type(self.db()),
-                                Err(CallError(_, bindings)) => {
-                                    if let Some(builder) =
-                                        self.context.report_lint(&CALL_NON_CALLABLE, value_node)
-                                    {
-                                        builder.into_diagnostic(format_args!(
-                                            "Method `__class_getitem__` of type `{}` \
-                                             is not callable on object of type `{}`",
-                                            bindings.callable_type().display(self.db()),
-                                            value_ty.display(self.db()),
-                                        ));
-                                    }
-                                    return bindings.return_type(self.db());
-                                }
-                            }
-                        }
-                    }
-
-                    if let Type::ClassLiteral(class) = value_ty {
-                        if class.is_known(self.db(), KnownClass::Type) {
-                            return KnownClass::GenericAlias.to_instance(self.db());
-                        }
-
-                        if class.generic_context(self.db()).is_some() {
-                            // TODO: specialize the generic class using these explicit type
-                            // variable assignments. This branch is only encountered when an
-                            // explicit class specialization appears inside of some other subscript
-                            // expression, e.g. `tuple[list[int], ...]`. We have already inferred
-                            // the type of the outer subscript slice as a value expression, which
-                            // means we can't re-infer the inner specialization here as a type
-                            // expression.
-                            return value_ty;
-                        }
-                    }
-
-                    // TODO: properly handle old-style generics; get rid of this temporary hack
-                    if !value_ty.into_class_literal().is_some_and(|class| {
-                        class
-                            .iter_mro(self.db(), None)
-                            .contains(&ClassBase::Generic)
-                    }) {
-                        report_non_subscriptable(
-                            &self.context,
-                            value_node.into(),
-                            value_ty,
-                            "__class_getitem__",
-                        );
-                    }
-                } else {
-                    report_non_subscriptable(
-                        &self.context,
-                        value_node.into(),
-                        value_ty,
-                        "__getitem__",
-                    );
-                }
-
-                Type::unknown()
-            }
+            _ => generic_subscript_inference(&self.context, value_node, value_ty, slice_ty),
         }
     }
 

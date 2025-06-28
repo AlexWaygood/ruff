@@ -392,4 +392,52 @@ class NotAlwaysTruthyTuple(tuple[int]):
 t: tuple[int] = NotAlwaysTruthyTuple((1,))
 ```
 
+## Tuple subclasses
+
+Tuple subclasses often receive analogous treatment to tuples.
+
+```toml
+[environment]
+python-version = "3.12"
+```
+
+```py
+from ty_extensions import static_assert, is_assignable_to, is_subtype_of, is_equivalent_to
+
+class Foo(tuple[int, str]): ...
+
+def _(f: Foo):
+    reveal_type(f[0])  # revealed: int
+    reveal_type(f[1])  # revealed: str
+
+    a, b = f
+    reveal_type(a)  # revealed: int
+    reveal_type(b)  # revealed: str
+
+    reveal_type(tuple(f))  # revealed: tuple[int, str]
+
+    for item in f:
+        reveal_type(item)  # revealed: int | str
+
+    reveal_type(f + f)  # revealed: tuple[int, str, int, str]
+
+static_assert(is_subtype_of(Foo, tuple[int, str]))
+static_assert(is_assignable_to(Foo, tuple[int, str]))
+static_assert(not is_equivalent_to(Foo, tuple[int, str]))
+static_assert(not is_assignable_to(tuple[int, str], Foo))
+
+class Bar[T, U](tuple[T, U]): ...
+
+b1 = Bar((1, 2))
+# TODO: should be `Bar[Literal[1], Literal[2]]
+reveal_type(b1)  # revealed: Bar[Unknown, Unknown]
+
+b2 = Bar((3, 4))
+# TODO: should be `Bar[Literal[3], Literal[4]]
+reveal_type(b2)  # revealed: Bar[Unknown, Unknown]
+
+reveal_type(b1 < b2)  # revealed: Literal[True]
+reveal_type(b1 > b2)  # revealed: Literal[False]
+```
+
 [not a singleton type]: https://discuss.python.org/t/should-we-specify-in-the-language-reference-that-the-empty-tuple-is-a-singleton/67957

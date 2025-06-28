@@ -18,7 +18,7 @@ use crate::types::function::{DataclassTransformerParams, KnownFunction};
 use crate::types::generics::{GenericContext, Specialization};
 use crate::types::infer::nearest_enclosing_class;
 use crate::types::signatures::{CallableSignature, Parameter, Parameters, Signature};
-use crate::types::tuple::TupleType;
+use crate::types::tuple::{TupleSpec, TupleType};
 use crate::types::{
     BareTypeAliasType, Binding, BoundSuperError, BoundSuperType, CallableType, DataclassParams,
     KnownInstanceType, TypeAliasType, TypeMapping, TypeRelation, TypeVarBoundOrConstraints,
@@ -320,6 +320,49 @@ impl<'db> ClassType<'db> {
     /// Return `Some` if this class is known to be a [`SolidBase`], or `None` if it is not.
     pub(super) fn as_solid_base(self, db: &'db dyn Db) -> Option<SolidBase<'db>> {
         self.class_literal(db).0.as_solid_base(db)
+    }
+
+    /// If this class is a tuple subclass and no MRO elements override any tuple methods
+    /// in a problematic way, return the tuple specialization for this class.
+    ///
+    /// Exactly what constitutes a "problematic" override depends on the situation in which
+    /// this method is called. For example, inferring a precise length for an instance of
+    /// this class can only fall back to the tuple specialization if `__len__` has not been
+    /// overridden; but inferring the result of indexing into an instance of this class can
+    /// only fall back to the tuple specialization if `__getitem__` has not been overridden.
+    /// Callers of this method can pass a closure to the `check_mro_element` parameter to
+    /// indicate exactly what constitutes a "problematic" override for their use case.
+    pub(super) fn tuple_spec(
+        self,
+        db: &'db dyn Db,
+        check_mro_element: impl Fn(ClassType<'db>) -> bool,
+    ) -> Option<&'db TupleSpec<'db>> {
+        for class in self.iter_mro(db) {
+            match class {
+                ClassBase::Generic
+                | ClassBase::Protocol
+                | ClassBase::Class(ClassType::NonGeneric(_)) => continue,
+
+                // Classes that feature `Any`/`Unknown` later in their MRO than `tuple`
+                // cannot be granted the same special-casing as other tuple subclasses
+                ClassBase::Dynamic(_) => return None,
+
+                ClassBase::Class(class) => {
+                    if !class.is_known(db, KnownClass::Tuple) {
+                        if !check_mro_element(class) {
+                            return None;
+                        }
+                        continue;
+                    }
+                    let ClassType::Generic(generic_base) = class else {
+                        continue;
+                    };
+                    return Some(generic_base.specialization(db).tuple(db));
+                }
+            }
+        }
+
+        None
     }
 
     /// Return `true` if this class represents `known_class`
