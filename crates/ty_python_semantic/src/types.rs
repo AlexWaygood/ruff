@@ -7460,31 +7460,43 @@ impl<'db> ModuleLiteralType<'db> {
                 .place;
         }
 
-        // If the file that originally imported the module has also imported a submodule
-        // named `name`, then the result is (usually) that submodule, even if the module
-        // also defines a (non-module) symbol with that name.
-        //
-        // Note that technically, either the submodule or the non-module symbol could take
-        // priority, depending on the ordering of when the submodule is loaded relative to
-        // the parent module's `__init__.py` file being evaluated. That said, we have
-        // chosen to always have the submodule take priority. (This matches pyright's
-        // current behavior, but is the opposite of mypy's current behavior.)
-        if let Some(submodule_name) = ModuleName::new(name) {
-            let importing_file = self.importing_file(db);
-            let imported_submodules = imported_modules(db, importing_file);
-            let mut full_submodule_name = self.module(db).name().clone();
-            full_submodule_name.extend(&submodule_name);
-            if imported_submodules.contains(&full_submodule_name) {
-                if let Some(submodule) = resolve_module(db, &full_submodule_name) {
-                    return Place::bound(Type::module_literal(db, importing_file, &submodule));
-                }
-            }
-        }
+        PlaceAndQualifiers::from(Place::Unbound)
+            .or_fall_back_to(db, || {
+                // If the file that originally imported the module has also imported a submodule
+                // named `name`, then the result is (usually) that submodule, even if the module
+                // also defines a (non-module) symbol with that name.
+                //
+                // Note that technically, either the submodule or the non-module symbol could take
+                // priority, depending on the ordering of when the submodule is loaded relative to
+                // the parent module's `__init__.py` file being evaluated. That said, we have
+                // chosen to always have the submodule take priority. (This matches pyright's
+                // current behavior, but is the opposite of mypy's current behavior.)
+                let Some(submodule_name) = ModuleName::new(name) else {
+                    return Place::Unbound.into();
+                };
+                let mut full_submodule_name = self.module(db).name().clone();
+                full_submodule_name.extend(&submodule_name);
+                let Some(submodule) = resolve_module(db, &full_submodule_name) else {
+                    return Place::Unbound.into();
+                };
+                let importing_file = self.importing_file(db);
+                let imported_submodules = imported_modules(db, importing_file);
 
-        self.module(db)
-            .file()
-            .map(|file| imported_symbol(db, file, name, None))
-            .unwrap_or_default()
+                let boundness = if imported_submodules.contains(&full_submodule_name) {
+                    Boundness::Bound
+                } else {
+                    Boundness::PossiblyUnbound
+                };
+
+                let submodule_type = Type::module_literal(db, importing_file, &submodule);
+                Place::Type(submodule_type, boundness).into()
+            })
+            .or_fall_back_to(db, || {
+                self.module(db)
+                    .file()
+                    .map(|file| imported_symbol(db, file, name, None))
+                    .unwrap_or_default()
+            })
             .place
     }
 }

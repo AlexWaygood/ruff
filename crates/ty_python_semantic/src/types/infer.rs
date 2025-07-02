@@ -4397,21 +4397,14 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             .into_module_literal()
             .is_some_and(|module| Some(self.file()) == module.module(self.db()).file());
 
-        // First try loading the requested attribute from the module.
+        let mut place = PlaceAndQualifiers {
+            place: Place::Unbound,
+            qualifiers: TypeQualifiers::default(),
+        };
+
         if !import_is_self_referential {
-            if let Place::Type(ty, boundness) = module_ty.member(self.db(), name).place {
-                if &alias.name != "*" && boundness == Boundness::PossiblyUnbound {
-                    // TODO: Consider loading _both_ the attribute and any submodule and unioning them
-                    // together if the attribute exists but is possibly-unbound.
-                    if let Some(builder) = self
-                        .context
-                        .report_lint(&POSSIBLY_UNBOUND_IMPORT, AnyNodeRef::Alias(alias))
-                    {
-                        builder.into_diagnostic(format_args!(
-                            "Member `{name}` of module `{module_name}` is possibly unbound",
-                        ));
-                    }
-                }
+            place = module_ty.member(self.db(), name);
+            if let Place::Type(ty, Boundness::Bound) = place.place {
                 self.add_declaration_with_binding(
                     alias.into(),
                     definition,
@@ -4449,10 +4442,27 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             .as_ref()
             .and_then(|submodule_name| self.module_type_from_name(submodule_name))
         {
+            place = place.or_fall_back_to(self.db(), || PlaceAndQualifiers {
+                place: Place::Type(submodule_type, Boundness::Bound),
+                qualifiers: TypeQualifiers::default(),
+            });
+        }
+
+        if let Place::Type(ty, boundness) = place.place {
+            if &alias.name != "*" && boundness == Boundness::PossiblyUnbound {
+                if let Some(builder) = self
+                    .context
+                    .report_lint(&POSSIBLY_UNBOUND_IMPORT, AnyNodeRef::Alias(alias))
+                {
+                    builder.into_diagnostic(format_args!(
+                        "Member `{name}` of module `{module_name}` is possibly unbound",
+                    ));
+                }
+            }
             self.add_declaration_with_binding(
                 alias.into(),
                 definition,
-                &DeclaredAndInferredType::AreTheSame(submodule_type),
+                &DeclaredAndInferredType::AreTheSame(ty),
             );
             return;
         }
