@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use ruff_db::parsed::ParsedModuleRef;
 use rustc_hash::FxHashMap;
 
@@ -8,7 +6,7 @@ use ruff_python_ast::{self as ast, AnyNodeRef};
 use crate::Db;
 use crate::semantic_index::ast_ids::node_key::ExpressionNodeKey;
 use crate::semantic_index::scope::ScopeId;
-use crate::types::tuple::{ResizeTupleError, Tuple, TupleLength, TupleSpec, TupleUnpacker};
+use crate::types::tuple::{ResizeTupleError, TupleLength, TupleSpec, TupleUnpacker};
 use crate::types::{Type, TypeCheckDiagnostics, infer_expression_types};
 use crate::unpack::{UnpackKind, UnpackValue};
 
@@ -129,12 +127,12 @@ impl<'db, 'ast> Unpacker<'db, 'ast> {
                 for ty in unpack_types.iter().copied() {
                     let tuple = ty.try_iterate(self.db()).unwrap_or_else(|err| {
                         err.report_diagnostic(&self.context, ty, value_expr);
-                        Cow::Owned(TupleSpec::homogeneous(err.fallback_element_type(self.db())))
+                        TupleSpec::homogeneous(self.db(), err.fallback_element_type(self.db()))
                     });
 
-                    if let Err(err) = unpacker.unpack_tuple(tuple.as_ref()) {
+                    if let Err(err) = unpacker.unpack_tuple(tuple) {
                         unpacker
-                            .unpack_tuple(&Tuple::homogeneous(Type::unknown()))
+                            .unpack_tuple(TupleSpec::homogeneous(self.db(), Type::unknown()))
                             .expect("adding a homogeneous tuple should always succeed");
                         if let Some(builder) = self.context.report_lint(&INVALID_ASSIGNMENT, target)
                         {
@@ -147,7 +145,10 @@ impl<'db, 'ast> Unpacker<'db, 'ast> {
                                         target_len.display_minimum(),
                                     ));
                                     diag.annotate(self.context.secondary(value_expr).message(
-                                        format_args!("Got {}", tuple.len().display_minimum()),
+                                        format_args!(
+                                            "Got {}",
+                                            tuple.len(self.db()).display_minimum()
+                                        ),
                                     ));
                                 }
                                 ResizeTupleError::TooFewValues => {
@@ -158,7 +159,10 @@ impl<'db, 'ast> Unpacker<'db, 'ast> {
                                         target_len.display_minimum(),
                                     ));
                                     diag.annotate(self.context.secondary(value_expr).message(
-                                        format_args!("Got {}", tuple.len().display_maximum()),
+                                        format_args!(
+                                            "Got {}",
+                                            tuple.len(self.db()).display_maximum()
+                                        ),
                                     ));
                                 }
                             }

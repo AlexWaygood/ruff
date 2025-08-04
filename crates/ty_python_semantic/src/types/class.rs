@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::hash::BuildHasherDefault;
 use std::sync::{LazyLock, Mutex};
 
@@ -21,7 +20,7 @@ use crate::types::function::{DataclassTransformerParams, KnownFunction};
 use crate::types::generics::{GenericContext, Specialization, walk_specialization};
 use crate::types::infer::nearest_enclosing_class;
 use crate::types::signatures::{CallableSignature, Parameter, Parameters, Signature};
-use crate::types::tuple::TupleSpec;
+use crate::types::tuple::{Tuple, TupleSpec};
 use crate::types::{
     BareTypeAliasType, Binding, BoundSuperError, BoundSuperType, CallableType, DataclassParams,
     DeprecatedInstance, DynamicType, KnownInstanceType, NominalInstanceType, TypeAliasType,
@@ -623,7 +622,7 @@ impl<'db> ClassType<'db> {
         match name {
             "__len__" if class_literal.is_tuple(db) => {
                 let return_type = specialization
-                    .and_then(|spec| spec.tuple(db).len().into_fixed_length())
+                    .and_then(|spec| spec.tuple(db).len(db).into_fixed_length())
                     .and_then(|len| i64::try_from(len).ok())
                     .map(Type::IntLiteral)
                     .unwrap_or_else(|| KnownClass::Int.to_instance(db));
@@ -633,7 +632,7 @@ impl<'db> ClassType<'db> {
 
             "__bool__" if class_literal.is_tuple(db) => {
                 let return_type = specialization
-                    .map(|spec| spec.tuple(db).truthiness().into_type(db))
+                    .map(|spec| spec.tuple(db).truthiness(db).into_type(db))
                     .unwrap_or_else(|| KnownClass::Bool.to_instance(db));
 
                 synthesize_simple_tuple_method(return_type)
@@ -647,13 +646,13 @@ impl<'db> ClassType<'db> {
                         let mut element_type_to_indices: FxIndexMap<Type<'db>, Vec<i64>> =
                             FxIndexMap::default();
 
-                        match tuple {
+                        match tuple.inner(db) {
                             // E.g. for `tuple[int, str]`, we will generate the following overloads:
                             //
                             //    __getitem__(self, index: Literal[0, -2], /) -> int
                             //    __getitem__(self, index: Literal[1, -1], /) -> str
                             //
-                            TupleSpec::Fixed(fixed_length_tuple) => {
+                            Tuple::Fixed(fixed_length_tuple) => {
                                 let tuple_length = fixed_length_tuple.len();
 
                                 for (index, ty) in fixed_length_tuple.elements().enumerate() {
@@ -676,7 +675,7 @@ impl<'db> ClassType<'db> {
                             //    __getitem__(self, index: Literal[-2], /) -> bytes
                             //    __getitem__(self, index: Literal[-3], /) -> float | str
                             //
-                            TupleSpec::Variable(variable_length_tuple) => {
+                            Tuple::Variable(variable_length_tuple) => {
                                 for (index, ty) in variable_length_tuple.prefix.iter().enumerate() {
                                     if let Ok(index) = i64::try_from(index) {
                                         element_type_to_indices.entry(*ty).or_default().push(index);
@@ -740,7 +739,7 @@ impl<'db> ClassType<'db> {
                         }
 
                         let all_elements_unioned =
-                            UnionType::from_elements(db, tuple.all_elements());
+                            UnionType::from_elements(db, tuple.all_elements(db));
 
                         let mut overload_signatures =
                             Vec::with_capacity(element_type_to_indices.len().saturating_add(2));
@@ -811,15 +810,15 @@ impl<'db> ClassType<'db> {
                         // TODO: Once we support PEP 646 annotations for `*args` parameters, we can
                         // use the tuple itself as the argument type.
                         let tuple = spec.tuple(db);
-                        let tuple_len = tuple.len();
+                        let tuple_len = tuple.len(db);
 
                         if tuple_len.minimum() == 0 && tuple_len.maximum().is_none() {
                             // If the tuple has no length restrictions,
                             // any iterable is allowed as long as the iterable has the correct element type.
-                            let mut tuple_elements = tuple.all_elements();
+                            let mut tuple_elements = tuple.all_elements(db);
                             iterable_parameter = iterable_parameter.with_annotated_type(
                                 KnownClass::Iterable
-                                    .to_specialized_instance(db, [*tuple_elements.next().unwrap()]),
+                                    .to_specialized_instance(db, [tuple_elements.next().unwrap()]),
                             );
                             assert_eq!(
                                 tuple_elements.next(),
@@ -845,7 +844,7 @@ impl<'db> ClassType<'db> {
                 // - a zero-length tuple
                 // - an unspecialized tuple
                 // - a tuple with no minimum length
-                if specialization.is_none_or(|spec| spec.tuple(db).len().minimum() == 0) {
+                if specialization.is_none_or(|spec| spec.tuple(db).len(db).minimum() == 0) {
                     iterable_parameter =
                         iterable_parameter.with_default_type(Type::empty_tuple(db));
                 }
@@ -1037,7 +1036,7 @@ impl<'db> ClassType<'db> {
     /// If this class is `tuple`, a specialization of `tuple` (`tuple[int, str]`, etc.),
     /// *or a subclass of `tuple`, or a subclass of a specialization of `tuple`*,
     /// return its tuple specification.
-    pub(super) fn tuple_spec(self, db: &'db dyn Db) -> Option<Cow<'db, TupleSpec<'db>>> {
+    pub(super) fn tuple_spec(self, db: &'db dyn Db) -> Option<TupleSpec<'db>> {
         // Avoid an expensive MRO traversal for common stdlib classes.
         if self
             .known(db)
@@ -1056,13 +1055,13 @@ impl<'db> ClassType<'db> {
     /// You usually don't want to use this method directly, because you usually want to consider
     /// any subclass of a certain tuple type in the same way as that tuple type itself.
     /// Use [`ClassType::tuple_spec`] instead.
-    pub(super) fn own_tuple_spec(self, db: &'db dyn Db) -> Option<Cow<'db, TupleSpec<'db>>> {
+    pub(super) fn own_tuple_spec(self, db: &'db dyn Db) -> Option<TupleSpec<'db>> {
         let (class_literal, specialization) = self.class_literal(db);
         match class_literal.known(db)? {
             KnownClass::Tuple => Some(
                 specialization
-                    .map(|spec| Cow::Borrowed(spec.tuple(db)))
-                    .unwrap_or_else(|| Cow::Owned(TupleSpec::homogeneous(Type::unknown()))),
+                    .map(|spec| spec.tuple(db))
+                    .unwrap_or_else(|| TupleSpec::homogeneous(db, Type::unknown())),
             ),
             KnownClass::VersionInfo => {
                 let python_version = Program::get(db).python_version(db);
@@ -1082,13 +1081,16 @@ impl<'db> ClassType<'db> {
                     Type::Union(UnionType::new(db, elements))
                 };
 
-                Some(Cow::Owned(TupleSpec::from_elements([
-                    Type::IntLiteral(python_version.major.into()),
-                    Type::IntLiteral(python_version.minor.into()),
-                    int_instance_ty,
-                    release_level_ty,
-                    int_instance_ty,
-                ])))
+                Some(TupleSpec::heterogeneous(
+                    db,
+                    [
+                        Type::IntLiteral(python_version.major.into()),
+                        Type::IntLiteral(python_version.minor.into()),
+                        int_instance_ty,
+                        release_level_ty,
+                        int_instance_ty,
+                    ],
+                ))
             }
             _ => None,
         }
@@ -4494,7 +4496,7 @@ impl SlotsKind {
             // __slots__ = ("a", "b")
             Type::NominalInstance(NominalInstanceType { class, .. }) => match class
                 .tuple_spec(db)
-                .and_then(|spec| spec.len().into_fixed_length())
+                .and_then(|spec| spec.len(db).into_fixed_length())
             {
                 Some(0) => Self::Empty,
                 Some(_) => Self::NotEmpty,

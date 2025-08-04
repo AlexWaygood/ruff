@@ -231,8 +231,7 @@ impl ClassInfoConstraintFunction {
                     UnionType::try_from_elements(
                         db,
                         tuple
-                            .all_elements()
-                            .copied()
+                            .all_elements(db)
                             .map(|element| self.generate_constraint(db, element)),
                     )
                 })
@@ -632,7 +631,10 @@ impl<'db, 'ast> NarrowingConstraintsBuilder<'db, 'ast> {
                 // but we'd still apply the narrowing here. This seems unlikely, however, and narrowing is
                 // generally unsound in numerous ways anyway (attribute narrowing, subscript, narrowing,
                 // narrowing of globals, etc.). So this doesn't seem worth worrying about too much.
-                Some(UnionType::from_elements(self.db, tuple_spec.all_elements()))
+                Some(UnionType::from_elements(
+                    self.db,
+                    tuple_spec.all_elements(self.db),
+                ))
             } else {
                 None
             }

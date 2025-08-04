@@ -113,7 +113,7 @@ use crate::types::function::{
 use crate::types::generics::{GenericContext, enclosing_generic_contexts};
 use crate::types::mro::MroErrorKind;
 use crate::types::signatures::{CallableSignature, Signature};
-use crate::types::tuple::{TupleSpec, TupleType};
+use crate::types::tuple::{Tuple, TupleSpec, TupleType};
 use crate::types::unpacker::{UnpackResult, Unpacker};
 use crate::types::{
     CallDunderError, CallableType, ClassLiteral, ClassType, DataclassParams, DynamicType,
@@ -3270,7 +3270,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         // it will actually be the type of the generic parameters to `BaseExceptionGroup` or `ExceptionGroup`.
         let symbol_ty = if let Some(tuple_spec) = node_ty.tuple_instance_spec(self.db()) {
             let mut builder = UnionBuilder::new(self.db());
-            for element in tuple_spec.all_elements().copied() {
+            for element in tuple_spec.all_elements(self.db()) {
                 builder = builder.add(
                     if element.is_assignable_to(self.db(), type_base_exception) {
                         element.to_instance(self.db()).expect(
@@ -4304,9 +4304,9 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 if let Some(tuple_spec) =
                     assigned_ty.and_then(|ty| ty.tuple_instance_spec(self.db()))
                 {
-                    let mut assigned_tys = tuple_spec.all_elements();
+                    let mut assigned_tys = tuple_spec.all_elements(self.db());
                     for element in elts {
-                        self.infer_target_impl(element, assigned_tys.next().copied());
+                        self.infer_target_impl(element, assigned_tys.next());
                     }
                 } else {
                     for element in elts {
@@ -8107,7 +8107,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                     right.tuple_instance_spec(self.db()),
                 ) {
                     let mut tuple_rich_comparison =
-                        |op| self.infer_tuple_rich_comparison(&lhs_tuple, op, &rhs_tuple, range);
+                        |op| self.infer_tuple_rich_comparison(lhs_tuple, op, rhs_tuple, range);
 
                     return match op {
                         ast::CmpOp::Eq => tuple_rich_comparison(RichCompareOperator::Eq),
@@ -8120,7 +8120,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                             let mut any_eq = false;
                             let mut any_ambiguous = false;
 
-                            for ty in rhs_tuple.all_elements().copied() {
+                            for ty in rhs_tuple.all_elements(self.db()) {
                                 let eq_result = self.infer_binary_type_comparison(
                                 left,
                                 ast::CmpOp::Eq,
@@ -8318,16 +8318,18 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
     /// see `<https://github.com/python/cpython/blob/9d6366b60d01305fc5e45100e0cd13e358aa397d/Objects/tupleobject.c#L637>`
     fn infer_tuple_rich_comparison(
         &mut self,
-        left: &TupleSpec<'db>,
+        left: TupleSpec<'db>,
         op: RichCompareOperator,
-        right: &TupleSpec<'db>,
+        right: TupleSpec<'db>,
         range: TextRange,
     ) -> Result<Type<'db>, CompareUnsupportedError<'db>> {
         // If either tuple is variable length, we can make no assumptions about the relative
         // lengths of the tuples, and therefore neither about how they compare lexicographically.
         // TODO: Consider comparing the prefixes of the tuples, since that could give a comparison
         // result regardless of how long the variable-length tuple is.
-        let (TupleSpec::Fixed(left), TupleSpec::Fixed(right)) = (left, right) else {
+        let (Tuple::Fixed(left), Tuple::Fixed(right)) =
+            (left.inner(self.db()), right.inner(self.db()))
+        else {
             return Ok(Type::unknown());
         };
 
@@ -8577,7 +8579,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                             "tuple",
                             value_node.into(),
                             value_ty,
-                            tuple.len().display_minimum(),
+                            tuple.len(self.db()).display_minimum(),
                             i64_int,
                         );
                         Type::unknown()
@@ -8594,21 +8596,22 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 }),
             ) => maybe_tuple
                 .tuple_spec(db)
-                .as_deref()
                 .and_then(|tuple_spec| Some((tuple_spec, maybe_slice.slice_literal(db)?)))
-                .map(|(tuple, SliceLiteral { start, stop, step })| match tuple {
-                    TupleSpec::Fixed(tuple) => {
-                        if let Ok(new_elements) = tuple.py_slice(db, start, stop, step) {
-                            Type::heterogeneous_tuple(db, new_elements)
-                        } else {
-                            report_slice_step_size_zero(context, value_node.into());
-                            Type::unknown()
+                .map(
+                    |(tuple, SliceLiteral { start, stop, step })| match tuple.inner(self.db()) {
+                        Tuple::Fixed(tuple) => {
+                            if let Ok(new_elements) = tuple.py_slice(db, start, stop, step) {
+                                Type::heterogeneous_tuple(db, new_elements)
+                            } else {
+                                report_slice_step_size_zero(context, value_node.into());
+                                Type::unknown()
+                            }
                         }
-                    }
-                    TupleSpec::Variable(_) => {
-                        todo_type!("slice into variable-length tuple")
-                    }
-                }),
+                        Tuple::Variable(_) => {
+                            todo_type!("slice into variable-length tuple")
+                        }
+                    },
+                ),
 
             // Ex) Given `"value"[1]`, return `"a"`
             (Type::StringLiteral(literal_ty), Type::IntLiteral(i64_int)) => {
@@ -8713,20 +8716,22 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 Type::SpecialForm(SpecialFormType::Protocol),
                 Type::NominalInstance(NominalInstanceType { class, .. }),
             ) => {
-                class.tuple_spec(db).map(|typevars| match &*typevars {
-                    TupleSpec::Fixed(typevars) => self
-                        .legacy_generic_class_context(
-                            value_node,
-                            typevars.elements_slice(),
-                            LegacyGenericBase::Protocol,
-                        )
-                        .map(|context| {
-                            Type::KnownInstance(KnownInstanceType::SubscriptedProtocol(context))
-                        })
-                        .unwrap_or_else(Type::unknown),
-                    // TODO: emit a diagnostic
-                    TupleSpec::Variable(_) => Type::unknown(),
-                })
+                class
+                    .tuple_spec(db)
+                    .map(|typevars| match typevars.inner(db) {
+                        Tuple::Fixed(typevars) => self
+                            .legacy_generic_class_context(
+                                value_node,
+                                typevars.elements_slice(),
+                                LegacyGenericBase::Protocol,
+                            )
+                            .map(|context| {
+                                Type::KnownInstance(KnownInstanceType::SubscriptedProtocol(context))
+                            })
+                            .unwrap_or_else(Type::unknown),
+                        // TODO: emit a diagnostic
+                        Tuple::Variable(_) => Type::unknown(),
+                    })
             }
 
             (Type::SpecialForm(SpecialFormType::Protocol), typevar) => Some(
@@ -8748,20 +8753,22 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 Type::SpecialForm(SpecialFormType::Generic),
                 Type::NominalInstance(NominalInstanceType { class, .. }),
             ) => {
-                class.tuple_spec(db).map(|typevars| match &*typevars {
-                    TupleSpec::Fixed(typevars) => self
-                        .legacy_generic_class_context(
-                            value_node,
-                            typevars.elements_slice(),
-                            LegacyGenericBase::Generic,
-                        )
-                        .map(|context| {
-                            Type::KnownInstance(KnownInstanceType::SubscriptedGeneric(context))
-                        })
-                        .unwrap_or_else(Type::unknown),
-                    // TODO: emit a diagnostic
-                    TupleSpec::Variable(_) => Type::unknown(),
-                })
+                class
+                    .tuple_spec(db)
+                    .map(|typevars| match typevars.inner(db) {
+                        Tuple::Fixed(typevars) => self
+                            .legacy_generic_class_context(
+                                value_node,
+                                typevars.elements_slice(),
+                                LegacyGenericBase::Generic,
+                            )
+                            .map(|context| {
+                                Type::KnownInstance(KnownInstanceType::SubscriptedGeneric(context))
+                            })
+                            .unwrap_or_else(Type::unknown),
+                        // TODO: emit a diagnostic
+                        Tuple::Variable(_) => Type::unknown(),
+                    })
             }
 
             (Type::SpecialForm(SpecialFormType::Generic), typevar) => Some(
@@ -9969,7 +9976,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     return result;
                 }
 
-                let mut element_types = TupleSpec::with_capacity(elements.len());
+                let mut element_types = Vec::with_capacity(elements.len());
 
                 // Whether to infer `Todo` for the whole tuple
                 // (see docstring for `element_could_alter_type_of_whole_tuple`)
@@ -9982,7 +9989,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
 
                     if let ast::Expr::Starred(_) = element {
                         if let Some(inner_tuple) = element_ty.exact_tuple_instance_spec(self.db()) {
-                            element_types = element_types.concat(self.db(), &inner_tuple);
+                            element_types.extend(inner_tuple.all_elements(self.db()));
                         } else {
                             // TODO: emit a diagnostic
                         }
@@ -9994,7 +10001,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 let ty = if return_todo {
                     TupleType::homogeneous(self.db(), todo_type!("PEP 646"))
                 } else {
-                    TupleType::new(self.db(), element_types)
+                    TupleType::heterogeneous(self.db(), element_types)
                 };
 
                 // Here, we store the type for the inner `int, str` tuple-expression,
@@ -10010,7 +10017,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 {
                     TupleType::homogeneous(self.db(), todo_type!("PEP 646"))
                 } else {
-                    TupleType::from_elements(self.db(), std::iter::once(single_element_ty))
+                    TupleType::heterogeneous(self.db(), [single_element_ty])
                 }
             }
         }

@@ -289,7 +289,7 @@ impl<'db> GenericContext<'db> {
         db: &'db dyn Db,
         tuple: TupleType<'db>,
     ) -> Specialization<'db> {
-        let element_type = tuple.tuple(db).homogeneous_element_type(db);
+        let element_type = tuple.homogeneous_element_type(db);
         Specialization::new(db, self, Box::from([element_type]), Some(tuple))
     }
 
@@ -404,18 +404,16 @@ pub(super) fn walk_specialization<'db, V: super::visitor::TypeVisitor<'db> + ?Si
 
 impl<'db> Specialization<'db> {
     /// Returns the tuple spec for a specialization of the `tuple` class.
-    pub(crate) fn tuple(self, db: &'db dyn Db) -> &'db TupleSpec<'db> {
-        if let Some(tuple) = self.tuple_inner(db).map(|tuple_type| tuple_type.tuple(db)) {
-            return tuple;
+    pub(crate) fn tuple(self, db: &'db dyn Db) -> TupleSpec<'db> {
+        if let Some(tuple) = self.tuple_inner(db) {
+            return tuple.tuple;
         }
         if let [element_type] = self.types(db) {
-            if let Some(tuple) = TupleType::new(db, TupleSpec::homogeneous(*element_type)) {
-                return tuple.tuple(db);
+            if let Some(tuple) = TupleType::homogeneous(db, *element_type) {
+                return tuple.tuple;
             }
         }
-        TupleType::new(db, TupleSpec::homogeneous(Type::unknown()))
-            .expect("tuple[Unknown, ...] should never contain Never")
-            .tuple(db)
+        TupleSpec::homogeneous(db, Type::unknown())
     }
 
     /// Returns the type that a typevar is mapped to, or None if the typevar isn't part of this
@@ -805,7 +803,7 @@ impl<'db> SpecializationBuilder<'db> {
                 Type::NominalInstance(NominalInstanceType { class: class2, .. })
             ) if class1.tuple_spec(self.db).is_some() => {
                 if let (Some(formal_tuple), Some(actual_tuple)) = (class1.tuple_spec(self.db), class2.tuple_spec(self.db)) {
-                    let Some(most_precise_length) = formal_tuple.len().most_precise(actual_tuple.len()) else {
+                    let Some(most_precise_length) = formal_tuple.len(self.db).most_precise(actual_tuple.len(self.db)) else {
                         return Ok(());
                     };
                     let Ok(formal_tuple) = formal_tuple.resize(self.db, most_precise_length) else {
@@ -815,9 +813,9 @@ impl<'db> SpecializationBuilder<'db> {
                         return Ok(());
                     };
                     for (formal_element, actual_element) in
-                        formal_tuple.all_elements().zip(actual_tuple.all_elements())
+                        formal_tuple.all_elements(self.db).zip(actual_tuple.all_elements(self.db))
                     {
-                        self.infer(*formal_element, *actual_element)?;
+                        self.infer(formal_element, actual_element)?;
                     }
                 }
             }

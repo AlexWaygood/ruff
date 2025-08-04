@@ -136,9 +136,9 @@ impl<'db> NominalInstanceType<'db> {
         visitor: &mut PairVisitor<'db>,
     ) -> bool {
         let self_spec = self.class.tuple_spec(db);
-        if let Some(self_spec) = self_spec.as_deref() {
+        if let Some(self_spec) = self_spec {
             let other_spec = other.class.tuple_spec(db);
-            if let Some(other_spec) = other_spec.as_deref() {
+            if let Some(other_spec) = other_spec {
                 if self_spec.is_disjoint_from_impl(db, other_spec, visitor) {
                     return true;
                 }
