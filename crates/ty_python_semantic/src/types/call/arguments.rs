@@ -356,12 +356,15 @@ mod tests {
         assert_eq!(expanded, expected_types);
 
         // Variable-length tuples are not expanded.
-        let variable_length_tuple = Type::tuple(&db, TupleType::mixed(
+        let variable_length_tuple = Type::tuple(
             &db,
-            [bool_ty],
-            int_ty,
-            [UnionType::from_elements(&db, [str_ty, bytes_ty]), str_ty],
-        ));
+            TupleType::mixed(
+                &db,
+                [bool_ty],
+                int_ty,
+                [UnionType::from_elements(&db, [str_ty, bytes_ty]), str_ty],
+            ),
+        );
         let expanded = expand_type(&db, variable_length_tuple);
         assert!(expanded.is_none());
     }
