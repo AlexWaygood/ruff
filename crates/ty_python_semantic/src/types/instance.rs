@@ -31,7 +31,12 @@ impl<'db> Type<'db> {
         };
         tuple
             .to_class_type(db)
-            .map(|class| Type::instance(db, class))
+            .map(|class| {
+                Type::NominalInstance(NominalInstanceType {
+                    class,
+                    _phantom: PhantomData,
+                })
+            })
             .unwrap_or_else(Type::unknown)
     }
 
