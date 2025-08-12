@@ -1193,17 +1193,19 @@ impl<'db> Type<'db> {
         }
     }
 
-    pub(crate) fn into_callable(self, db: &'db dyn Db) -> Option<Type<'db>> {
+    pub(crate) fn into_callable(self, db: &'db dyn Db) -> IntoCallableOutcome<'db> {
         match self {
-            Type::Callable(_) => Some(self),
+            Type::Callable(callable) => IntoCallableOutcome::Single(callable),
 
-            Type::Dynamic(_) => Some(CallableType::single(db, Signature::dynamic(self))),
+            Type::Dynamic(_) => {
+                IntoCallableOutcome::Single(CallableType::single(db, Signature::dynamic(self)))
+            }
 
             Type::FunctionLiteral(function_literal) => {
-                Some(Type::Callable(function_literal.into_callable_type(db)))
+                IntoCallableOutcome::Single(function_literal.into_callable_type(db))
             }
             Type::BoundMethod(bound_method) => {
-                Some(Type::Callable(bound_method.into_callable_type(db)))
+                IntoCallableOutcome::Single(bound_method.into_callable_type(db))
             }
 
             Type::NominalInstance(_) | Type::ProtocolInstance(_) => {
@@ -1218,25 +1220,46 @@ impl<'db> Type<'db> {
                 if let Place::Type(ty, Boundness::Bound) = call_symbol {
                     ty.into_callable(db)
                 } else {
-                    None
+                    IntoCallableOutcome::NotCallable
                 }
             }
             Type::ClassLiteral(class_literal) => {
-                Some(ClassType::NonGeneric(class_literal).into_callable(db))
+                IntoCallableOutcome::Single(ClassType::NonGeneric(class_literal).into_callable(db))
             }
 
-            Type::GenericAlias(alias) => Some(ClassType::Generic(alias).into_callable(db)),
+            Type::GenericAlias(alias) => {
+                IntoCallableOutcome::Single(ClassType::Generic(alias).into_callable(db))
+            }
 
             // TODO: This is unsound so in future we can consider an opt-in option to disable it.
-            Type::SubclassOf(subclass_of_ty) => match subclass_of_ty.subclass_of() {
-                SubclassOfInner::Class(class) => Some(class.into_callable(db)),
-                SubclassOfInner::Dynamic(dynamic) => Some(CallableType::single(
-                    db,
-                    Signature::new(Parameters::unknown(), Some(Type::Dynamic(dynamic))),
-                )),
-            },
+            Type::SubclassOf(subclass_of_ty) => {
+                IntoCallableOutcome::Single(match subclass_of_ty.subclass_of() {
+                    SubclassOfInner::Class(class) => class.into_callable(db),
+                    SubclassOfInner::Dynamic(dynamic) => CallableType::single(
+                        db,
+                        Signature::new(Parameters::unknown(), Some(Type::Dynamic(dynamic))),
+                    ),
+                })
+            }
 
-            Type::Union(union) => union.try_map(db, |element| element.into_callable(db)),
+            Type::Union(union) => {
+                let union_elements = union.elements(db);
+                let mut outcome_elements = Vec::with_capacity(union_elements.len());
+                for element in union_elements {
+                    match element.into_callable(db) {
+                        IntoCallableOutcome::Single(callable) => {
+                            outcome_elements.push(callable);
+                        }
+                        IntoCallableOutcome::Union(union_outcome) => {
+                            outcome_elements.extend(union_outcome);
+                        }
+                        IntoCallableOutcome::NotCallable => {
+                            return IntoCallableOutcome::NotCallable;
+                        }
+                    }
+                }
+                IntoCallableOutcome::Union(outcome_elements)
+            }
 
             Type::EnumLiteral(enum_literal) => {
                 enum_literal.enum_class_instance(db).into_callable(db)
@@ -1254,7 +1277,7 @@ impl<'db> Type<'db> {
             | Type::LiteralString
             | Type::BytesLiteral(_)
             | Type::TypeIs(_)
-            | Type::TypedDict(_) => None,
+            | Type::TypedDict(_) => IntoCallableOutcome::NotCallable,
 
             // TODO
             Type::MethodWrapper(_)
@@ -1266,9 +1289,10 @@ impl<'db> Type<'db> {
             | Type::PropertyInstance(_)
             | Type::Intersection(_)
             | Type::TypeVar(_)
-            | Type::BoundSuper(_) => None,
+            | Type::BoundSuper(_) => IntoCallableOutcome::NotCallable,
         }
     }
+
     /// Return true if this type is a [subtype of] type `target`.
     ///
     /// For fully static types, this means that the set of objects represented by `self` is a
@@ -1525,13 +1549,10 @@ impl<'db> Type<'db> {
                 | Type::EnumLiteral(_),
             ) => false,
 
-            (Type::Callable(self_callable), Type::Callable(other_callable)) => {
-                self_callable.has_relation_to(db, other_callable, relation)
-            }
-
-            (_, Type::Callable(_)) => self.into_callable(db).is_some_and(|callable| {
-                callable.has_relation_to_impl(db, target, relation, visitor)
-            }),
+            (_, Type::Callable(other_callable)) => self
+                .into_callable(db)
+                .into_single_callable() // Unions of callables are dealt with in an earlier branch of this `match`
+                .is_some_and(|callable| callable.has_relation_to(db, other_callable, relation)),
 
             (Type::ProtocolInstance(left), Type::ProtocolInstance(right)) => {
                 left.has_relation_to(db, right, relation)
@@ -2284,7 +2305,7 @@ impl<'db> Type<'db> {
                 .place
                 .ignore_possibly_unbound()
                 .is_none_or(|dunder_call| {
-                    !dunder_call.is_assignable_to(db, CallableType::unknown(db))
+                    !dunder_call.is_assignable_to(db, Type::Callable(CallableType::unknown(db)))
                 }),
 
             (
@@ -4462,7 +4483,10 @@ impl<'db> Type<'db> {
                                     .with_annotated_type(UnionType::from_elements(
                                         db,
                                         [
-                                            CallableType::single(db, getter_signature),
+                                            Type::Callable(CallableType::single(
+                                                db,
+                                                getter_signature,
+                                            )),
                                             Type::none(db),
                                         ],
                                     ))
@@ -4471,7 +4495,10 @@ impl<'db> Type<'db> {
                                     .with_annotated_type(UnionType::from_elements(
                                         db,
                                         [
-                                            CallableType::single(db, setter_signature),
+                                            Type::Callable(CallableType::single(
+                                                db,
+                                                setter_signature,
+                                            )),
                                             Type::none(db),
                                         ],
                                     ))
@@ -4480,7 +4507,10 @@ impl<'db> Type<'db> {
                                     .with_annotated_type(UnionType::from_elements(
                                         db,
                                         [
-                                            CallableType::single(db, deleter_signature),
+                                            Type::Callable(CallableType::single(
+                                                db,
+                                                deleter_signature,
+                                            )),
                                             Type::none(db),
                                         ],
                                     ))
@@ -5443,7 +5473,7 @@ impl<'db> Type<'db> {
                 SpecialFormType::OrderedDict => Ok(KnownClass::OrderedDict.to_instance(db)),
 
                 // TODO: Use an opt-in rule for a bare `Callable`
-                SpecialFormType::Callable => Ok(CallableType::unknown(db)),
+                SpecialFormType::Callable => Ok(Type::Callable(CallableType::unknown(db))),
 
                 SpecialFormType::TypingSelf => {
                     let module = parsed_module(db, scope_id.file(db)).load(db);
@@ -6210,6 +6240,22 @@ impl<'db> Type<'db> {
 impl<'db> From<&Type<'db>> for Type<'db> {
     fn from(value: &Type<'db>) -> Self {
         *value
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum IntoCallableOutcome<'db> {
+    Single(CallableType<'db>),
+    Union(Vec<CallableType<'db>>),
+    NotCallable,
+}
+
+impl<'db> IntoCallableOutcome<'db> {
+    fn into_single_callable(self) -> Option<CallableType<'db>> {
+        match self {
+            IntoCallableOutcome::Single(callable) => Some(callable),
+            IntoCallableOutcome::Union(_) | IntoCallableOutcome::NotCallable => None,
+        }
     }
 }
 
@@ -8159,12 +8205,8 @@ impl get_size2::GetSize for CallableType<'_> {}
 
 impl<'db> CallableType<'db> {
     /// Create a callable type with a single non-overloaded signature.
-    pub(crate) fn single(db: &'db dyn Db, signature: Signature<'db>) -> Type<'db> {
-        Type::Callable(CallableType::new(
-            db,
-            CallableSignature::single(signature),
-            false,
-        ))
+    pub(crate) fn single(db: &'db dyn Db, signature: Signature<'db>) -> CallableType<'db> {
+        CallableType::new(db, CallableSignature::single(signature), false)
     }
 
     /// Create a non-overloaded, function-like callable type with a single signature.
@@ -8179,7 +8221,7 @@ impl<'db> CallableType<'db> {
     }
 
     /// Create a callable type which accepts any parameters and returns an `Unknown` type.
-    pub(crate) fn unknown(db: &'db dyn Db) -> Type<'db> {
+    pub(crate) fn unknown(db: &'db dyn Db) -> Self {
         Self::single(db, Signature::unknown())
     }
 

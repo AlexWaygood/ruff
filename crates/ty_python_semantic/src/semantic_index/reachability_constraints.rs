@@ -208,7 +208,8 @@ use crate::semantic_index::predicate::{
     Predicates, ScopedPredicateId,
 };
 use crate::types::{
-    IntersectionBuilder, Truthiness, Type, UnionBuilder, UnionType, infer_expression_type,
+    IntersectionBuilder, IntoCallableOutcome, Truthiness, Type, UnionBuilder, UnionType,
+    infer_expression_type,
 };
 
 /// A ternary formula that defines under what conditions a binding is visible. (A ternary formula
@@ -826,12 +827,15 @@ impl ReachabilityConstraints {
                     return Truthiness::AlwaysFalse.negate_if(!predicate.is_positive);
                 }
 
-                let overloads_iterator =
-                    if let Some(Type::Callable(callable)) = ty.into_callable(db) {
+                let overloads_iterator = match ty.into_callable(db) {
+                    IntoCallableOutcome::Single(callable) => {
                         callable.signatures(db).overloads.iter()
-                    } else {
+                    }
+                    // TODO: better handling for unions of callables
+                    IntoCallableOutcome::Union(_) | IntoCallableOutcome::NotCallable => {
                         return Truthiness::AlwaysFalse.negate_if(!predicate.is_positive);
-                    };
+                    }
+                };
 
                 let (no_overloads_return_never, all_overloads_return_never) = overloads_iterator
                     .fold((true, true), |(none, all), overload| {

@@ -22,10 +22,7 @@ use crate::types::infer::nearest_enclosing_class;
 use crate::types::signatures::{CallableSignature, Parameter, Parameters, Signature};
 use crate::types::tuple::TupleSpec;
 use crate::types::{
-    BareTypeAliasType, Binding, BoundSuperError, BoundSuperType, CallableType, DataclassParams,
-    DeprecatedInstance, KnownInstanceType, StringLiteralType, TypeAliasType, TypeMapping,
-    TypeRelation, TypeTransformer, TypeVarBoundOrConstraints, TypeVarInstance, TypeVarKind,
-    declaration_type, infer_definition_types, todo_type,
+    declaration_type, infer_definition_types, todo_type, BareTypeAliasType, Binding, BoundSuperError, BoundSuperType, CallableType, DataclassParams, DeprecatedInstance, IntoCallableOutcome, KnownInstanceType, StringLiteralType, TypeAliasType, TypeMapping, TypeRelation, TypeTransformer, TypeVarBoundOrConstraints, TypeVarInstance, TypeVarKind
 };
 use crate::{
     Db, FxIndexMap, FxOrderSet, Program,
@@ -941,7 +938,7 @@ impl<'db> ClassType<'db> {
 
     /// Return a callable type (or union of callable types) that represents the callable
     /// constructor signature of this class.
-    pub(super) fn into_callable(self, db: &'db dyn Db) -> Type<'db> {
+    pub(super) fn into_callable(self, db: &'db dyn Db) -> IntoCallableOutcome<'db> {
         let self_ty = Type::from(self);
         let metaclass_dunder_call_function_symbol = self_ty
             .member_lookup_with_policy(
@@ -952,14 +949,12 @@ impl<'db> ClassType<'db> {
             )
             .place;
 
-        if let Place::Type(Type::BoundMethod(metaclass_dunder_call_function), _) =
-            metaclass_dunder_call_function_symbol
-        {
+        if let Place::Type(metaclass_dunder_call_function, _) = metaclass_dunder_call_function_symbol {
             // TODO: this intentionally diverges from step 1 in
             // https://typing.python.org/en/latest/spec/constructors.html#converting-a-constructor-to-callable
             // by always respecting the signature of the metaclass `__call__`, rather than
             // using a heuristic which makes unwarranted assumptions to sometimes ignore it.
-            return Type::Callable(metaclass_dunder_call_function.into_callable_type(db));
+            return metaclass_dunder_call_function.into_callable(db);
         }
 
         let dunder_new_function_symbol = self_ty
@@ -972,11 +967,9 @@ impl<'db> ClassType<'db> {
 
         let dunder_new_signature = dunder_new_function_symbol
             .ignore_possibly_unbound()
-            .and_then(|ty| match ty {
-                Type::FunctionLiteral(function) => Some(function.signature(db)),
-                Type::Callable(callable) => Some(callable.signatures(db)),
-                _ => None,
-            });
+            .map(|ty| ty.into_callable(db))
+            .and_then(|outcome| outcome.into_single_callable()) // TODO: handle unions of Callables better
+            .map(|callable| callable.signatures(db));
 
         let dunder_new_function = if let Some(dunder_new_signature) = dunder_new_signature {
             // Step 3: If the return type of the `__new__` evaluates to a type that is not a subclass of this class,
@@ -992,14 +985,11 @@ impl<'db> ClassType<'db> {
                 })
             });
 
-            let dunder_new_bound_method = Type::Callable(CallableType::new(
-                db,
-                dunder_new_signature.bind_self(),
-                true,
-            ));
+            let dunder_new_bound_method =
+                CallableType::new(db, dunder_new_signature.bind_self(), true);
 
             if returns_non_subclass {
-                return dunder_new_bound_method;
+                return IntoCallableOutcome::Single(dunder_new_bound_method);
             }
             Some(dunder_new_bound_method)
         } else {
@@ -1073,11 +1063,9 @@ impl<'db> ClassType<'db> {
                     .place;
 
                 if let Place::Type(Type::FunctionLiteral(new_function), _) = new_function_symbol {
-                    Type::Callable(
-                        new_function
-                            .into_bound_method_type(db, self_ty)
-                            .into_callable_type(db),
-                    )
+                    new_function
+                        .into_bound_method_type(db, self_ty)
+                        .into_callable_type(db)
                 } else {
                     // Fallback if no `object.__new__` is found.
                     CallableType::single(
