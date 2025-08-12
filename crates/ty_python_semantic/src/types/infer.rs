@@ -1800,37 +1800,43 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
     }
 
     fn add_binding(&mut self, node: AnyNodeRef, binding: Definition<'db>, ty: Type<'db>) {
-        /// Arbitrary `__getitem__`/`__setitem__` methods on a class do not
-        /// necessarily guarantee that the passed-in value for `__setitem__` is stored and
-        /// can be retrieved unmodified via `__getitem__`. Therefore, we currently only
-        /// perform assignment-based narrowing on a few built-in classes (`list`, `dict`,
-        /// `bytesarray`, `TypedDict` and `collections` types) where we are confident that
-        /// this kind of narrowing can be performed soundly. This is the same approach as
-        /// pyright. TODO: Other standard library classes may also be considered safe. Also,
-        /// subclasses of these safe classes that do not override `__getitem__/__setitem__`
-        /// may be considered safe.
-        fn is_safe_mutable_class<'db>(db: &'db dyn Db, ty: Type<'db>) -> bool {
-            const SAFE_MUTABLE_CLASSES: &[KnownClass] = &[
-                KnownClass::List,
-                KnownClass::Dict,
-                KnownClass::Bytearray,
-                KnownClass::DefaultDict,
-                KnownClass::ChainMap,
-                KnownClass::Counter,
-                KnownClass::Deque,
-                KnownClass::OrderedDict,
-            ];
+        fn is_safe_mutable_type<'db>(db: &'db dyn Db, ty: Type<'db>) -> bool {
+            if ty.is_typed_dict() {
+                return true;
+            }
 
-            SAFE_MUTABLE_CLASSES
-                .iter()
-                .map(|class| class.to_instance(db))
-                .any(|safe_mutable_class| {
-                    ty.is_equivalent_to(db, safe_mutable_class)
-                        || ty
-                            .generic_origin(db)
-                            .zip(safe_mutable_class.generic_origin(db))
-                            .is_some_and(|(l, r)| l == r)
-                })
+            if ty.into_nominal_instance().is_some_and(|instance| {
+                matches!(
+                    instance.class(db).known(db),
+                    Some(
+                        KnownClass::Dict
+                            | KnownClass::List
+                            | KnownClass::Bytearray
+                            | KnownClass::ChainMap
+                            | KnownClass::Counter
+                            | KnownClass::DefaultDict
+                            | KnownClass::Deque
+                            | KnownClass::OrderedDict
+                    )
+                )
+            }) {
+                return true;
+            }
+
+            let Place::Type(dunder_getitem, Boundness::Bound) = ty
+                .member_lookup_with_policy(
+                    db,
+                    "__getitem__".into(),
+                    MemberLookupPolicy::NO_INSTANCE_FALLBACK,
+                )
+                .place
+            else {
+                return false;
+            };
+
+            let Some(callable) = dunder_getitem.into_callable(db) else {
+                return false;
+            };
         }
 
         debug_assert!(
@@ -2075,7 +2081,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 .try_expression_type(value)
                 .unwrap_or_else(|| self.infer_expression(value));
 
-            if !value_ty.is_typed_dict() && !is_safe_mutable_class(db, value_ty) {
+            if !is_safe_mutable_type(db, value_ty) {
                 bound_ty = declared_ty;
             }
         }
