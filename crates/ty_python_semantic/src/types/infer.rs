@@ -7028,6 +7028,16 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
 
     /// Infer the type of a [`ast::ExprAttribute`] expression, assuming a load context.
     fn infer_attribute_load(&mut self, attribute: &ast::ExprAttribute) -> Type<'db> {
+        fn infer_mro_attribute<'db>(db: &'db dyn Db, ty: Type<'db>) -> Option<Type<'db>> {
+            match ty {
+                Type::ClassLiteral(class) => Some(Type::heterogeneous_tuple(db, class.iter_mro(db, None))),
+                Type::SubclassOf(subclass_of) => Some(Type::heterogeneous_tuple(db, subclass_of.subclass_of().into_class()?.iter_mro(db))),
+                Type::GenericAlias(alias) => Some(Type::heterogeneous_tuple(db, alias.origin(db).iter_mro(db, Some(alias.specialization(db))))),
+                Type::Union(union) => union.try_map(db, |ty| infer_mro_attribute(db, *ty)),
+                _ => None,
+            }
+        }
+
         let ast::ExprAttribute {
             value,
             attr,
