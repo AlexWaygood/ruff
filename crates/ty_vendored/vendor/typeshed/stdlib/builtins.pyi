@@ -223,12 +223,13 @@ class classmethod(Generic[_T, _P, _R_co]):
     @property
     def __isabstractmethod__(self) -> bool: ...
     def __init__(self, f: Callable[Concatenate[type[_T], _P], _R_co], /) -> None: ...
+
     @overload
     def __get__(self, instance: _T, owner: type[_T] | None = None, /) -> Callable[_P, _R_co]:
         """Return an attribute of instance, which is of type owner."""
-
     @overload
     def __get__(self, instance: None, owner: type[_T], /) -> Callable[_P, _R_co]: ...
+
     if sys.version_info >= (3, 10):
         __name__: str
         __qualname__: str
@@ -281,6 +282,7 @@ class type:
 
     def __subclasses__(self: _typeshed.Self) -> list[_typeshed.Self]:
         """Return a list of immediate subclasses."""
+
     # Note: the documentation doesn't specify what the return type is, the standard
     # implementation seems to be returning a list.
     def mro(self) -> list[type]:
@@ -295,12 +297,14 @@ class type:
     @classmethod
     def __prepare__(metacls, name: str, bases: tuple[type, ...], /, **kwds: Any) -> MutableMapping[str, object]:
         """Create the namespace for the class statement"""
+
     if sys.version_info >= (3, 10):
         def __or__(self, value: Any, /) -> types.UnionType:
             """Return self|value."""
 
         def __ror__(self, value: Any, /) -> types.UnionType:
             """Return value|self."""
+
     if sys.version_info >= (3, 12):
         __type_params__: tuple[TypeVar | ParamSpec | TypeVarTuple, ...]
     __annotations__: dict[str, AnnotationForm]
