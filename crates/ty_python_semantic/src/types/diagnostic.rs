@@ -18,8 +18,8 @@ use crate::types::string_annotation::{
     RAW_STRING_TYPE_ANNOTATION,
 };
 use crate::types::{
-    DynamicType, LintDiagnosticGuard, PropertyInstanceType, Protocol, ProtocolInstanceType,
-    SubclassOfInner, binding_type,
+    DynamicType, LintDiagnosticGuard, LintDiagnosticGuardBuilder, PropertyInstanceType, Protocol,
+    ProtocolInstanceType, SubclassOfInner, binding_type,
 };
 use crate::types::{SpecialFormType, Type, protocol_class::ProtocolClass};
 use crate::util::diagnostics::format_enumeration;
@@ -1911,26 +1911,23 @@ pub(super) fn report_slice_step_size_zero(context: &InferContext, node: AnyNodeR
 }
 
 fn report_invalid_assignment_with_message(
-    context: &InferContext,
-    node: AnyNodeRef,
+    db: &dyn Db,
+    builder: LintDiagnosticGuardBuilder,
     target_ty: Type,
     message: std::fmt::Arguments,
 ) {
-    let Some(builder) = context.report_lint(&INVALID_ASSIGNMENT, node) else {
-        return;
-    };
     match target_ty {
         Type::ClassLiteral(class) => {
             let mut diag = builder.into_diagnostic(format_args!(
                 "Implicit shadowing of class `{}`",
-                class.name(context.db()),
+                class.name(db),
             ));
             diag.info("Annotate to make it explicit if this is intentional");
         }
         Type::FunctionLiteral(function) => {
             let mut diag = builder.into_diagnostic(format_args!(
                 "Implicit shadowing of function `{}`",
-                function.name(context.db()),
+                function.name(db),
             ));
             diag.info("Annotate to make it explicit if this is intentional");
         }
@@ -1941,56 +1938,51 @@ fn report_invalid_assignment_with_message(
 }
 
 pub(super) fn report_invalid_assignment(
-    context: &InferContext,
-    node: AnyNodeRef,
+    db: &dyn Db,
+    builder: LintDiagnosticGuardBuilder,
     target_ty: Type,
     source_ty: Type,
 ) {
-    let settings =
-        DisplaySettings::from_possibly_ambiguous_type_pair(context.db(), target_ty, source_ty);
+    let settings = DisplaySettings::from_possibly_ambiguous_type_pair(db, target_ty, source_ty);
 
     report_invalid_assignment_with_message(
-        context,
-        node,
+        db,
+        builder,
         target_ty,
         format_args!(
             "Object of type `{}` is not assignable to `{}`",
-            source_ty.display_with(context.db(), settings),
-            target_ty.display_with(context.db(), settings)
+            source_ty.display_with(db, settings),
+            target_ty.display_with(db, settings)
         ),
     );
 }
 
 pub(super) fn report_invalid_attribute_assignment(
-    context: &InferContext,
-    node: AnyNodeRef,
+    db: &dyn Db,
+    builder: LintDiagnosticGuardBuilder,
     target_ty: Type,
     source_ty: Type,
     attribute_name: &'_ str,
 ) {
     report_invalid_assignment_with_message(
-        context,
-        node,
+        db,
+        builder,
         target_ty,
         format_args!(
             "Object of type `{}` is not assignable to attribute `{attribute_name}` on type `{}`",
-            source_ty.display(context.db()),
-            target_ty.display(context.db()),
+            source_ty.display(db),
+            target_ty.display(db),
         ),
     );
 }
 
 pub(super) fn report_attempted_write_to_read_only_property<'db>(
-    context: &InferContext<'db, '_>,
+    db: &'db dyn Db,
+    builder: LintDiagnosticGuardBuilder,
     property: Option<PropertyInstanceType<'db>>,
     attribute: &str,
     object_type: Type<'db>,
-    target: &ast::ExprAttribute,
 ) {
-    let Some(builder) = context.report_lint(&INVALID_ASSIGNMENT, target) else {
-        return;
-    };
-    let db = context.db();
     let object_type = object_type.display(db);
 
     if let Some(file_range) = property
@@ -2164,17 +2156,14 @@ pub(super) fn report_possibly_unresolved_reference(
 }
 
 pub(super) fn report_possibly_unbound_attribute(
-    context: &InferContext,
-    target: &ast::ExprAttribute,
+    db: &dyn Db,
+    builder: LintDiagnosticGuardBuilder,
     attribute: &str,
-    object_ty: Type,
+    object_type: Type,
 ) {
-    let Some(builder) = context.report_lint(&POSSIBLY_UNBOUND_ATTRIBUTE, target) else {
-        return;
-    };
     builder.into_diagnostic(format_args!(
         "Attribute `{attribute}` on type `{}` is possibly unbound",
-        object_ty.display(context.db()),
+        object_type.display(db),
     ));
 }
 

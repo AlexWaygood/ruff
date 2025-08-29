@@ -9,11 +9,12 @@ use crate::{
     place::{Boundness, Place, PlaceAndQualifiers, place_from_bindings, place_from_declarations},
     semantic_index::{SemanticIndex, definition::Definition, place_table, use_def_map},
     types::{
-        AttributeAssignmentError, BoundTypeVarInstance, CallArguments, CallableType, ClassBase,
-        ClassLiteral, ClassType, Constraints, FindLegacyTypeVarsVisitor, HasRelationToVisitor,
-        InferContext, KnownFunction, MaterializationKind, NormalizedVisitor,
-        OptionConstraintsExtension, PropertyInstanceType, ScopedPlaceId, Signature, Type,
-        TypeMapping, TypeQualifiers, TypeRelation, TypeVarVariance, UnionType, VarianceInferable,
+        BoundTypeVarInstance, CallArguments, CallableType, ClassBase, ClassLiteral, ClassType,
+        Constraints, FindLegacyTypeVarsVisitor, HasRelationToVisitor, InferContext, KnownFunction,
+        MaterializationKind, NormalizedVisitor, OptionConstraintsExtension, PropertyInstanceType,
+        ScopedPlaceId, Signature, Type, TypeMapping, TypeQualifiers, TypeRelation, TypeVarVariance,
+        UnionType, VarianceInferable,
+        assignment_validation::{AttributeAssignmentErrorKind, validate_attribute_assignment},
         constraints::{IteratorConstraintsExtension, ResultConstraintsExtension},
         diagnostic::report_undeclared_protocol_member,
     },
@@ -635,15 +636,15 @@ impl<'a, 'db> ProtocolMember<'a, 'db> {
     /// If so, what types must it be permissible to write to that member?
     /// If not, what error should be returned when a user tries to write
     /// to this member on an instance?
-    pub(super) fn instance_set_type(&self) -> Result<Type<'db>, AttributeAssignmentError<'db>> {
+    pub(super) fn instance_set_type(&self) -> Result<Type<'db>, AttributeAssignmentErrorKind<'db>> {
         match self.kind {
             ProtocolMemberKind::Property { set_type, .. } => {
-                set_type.ok_or(AttributeAssignmentError::ReadOnlyProperty(None))
+                set_type.ok_or(AttributeAssignmentErrorKind::ReadOnlyProperty(None))
             }
-            ProtocolMemberKind::Method(_) => Err(AttributeAssignmentError::CannotAssign),
+            ProtocolMemberKind::Method(_) => Err(AttributeAssignmentErrorKind::CannotAssign),
             ProtocolMemberKind::Attribute(ty) => {
                 if self.qualifiers.contains(TypeQualifiers::CLASS_VAR) {
-                    Err(AttributeAssignmentError::CannotAssignToClassVar)
+                    Err(AttributeAssignmentErrorKind::CannotAssignToClassVar)
                 } else {
                     Ok(*ty)
                 }
@@ -657,17 +658,17 @@ impl<'a, 'db> ProtocolMember<'a, 'db> {
     /// member on the class object `X`? If not, what error should be
     /// returned when a user tries to write to this member on the
     /// class object itself?
-    pub(super) fn meta_set_type(&self) -> Result<Type<'db>, AttributeAssignmentError<'db>> {
+    pub(super) fn meta_set_type(&self) -> Result<Type<'db>, AttributeAssignmentErrorKind<'db>> {
         match self.kind {
             ProtocolMemberKind::Property { .. } => {
-                Err(AttributeAssignmentError::CannotAssignToInstanceAttr)
+                Err(AttributeAssignmentErrorKind::CannotAssignToInstanceAttr)
             }
-            ProtocolMemberKind::Method(_) => Err(AttributeAssignmentError::CannotAssign),
+            ProtocolMemberKind::Method(_) => Err(AttributeAssignmentErrorKind::CannotAssign),
             ProtocolMemberKind::Attribute(ty) => {
                 if self.qualifiers.contains(TypeQualifiers::CLASS_VAR) {
                     Ok(*ty)
                 } else {
-                    Err(AttributeAssignmentError::CannotAssignToInstanceAttr)
+                    Err(AttributeAssignmentErrorKind::CannotAssignToInstanceAttr)
                 }
             }
         }
@@ -708,9 +709,7 @@ impl<'a, 'db> ProtocolMember<'a, 'db> {
                 self.instance_set_type().when_err_or(db, |set_type| {
                     C::from_bool(
                         db,
-                        other
-                            .validate_attribute_assignment(db, self.name, set_type)
-                            .is_ok(),
+                        validate_attribute_assignment(db, other, self.name, set_type).is_ok(),
                     )
                 })
             })
@@ -728,10 +727,13 @@ impl<'a, 'db> ProtocolMember<'a, 'db> {
                 self.meta_set_type().when_err_or(db, |set_type| {
                     C::from_bool(
                         db,
-                        other
-                            .to_meta_type(db)
-                            .validate_attribute_assignment(db, self.name, set_type)
-                            .is_ok(),
+                        validate_attribute_assignment(
+                            db,
+                            other.to_meta_type(db),
+                            self.name,
+                            set_type,
+                        )
+                        .is_ok(),
                     )
                 })
             })

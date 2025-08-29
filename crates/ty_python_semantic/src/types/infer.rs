@@ -91,22 +91,22 @@ use crate::semantic_index::symbol::ScopedSymbolId;
 use crate::semantic_index::{
     ApplicableConstraints, EnclosingSnapshotResult, SemanticIndex, place_table, semantic_index,
 };
+use crate::types::assignment_validation::validate_attribute_assignment;
 use crate::types::call::{Binding, Bindings, CallArguments, CallError, CallErrorKind};
 use crate::types::class::{CodeGeneratorKind, FieldKind, MetaclassErrorKind};
 use crate::types::diagnostic::{
     self, CALL_NON_CALLABLE, CONFLICTING_DECLARATIONS, CONFLICTING_METACLASS,
     CYCLIC_CLASS_DEFINITION, DIVISION_BY_ZERO, DUPLICATE_KW_ONLY, INCONSISTENT_MRO,
-    INVALID_ARGUMENT_TYPE, INVALID_ASSIGNMENT, INVALID_ATTRIBUTE_ACCESS, INVALID_BASE,
-    INVALID_DECLARATION, INVALID_GENERIC_CLASS, INVALID_KEY, INVALID_NAMED_TUPLE,
-    INVALID_PARAMETER_DEFAULT, INVALID_TYPE_FORM, INVALID_TYPE_GUARD_CALL,
-    INVALID_TYPE_VARIABLE_CONSTRAINTS, IncompatibleBases, POSSIBLY_UNBOUND_IMPLICIT_CALL,
+    INVALID_ARGUMENT_TYPE, INVALID_ASSIGNMENT, INVALID_BASE, INVALID_DECLARATION,
+    INVALID_GENERIC_CLASS, INVALID_KEY, INVALID_NAMED_TUPLE, INVALID_PARAMETER_DEFAULT,
+    INVALID_TYPE_FORM, INVALID_TYPE_GUARD_CALL, INVALID_TYPE_VARIABLE_CONSTRAINTS,
+    IncompatibleBases, POSSIBLY_UNBOUND_ATTRIBUTE, POSSIBLY_UNBOUND_IMPLICIT_CALL,
     POSSIBLY_UNBOUND_IMPORT, TypeCheckDiagnostics, UNDEFINED_REVEAL, UNRESOLVED_ATTRIBUTE,
     UNRESOLVED_GLOBAL, UNRESOLVED_IMPORT, UNRESOLVED_REFERENCE, UNSUPPORTED_OPERATOR,
-    report_attempted_write_to_read_only_property, report_cannot_pop_required_field_on_typed_dict,
-    report_implicit_return_type, report_instance_layout_conflict,
-    report_invalid_argument_number_to_special_form, report_invalid_arguments_to_annotated,
-    report_invalid_arguments_to_callable, report_invalid_assignment,
-    report_invalid_attribute_assignment, report_invalid_generator_function_return_type,
+    report_cannot_pop_required_field_on_typed_dict, report_implicit_return_type,
+    report_instance_layout_conflict, report_invalid_argument_number_to_special_form,
+    report_invalid_arguments_to_annotated, report_invalid_arguments_to_callable,
+    report_invalid_assignment, report_invalid_generator_function_return_type,
     report_invalid_key_on_typed_dict, report_invalid_return_type,
     report_namedtuple_field_without_default_after_field_with_default,
     report_possibly_unbound_attribute,
@@ -126,13 +126,13 @@ use crate::types::typed_dict::{
 };
 use crate::types::unpacker::{UnpackResult, Unpacker};
 use crate::types::{
-    AttributeAssignmentError, CallDunderError, CallableType, ClassLiteral, ClassType,
-    DataclassParams, DynamicType, IntersectionBuilder, IntersectionType, KnownClass,
-    KnownInstanceType, LintDiagnosticGuard, MemberLookupPolicy, MetaclassCandidate,
-    PEP695TypeAliasType, Parameter, ParameterForm, Parameters, SpecialFormType, SubclassOfType,
-    Truthiness, Type, TypeAliasType, TypeAndQualifiers, TypeIsType, TypeQualifiers,
-    TypeVarBoundOrConstraintsEvaluation, TypeVarDefaultEvaluation, TypeVarInstance, TypeVarKind,
-    UnionBuilder, UnionType, binding_type, todo_type,
+    CallDunderError, CallableType, ClassLiteral, ClassType, DataclassParams, DynamicType,
+    IntersectionBuilder, IntersectionType, KnownClass, KnownInstanceType, LintDiagnosticGuard,
+    MemberLookupPolicy, MetaclassCandidate, PEP695TypeAliasType, Parameter, ParameterForm,
+    Parameters, SpecialFormType, SubclassOfType, Truthiness, Type, TypeAliasType,
+    TypeAndQualifiers, TypeIsType, TypeQualifiers, TypeVarBoundOrConstraintsEvaluation,
+    TypeVarDefaultEvaluation, TypeVarInstance, TypeVarKind, UnionBuilder, UnionType, binding_type,
+    todo_type,
 };
 use crate::unpack::{EvaluationMode, Unpack, UnpackPosition};
 use crate::util::diagnostics::format_enumeration;
@@ -2145,7 +2145,9 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         }
 
         if !bound_ty.is_assignable_to(db, declared_ty) {
-            report_invalid_assignment(&self.context, node, declared_ty, bound_ty);
+            if let Some(builder) = self.context.report_lint(&INVALID_ASSIGNMENT, node) {
+                report_invalid_assignment(self.db(), builder, declared_ty, bound_ty);
+            }
             // allow declarations to override inference in case of invalid assignment
             bound_ty = declared_ty;
         }
@@ -2299,12 +2301,14 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                 if inferred_ty.is_assignable_to(self.db(), declared_ty.inner_type()) {
                     (declared_ty, inferred_ty)
                 } else {
-                    report_invalid_assignment(
-                        &self.context,
-                        node,
-                        declared_ty.inner_type(),
-                        inferred_ty,
-                    );
+                    if let Some(builder) = self.context.report_lint(&INVALID_ASSIGNMENT, node) {
+                        report_invalid_assignment(
+                            self.db(),
+                            builder,
+                            declared_ty.inner_type(),
+                            inferred_ty,
+                        );
+                    }
                     // if the assignment is invalid, fall back to assuming the annotation is correct
                     (declared_ty, declared_ty.inner_type())
                 }
@@ -3963,126 +3967,26 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
     fn validate_attribute_assignment(
         &mut self,
         target: &ast::ExprAttribute,
-        object_ty: Type<'db>,
+        object_assigned_to: Type<'db>,
         attribute: &str,
-        value_ty: Type<'db>,
+        assignment_value: Type<'db>,
     ) {
-        let Err(errors) = object_ty.validate_attribute_assignment(self.db(), attribute, value_ty)
-        else {
+        let Err(errors) = validate_attribute_assignment(
+            self.db(),
+            object_assigned_to,
+            attribute,
+            assignment_value,
+        ) else {
             return;
         };
         for result in errors {
-            match result {
-                AttributeAssignmentError::PossiblyUnbound => {
-                    report_possibly_unbound_attribute(&self.context, target, attribute, object_ty);
-                }
-                AttributeAssignmentError::TypeMismatch(target_ty) => {
-                    // TODO: This is not a very helpful error message for union/intersection, as it does not include the underlying reason
-                    // why the assignment is invalid. This would be a good use case for sub-diagnostics.
-                    report_invalid_attribute_assignment(
-                        &self.context,
-                        target.into(),
-                        target_ty,
-                        value_ty,
-                        attribute,
-                    );
-                }
-                AttributeAssignmentError::CannotAssign => {
-                    if let Some(builder) = self.context.report_lint(&INVALID_ASSIGNMENT, target) {
-                        builder.into_diagnostic(format_args!(
-                            "Cannot assign to attribute `{attribute}` on type `{}`",
-                            object_ty.display(self.db()),
-                        ));
-                    }
-                }
-                AttributeAssignmentError::CannotAssignToClassVar => {
-                    if let Some(builder) =
-                        self.context.report_lint(&INVALID_ATTRIBUTE_ACCESS, target)
-                    {
-                        builder.into_diagnostic(format_args!(
-                            "Cannot assign to ClassVar `{attribute}` \
-                                 from an instance of type `{ty}`",
-                            ty = object_ty.display(self.db()),
-                        ));
-                    }
-                }
-                AttributeAssignmentError::CannotAssignToInstanceAttr => {
-                    if let Some(builder) =
-                        self.context.report_lint(&INVALID_ATTRIBUTE_ACCESS, target)
-                    {
-                        builder.into_diagnostic(format_args!(
-                            "Cannot assign to instance attribute \
-                                    `{attribute}` from the class object `{ty}`",
-                            ty = object_ty.display(self.db()),
-                        ));
-                    }
-                }
-                AttributeAssignmentError::CannotAssignToFinal => {
-                    if let Some(builder) = self.context.report_lint(&INVALID_ASSIGNMENT, target) {
-                        builder.into_diagnostic(format_args!(
-                            "Cannot assign to final attribute `{attribute}` \
-                                         on type `{ty}`",
-                            ty = object_ty.display(self.db()),
-                        ));
-                    }
-                }
-                AttributeAssignmentError::CannotAssignToUnresolved => {
-                    if let Some(builder) = self.context.report_lint(&INVALID_ASSIGNMENT, target) {
-                        builder.into_diagnostic(format!(
-                            "Can not assign to unresolved attribute `{attribute}` on type `{ty}`",
-                            ty = object_ty.display(self.db()),
-                        ));
-                    }
-                }
-                AttributeAssignmentError::ReadOnlyProperty(property) => {
-                    report_attempted_write_to_read_only_property(
-                        &self.context,
-                        property,
-                        attribute,
-                        object_ty,
-                        target,
-                    );
-                }
-                AttributeAssignmentError::FailToSet => {
-                    if let Some(builder) = self.context.report_lint(&INVALID_ASSIGNMENT, target) {
-                        // TODO: Here, it would be nice to emit an additional diagnostic that explains why the call failed
-                        builder.into_diagnostic(format_args!(
-                            "Invalid assignment to data descriptor attribute \
-                            `{attribute}` on type `{}` with custom `__set__` method",
-                            object_ty.display(self.db())
-                        ));
-                    }
-                }
-                AttributeAssignmentError::FailToSetAttr => {
-                    if let Some(builder) = self.context.report_lint(&UNRESOLVED_ATTRIBUTE, target) {
-                        builder.into_diagnostic(format_args!(
-                            "Can not assign object of type `{}` to attribute \
-                                    `{attribute}` on type `{}` with \
-                                    custom `__setattr__` method.",
-                            value_ty.display(self.db()),
-                            object_ty.display(self.db())
-                        ));
-                    }
-                }
-                AttributeAssignmentError::SetAttrReturnsNeverOrNoReturn => {
-                    if let Some(builder) = self.context.report_lint(&INVALID_ASSIGNMENT, target) {
-                        builder.into_diagnostic(format_args!(
-                            "Cannot assign to attribute `{attribute}` on type `{}` \
-                            whose `__setattr__` method returns `Never`/`NoReturn`",
-                            object_ty.display(self.db())
-                        ));
-                    }
-                }
-                AttributeAssignmentError::Unresolved => {
-                    if let Some(builder) = self.context.report_lint(&UNRESOLVED_ATTRIBUTE, target) {
-                        builder.into_diagnostic(format_args!(
-                            "Unresolved attribute `{}` on type `{}`.",
-                            attribute,
-                            object_ty.display(self.db())
-                        ));
-                    }
-                }
-            }
+            result.into_diagnostic(
+                &self.context,
+                target,
+                attribute,
+                object_assigned_to,
+                assignment_value,
+            );
         }
     }
 
@@ -6895,13 +6799,17 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                     Type::unknown().into()
                 }
                 LookupError::PossiblyUnbound(type_when_bound) => {
-                    report_possibly_unbound_attribute(
-                        &self.context,
-                        attribute,
-                        &attr.id,
-                        value_type,
-                    );
-
+                    if let Some(builder) = self
+                        .context
+                        .report_lint(&POSSIBLY_UNBOUND_ATTRIBUTE, attribute)
+                    {
+                        report_possibly_unbound_attribute(
+                            self.db(),
+                            builder,
+                            &attr.id,
+                            value_type,
+                        );
+                    }
                     type_when_bound
                 }
             })

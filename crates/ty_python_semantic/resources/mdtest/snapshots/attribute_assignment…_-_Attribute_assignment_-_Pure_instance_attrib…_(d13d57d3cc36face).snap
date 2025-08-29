@@ -41,7 +41,7 @@ info: rule `invalid-assignment` is enabled by default
 ```
 
 ```
-error[invalid-attribute-access]: Cannot assign to instance attribute `attr` from the class object `<class 'C'>`
+error[invalid-assignment]: Cannot assign to instance attribute `attr` from the class object `<class 'C'>`
  --> src/mdtest_snippet.py:9:1
   |
 7 | instance.attr = "wrong"  # error: [invalid-assignment]
@@ -49,6 +49,6 @@ error[invalid-attribute-access]: Cannot assign to instance attribute `attr` from
 9 | C.attr = 1  # error: [invalid-attribute-access]
   | ^^^^^^
   |
-info: rule `invalid-attribute-access` is enabled by default
+info: rule `invalid-assignment` is enabled by default
 
 ```
