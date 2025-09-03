@@ -106,13 +106,17 @@ impl<'db> UnionElement<'db> {
                     let negated = other_type.negate(db);
                     literals.retain(|literal| {
                         let ty = Type::IntLiteral(*literal);
-                        if negated.is_subtype_of(db, ty) {
+                        if negated.is_purely_nominal_type(db) && negated.is_subtype_of(db, ty) {
                             collapse = true;
                         }
-                        if other_type.is_subtype_of(db, ty) {
-                            ignore = true;
+                        if other_type.is_purely_nominal_type(db) {
+                            if other_type.is_subtype_of(db, ty) {
+                                ignore = true;
+                            }
+                            !ty.is_subtype_of(db, other_type)
+                        } else {
+                            true
                         }
-                        !ty.is_subtype_of(db, other_type)
                     });
                     if ignore {
                         ReduceResult::Ignore
@@ -123,7 +127,8 @@ impl<'db> UnionElement<'db> {
                     }
                 } else {
                     ReduceResult::KeepIf(
-                        !Type::IntLiteral(literals[0]).is_subtype_of(db, other_type),
+                        !other_type.is_purely_nominal_type(db)
+                            || !Type::IntLiteral(literals[0]).is_subtype_of(db, other_type),
                     )
                 }
             }
@@ -134,13 +139,17 @@ impl<'db> UnionElement<'db> {
                     let negated = other_type.negate(db);
                     literals.retain(|literal| {
                         let ty = Type::StringLiteral(*literal);
-                        if negated.is_subtype_of(db, ty) {
+                        if negated.is_purely_nominal_type(db) && negated.is_subtype_of(db, ty) {
                             collapse = true;
                         }
-                        if other_type.is_subtype_of(db, ty) {
-                            ignore = true;
+                        if other_type.is_purely_nominal_type(db) {
+                            if other_type.is_subtype_of(db, ty) {
+                                ignore = true;
+                            }
+                            !ty.is_subtype_of(db, other_type)
+                        } else {
+                            true
                         }
-                        !ty.is_subtype_of(db, other_type)
                     });
                     if ignore {
                         ReduceResult::Ignore
@@ -151,7 +160,8 @@ impl<'db> UnionElement<'db> {
                     }
                 } else {
                     ReduceResult::KeepIf(
-                        !Type::StringLiteral(literals[0]).is_subtype_of(db, other_type),
+                        !other_type.is_purely_nominal_type(db)
+                            || !Type::StringLiteral(literals[0]).is_subtype_of(db, other_type),
                     )
                 }
             }
@@ -162,13 +172,17 @@ impl<'db> UnionElement<'db> {
                     let negated = other_type.negate(db);
                     literals.retain(|literal| {
                         let ty = Type::BytesLiteral(*literal);
-                        if negated.is_subtype_of(db, ty) {
+                        if negated.is_purely_nominal_type(db) && negated.is_subtype_of(db, ty) {
                             collapse = true;
                         }
-                        if other_type.is_subtype_of(db, ty) {
-                            ignore = true;
+                        if other_type.is_purely_nominal_type(db) {
+                            if other_type.is_subtype_of(db, ty) {
+                                ignore = true;
+                            }
+                            !ty.is_subtype_of(db, other_type)
+                        } else {
+                            true
                         }
-                        !ty.is_subtype_of(db, other_type)
                     });
                     if ignore {
                         ReduceResult::Ignore
@@ -179,7 +193,8 @@ impl<'db> UnionElement<'db> {
                     }
                 } else {
                     ReduceResult::KeepIf(
-                        !Type::BytesLiteral(literals[0]).is_subtype_of(db, other_type),
+                        !other_type.is_purely_nominal_type(db)
+                            || !Type::BytesLiteral(literals[0]).is_subtype_of(db, other_type),
                     )
                 }
             }
@@ -297,13 +312,18 @@ impl<'db> UnionBuilder<'db> {
                             continue;
                         }
                         UnionElement::Type(existing) => {
-                            if ty.is_subtype_of(self.db, *existing) {
+                            let existing_type_is_nominal = existing.is_purely_nominal_type(self.db);
+                            if existing_type_is_nominal && ty.is_subtype_of(self.db, *existing) {
                                 return;
                             }
-                            if existing.is_subtype_of(self.db, ty) {
+                            if ty.is_purely_nominal_type(self.db)
+                                && existing.is_subtype_of(self.db, ty)
+                            {
                                 to_remove = Some(index);
                             }
-                            if ty_negated.is_subtype_of(self.db, *existing) {
+                            if existing_type_is_nominal
+                                && ty_negated.is_subtype_of(self.db, *existing)
+                            {
                                 // The type that includes both this new element, and its negation
                                 // (or a supertype of its negation), must be simply `object`.
                                 self.collapse_to_object();
@@ -342,13 +362,18 @@ impl<'db> UnionBuilder<'db> {
                             continue;
                         }
                         UnionElement::Type(existing) => {
-                            if ty.is_subtype_of(self.db, *existing) {
+                            let existing_type_is_nominal = existing.is_purely_nominal_type(self.db);
+                            if existing_type_is_nominal && ty.is_subtype_of(self.db, *existing) {
                                 return;
                             }
-                            if existing.is_subtype_of(self.db, ty) {
+                            if ty.is_purely_nominal_type(self.db)
+                                && existing.is_subtype_of(self.db, ty)
+                            {
                                 to_remove = Some(index);
                             }
-                            if ty_negated.is_subtype_of(self.db, *existing) {
+                            if existing_type_is_nominal
+                                && ty_negated.is_subtype_of(self.db, *existing)
+                            {
                                 // The type that includes both this new element, and its negation
                                 // (or a supertype of its negation), must be simply `object`.
                                 self.collapse_to_object();
@@ -387,13 +412,18 @@ impl<'db> UnionBuilder<'db> {
                             continue;
                         }
                         UnionElement::Type(existing) => {
-                            if ty.is_subtype_of(self.db, *existing) {
+                            let existing_type_is_nominal = existing.is_purely_nominal_type(self.db);
+                            if existing_type_is_nominal && ty.is_subtype_of(self.db, *existing) {
                                 return;
                             }
-                            if existing.is_subtype_of(self.db, ty) {
+                            if ty.is_purely_nominal_type(self.db)
+                                && existing.is_subtype_of(self.db, ty)
+                            {
                                 to_remove = Some(index);
                             }
-                            if ty_negated.is_subtype_of(self.db, *existing) {
+                            if existing_type_is_nominal
+                                && ty_negated.is_subtype_of(self.db, *existing)
+                            {
                                 // The type that includes both this new element, and its negation
                                 // (or a supertype of its negation), must be simply `object`.
                                 self.collapse_to_object();
@@ -442,7 +472,10 @@ impl<'db> UnionBuilder<'db> {
                     .elements
                     .iter()
                     .filter_map(UnionElement::to_type_element)
-                    .any(|ty| Type::EnumLiteral(enum_member_to_add).is_subtype_of(self.db, ty))
+                    .any(|ty| {
+                        ty.is_purely_nominal_type(self.db)
+                            && Type::EnumLiteral(enum_member_to_add).is_subtype_of(self.db, ty)
+                    })
                 {
                     self.elements
                         .push(UnionElement::Type(Type::EnumLiteral(enum_member_to_add)));
@@ -499,13 +532,18 @@ impl<'db> UnionBuilder<'db> {
                     }
 
                     if should_simplify_full && !matches!(element_type, Type::TypeAlias(_)) {
+                        let element_is_nominal = element_type.is_purely_nominal_type(self.db);
                         if ty.is_equivalent_to(self.db, element_type)
-                            || ty.is_subtype_of(self.db, element_type)
+                            || (element_is_nominal && ty.is_subtype_of(self.db, element_type))
                         {
                             return;
-                        } else if element_type.is_subtype_of(self.db, ty) {
+                        } else if ty.is_purely_nominal_type(self.db)
+                            && element_type.is_subtype_of(self.db, ty)
+                        {
                             to_remove.push(index);
-                        } else if ty_negated.is_subtype_of(self.db, element_type) {
+                        } else if element_is_nominal
+                            && ty_negated.is_subtype_of(self.db, element_type)
+                        {
                             // We add `ty` to the union. We just checked that `~ty` is a subtype of an
                             // existing `element`. This also means that `~ty | ty` is a subtype of
                             // `element | ty`, because both elements in the first union are subtypes of
@@ -934,13 +972,16 @@ impl<'db> InnerIntersectionBuilder<'db> {
                 let mut to_remove = SmallVec::<[usize; 1]>::new();
                 for (index, existing_positive) in self.positive.iter().enumerate() {
                     // S & T = S    if S <: T
-                    if existing_positive.is_subtype_of(db, new_positive)
+                    if (new_positive.is_purely_nominal_type(db)
+                        && existing_positive.is_subtype_of(db, new_positive))
                         || existing_positive.is_equivalent_to(db, new_positive)
                     {
                         return;
                     }
                     // same rule, reverse order
-                    if new_positive.is_subtype_of(db, *existing_positive) {
+                    if existing_positive.is_purely_nominal_type(db)
+                        && new_positive.is_subtype_of(db, *existing_positive)
+                    {
                         to_remove.push(index);
                     }
                     // A & B = Never    if A and B are disjoint
@@ -957,7 +998,9 @@ impl<'db> InnerIntersectionBuilder<'db> {
                 let mut to_remove = SmallVec::<[usize; 1]>::new();
                 for (index, existing_negative) in self.negative.iter().enumerate() {
                     // S & ~T = Never    if S <: T
-                    if new_positive.is_subtype_of(db, *existing_negative) {
+                    if existing_negative.is_purely_nominal_type(db)
+                        && new_positive.is_subtype_of(db, *existing_negative)
+                    {
                         *self = Self::default();
                         self.positive.insert(Type::Never);
                         return;
@@ -1031,13 +1074,16 @@ impl<'db> InnerIntersectionBuilder<'db> {
                 let mut to_remove = SmallVec::<[usize; 1]>::new();
                 for (index, existing_negative) in self.negative.iter().enumerate() {
                     // ~S & ~T = ~T    if S <: T
-                    if existing_negative.is_subtype_of(db, new_negative)
+                    if (new_negative.is_purely_nominal_type(db)
+                        && existing_negative.is_subtype_of(db, new_negative))
                         || existing_negative.is_equivalent_to(db, new_negative)
                     {
                         to_remove.push(index);
                     }
                     // same rule, reverse order
-                    if new_negative.is_subtype_of(db, *existing_negative) {
+                    if existing_negative.is_purely_nominal_type(db)
+                        && new_negative.is_subtype_of(db, *existing_negative)
+                    {
                         return;
                     }
                 }
@@ -1047,7 +1093,9 @@ impl<'db> InnerIntersectionBuilder<'db> {
 
                 for existing_positive in &self.positive {
                     // S & ~T = Never    if S <: T
-                    if existing_positive.is_subtype_of(db, new_negative) {
+                    if new_negative.is_purely_nominal_type(db)
+                        && existing_positive.is_subtype_of(db, new_negative)
+                    {
                         *self = Self::default();
                         self.positive.insert(Type::Never);
                         return;

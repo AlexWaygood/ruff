@@ -223,8 +223,8 @@ def _(
     bytes_or_falsy: bytes | AlwaysFalsy,
     falsy_or_bytes: AlwaysFalsy | bytes,
 ):
-    reveal_type(strings_or_truthy)  # revealed: Literal[""] | AlwaysTruthy
-    reveal_type(truthy_or_strings)  # revealed: AlwaysTruthy | Literal[""]
+    reveal_type(strings_or_truthy)  # revealed: Literal["foo", ""] | AlwaysTruthy
+    reveal_type(truthy_or_strings)  # revealed: AlwaysTruthy | Literal["foo", ""]
 
     reveal_type(strings_or_falsy)  # revealed: Literal["foo"] | AlwaysFalsy
     reveal_type(falsy_or_strings)  # revealed: AlwaysFalsy | Literal["foo"]

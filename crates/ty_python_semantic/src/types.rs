@@ -64,6 +64,7 @@ use crate::types::signatures::{Parameter, ParameterForm, Parameters, walk_signat
 use crate::types::tuple::TupleSpec;
 pub(crate) use crate::types::typed_dict::{TypedDictParams, TypedDictType, walk_typed_dict_type};
 use crate::types::variance::{TypeVarVariance, VarianceInferable};
+use crate::types::visitor::any_over_type;
 use crate::unpack::EvaluationMode;
 pub use crate::util::diagnostics::add_inferred_python_version_hint_to_diagnostic;
 use crate::{Db, FxOrderSet, Module, Program};
@@ -914,6 +915,45 @@ impl<'db> Type<'db> {
             }
             Type::TypeAlias(alias) => alias.value_type(db).materialize(db, materialization_kind),
         }
+    }
+
+    pub(crate) fn is_purely_nominal_type(self, db: &'db dyn Db) -> bool {
+        !any_over_type(db, self, &|ty| match ty {
+            Type::ProtocolInstance(_)
+            | Type::TypedDict(_)
+            | Type::Callable(_)
+            | Type::AlwaysTruthy
+            | Type::AlwaysFalsy => true,
+            Type::BooleanLiteral(_)
+            | Type::IntLiteral(_)
+            | Type::StringLiteral(_)
+            | Type::EnumLiteral(_)
+            | Type::BytesLiteral(_)
+            | Type::Union(_)
+            | Type::Intersection(_)
+            | Type::TypeVar(_)
+            | Type::TypeAlias(_)
+            | Type::Dynamic(_)
+            | Type::Never
+            | Type::FunctionLiteral(_)
+            | Type::MethodWrapper(_)
+            | Type::BoundMethod(_)
+            | Type::BoundSuper(_)
+            | Type::WrapperDescriptor(_)
+            | Type::DataclassDecorator(_)
+            | Type::DataclassTransformer(_)
+            | Type::ModuleLiteral(_)
+            | Type::ClassLiteral(_)
+            | Type::GenericAlias(_)
+            | Type::NominalInstance(_)
+            | Type::SubclassOf(_)
+            | Type::SpecialForm(_)
+            | Type::KnownInstance(_)
+            | Type::PropertyInstance(_)
+            | Type::LiteralString
+            | Type::TypeIs(_)
+            | Type::NonInferableTypeVar(_) => false,
+        })
     }
 
     pub(crate) const fn into_class_literal(self) -> Option<ClassLiteral<'db>> {
