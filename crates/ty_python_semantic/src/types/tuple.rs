@@ -20,6 +20,7 @@ use std::cmp::Ordering;
 use std::hash::Hash;
 
 use itertools::{Either, EitherOrBoth, Itertools};
+use rustc_hash::FxHashSet;
 
 use crate::semantic_index::definition::Definition;
 use crate::types::Truthiness;
@@ -1357,8 +1358,67 @@ pub(crate) enum ResizeTupleError {
     TooManyValues,
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct TupleSpecBuilder<'db> {
+    inner_builders: Vec<TupleSpecBuilderInner<'db>>,
+}
+
+impl<'db> TupleSpecBuilder<'db> {
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
+        Self {
+            inner_builders: vec![TupleSpecBuilderInner::with_capacity(capacity)],
+        }
+    }
+
+    pub(crate) fn push(self, db: &'db dyn Db, element: Type<'db>) -> Self {
+        self.push_impl(db, element, &mut FxHashSet::default())
+    }
+
+    fn push_impl(
+        mut self,
+        db: &'db dyn Db,
+        element: Type<'db>,
+        seen_aliases: &mut FxHashSet<Type<'db>>,
+    ) -> Self {
+        match element {
+            Type::TypeAlias(alias) => {
+                if seen_aliases.contains(&element) {
+                    // Recursive alias, add it without expanding to avoid infinite recursion.
+                    for builder in &mut self.inner_builders {
+                        builder.push(element);
+                    }
+                    return self;
+                }
+                seen_aliases.insert(element);
+                self.push_impl(db, alias.value_type(db), seen_aliases)
+            }
+            Type::Union(union) => union
+                .elements(db)
+                .iter()
+                .map(|element| self.clone().push_impl(db, *element, seen_aliases))
+                .fold(Self::default(), |mut new_builder, builder| {
+                    new_builder.inner_builders.extend(builder.inner_builders);
+                    new_builder
+                }),
+            _ => {
+                for builder in &mut self.inner_builders {
+                    builder.push(element);
+                }
+                self
+            }
+        }
+    }
+
+    pub(crate) fn build(self) -> impl Iterator<Item = TupleSpec<'db>> {
+        self.inner_builders
+            .into_iter()
+            .map(|builder| builder.build())
+    }
+}
+
 /// A builder for creating a new [`TupleSpec`]
-pub(crate) enum TupleSpecBuilder<'db> {
+#[derive(Clone, Debug)]
+enum TupleSpecBuilderInner<'db> {
     Fixed(Vec<Type<'db>>),
     Variable {
         prefix: Vec<Type<'db>>,
@@ -1367,28 +1427,28 @@ pub(crate) enum TupleSpecBuilder<'db> {
     },
 }
 
-impl<'db> TupleSpecBuilder<'db> {
-    pub(crate) fn with_capacity(capacity: usize) -> Self {
-        TupleSpecBuilder::Fixed(Vec::with_capacity(capacity))
+impl<'db> TupleSpecBuilderInner<'db> {
+    fn with_capacity(capacity: usize) -> Self {
+        Self::Fixed(Vec::with_capacity(capacity))
     }
 
-    pub(crate) fn push(&mut self, element: Type<'db>) {
+    fn push(&mut self, element: Type<'db>) {
         match self {
-            TupleSpecBuilder::Fixed(elements) => elements.push(element),
-            TupleSpecBuilder::Variable { suffix, .. } => suffix.push(element),
+            Self::Fixed(elements) => elements.push(element),
+            Self::Variable { suffix, .. } => suffix.push(element),
         }
     }
 
     /// Concatenates another tuple to the end of this tuple, returning a new tuple.
-    pub(crate) fn concat(mut self, db: &'db dyn Db, other: &TupleSpec<'db>) -> Self {
+    fn concat(mut self, db: &'db dyn Db, other: &TupleSpec<'db>) -> Self {
         match (&mut self, other) {
-            (TupleSpecBuilder::Fixed(left_tuple), TupleSpec::Fixed(right_tuple)) => {
+            (Self::Fixed(left_tuple), TupleSpec::Fixed(right_tuple)) => {
                 left_tuple.extend_from_slice(&right_tuple.0);
                 self
             }
 
             (
-                TupleSpecBuilder::Fixed(left_tuple),
+                Self::Fixed(left_tuple),
                 TupleSpec::Variable(VariableLengthTuple {
                     prefix,
                     variable,
@@ -1396,7 +1456,7 @@ impl<'db> TupleSpecBuilder<'db> {
                 }),
             ) => {
                 left_tuple.extend_from_slice(prefix);
-                TupleSpecBuilder::Variable {
+                Self::Variable {
                     prefix: std::mem::take(left_tuple),
                     variable: *variable,
                     suffix: suffix.to_vec(),
@@ -1404,7 +1464,7 @@ impl<'db> TupleSpecBuilder<'db> {
             }
 
             (
-                TupleSpecBuilder::Variable {
+                Self::Variable {
                     prefix: _,
                     variable: _,
                     suffix,
@@ -1416,7 +1476,7 @@ impl<'db> TupleSpecBuilder<'db> {
             }
 
             (
-                TupleSpecBuilder::Variable {
+                Self::Variable {
                     prefix: left_prefix,
                     variable: left_variable,
                     suffix: left_suffix,
@@ -1434,7 +1494,7 @@ impl<'db> TupleSpecBuilder<'db> {
                         .chain([left_variable, right_variable])
                         .chain(right_prefix),
                 );
-                TupleSpecBuilder::Variable {
+                Self::Variable {
                     prefix: std::mem::take(left_prefix),
                     variable,
                     suffix: right_suffix.to_vec(),
@@ -1443,12 +1503,12 @@ impl<'db> TupleSpecBuilder<'db> {
         }
     }
 
-    pub(super) fn build(self) -> TupleSpec<'db> {
+    fn build(self) -> TupleSpec<'db> {
         match self {
-            TupleSpecBuilder::Fixed(elements) => {
+            Self::Fixed(elements) => {
                 TupleSpec::Fixed(FixedLengthTuple(elements.into_boxed_slice()))
             }
-            TupleSpecBuilder::Variable {
+            Self::Variable {
                 prefix,
                 variable,
                 suffix,
@@ -1461,11 +1521,11 @@ impl<'db> TupleSpecBuilder<'db> {
     }
 }
 
-impl<'db> From<&TupleSpec<'db>> for TupleSpecBuilder<'db> {
+impl<'db> From<&TupleSpec<'db>> for TupleSpecBuilderInner<'db> {
     fn from(tuple: &TupleSpec<'db>) -> Self {
         match tuple {
-            TupleSpec::Fixed(fixed) => TupleSpecBuilder::Fixed(fixed.0.to_vec()),
-            TupleSpec::Variable(variable) => TupleSpecBuilder::Variable {
+            TupleSpec::Fixed(fixed) => TupleSpecBuilderInner::Fixed(fixed.0.to_vec()),
+            TupleSpec::Variable(variable) => TupleSpecBuilderInner::Variable {
                 prefix: variable.prefix.to_vec(),
                 variable: variable.variable,
                 suffix: variable.suffix.to_vec(),

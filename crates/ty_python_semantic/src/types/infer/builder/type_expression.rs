@@ -523,7 +523,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
     pub(super) fn infer_tuple_type_expression(
         &mut self,
         tuple_slice: &ast::Expr,
-    ) -> Option<TupleType<'db>> {
+    ) -> Option<impl Iterator<Item = TupleType<'db>>> {
         /// In most cases, if a subelement of the tuple is inferred as `Todo`,
         /// we should only infer `Todo` for that specific subelement.
         /// Certain specific AST nodes can however change the meaning of the entire tuple,
@@ -567,7 +567,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     let result =
                         TupleType::homogeneous(self.db(), self.infer_type_expression(element));
                     self.store_expression_type(tuple_slice, Type::tuple(Some(result)));
-                    return Some(result);
+                    return Some(Either::Left(std::iter::once(result)));
                 }
 
                 let mut element_types = TupleSpecBuilder::with_capacity(elements.len());
@@ -588,7 +588,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                             // TODO: emit a diagnostic
                         }
                     } else {
-                        element_types.push(element_ty);
+                        element_types.push(self.db(), element_ty);
                     }
                 }
 
@@ -603,7 +603,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 // stored in the surrounding `infer_type_expression` call:
                 self.store_expression_type(tuple_slice, Type::tuple(ty));
 
-                ty
+                ty.map(|t| Either::Left(std::iter::once(t)))
             }
             single_element => {
                 let single_element_ty = self.infer_type_expression(single_element);
