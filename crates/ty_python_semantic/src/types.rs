@@ -1439,8 +1439,11 @@ impl<'db> Type<'db> {
     ///
     /// See [`TypeRelation::Redundancy`] for more details.
     pub(crate) fn is_redundant_with(self, db: &'db dyn Db, other: Type<'db>) -> bool {
+        self.when_redundant_with(db, other).is_always_satisfied()
+    }
+
+    fn when_redundant_with(self, db: &'db dyn Db, other: Type<'db>) -> ConstraintSet<'db> {
         self.has_relation_to(db, other, TypeRelation::Redundancy)
-            .is_always_satisfied()
     }
 
     fn has_relation_to(
@@ -4140,6 +4143,7 @@ impl<'db> Type<'db> {
                 Some(
                     KnownFunction::IsEquivalentTo
                     | KnownFunction::IsAssignableTo
+                    | KnownFunction::IsRedundantWith
                     | KnownFunction::IsSubtypeOf
                     | KnownFunction::IsDisjointFrom,
                 ) => Binding::single(

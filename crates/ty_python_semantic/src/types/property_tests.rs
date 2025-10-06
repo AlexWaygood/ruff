@@ -107,10 +107,22 @@ mod stable {
         forall types s, t, u. s.is_subtype_of(db, t) && t.is_subtype_of(db, u) => s.is_subtype_of(db, u)
     );
 
+    // The same test as above, but for redundancy rather than subtyping.
+    type_property_test!(
+        redundancy_is_transitive, db,
+        forall types s, t, u. s.is_redundant_with(db, t) && t.is_redundant_with(db, u) => s.is_redundant_with(db, u)
+    );
+
     // `S <: T` and `T <: S` implies that `S` is equivalent to `T`.
     type_property_test!(
         subtype_of_is_antisymmetric, db,
         forall types s, t. s.is_subtype_of(db, t) && t.is_subtype_of(db, s) => s.is_equivalent_to(db, t)
+    );
+
+    // The same test as above, but for redundancy rather than subtyping.
+    type_property_test!(
+        redundancy_is_antisymmetric, db,
+        forall types s, t. s.is_redundant_with(db, t) && t.is_redundant_with(db, s) => s.is_equivalent_to(db, t)
     );
 
     // `T` is not disjoint from itself, unless `T` is `Never`.
@@ -131,10 +143,16 @@ mod stable {
         forall types s, t. s.is_subtype_of(db, t) => !s.is_disjoint_from(db, t) || s.is_never()
     );
 
-    // `S <: T` implies that `S` can be assigned to `T`.
+    // `S <: T` implies that `S` can be assigned to `T`, and that `S` would be redundant in a union with `T`.
     type_property_test!(
-        subtype_of_implies_assignable_to, db,
-        forall types s, t. s.is_subtype_of(db, t) => s.is_assignable_to(db, t)
+        subtype_of_implies_assignability_and_redundancy, db,
+        forall types s, t. s.is_subtype_of(db, t) => s.is_assignable_to(db, t) && s.is_redundant_with(db, t)
+    );
+
+    // If `S` is redundant in a union with `T`, then `S` can be assigned to `T`.
+    type_property_test!(
+        redundancy_implies_assignability, db,
+        forall types s, t. s.is_redundant_with(db, t) => s.is_assignable_to(db, t)
     );
 
     // If `T` is a singleton, it is also single-valued.
@@ -149,6 +167,12 @@ mod stable {
         forall types t. t.is_assignable_to(db, Type::object())
     );
 
+    // All types should be redundant in a union with `object`
+    type_property_test!(
+        all_types_redundant_with_object, db,
+        forall types t. t.is_redundant_with(db, Type::object())
+    );
+
     // And all types should be subtypes of `object`
     type_property_test!(
         all_types_subtype_of_object, db,
@@ -159,6 +183,12 @@ mod stable {
     type_property_test!(
         never_assignable_to_every_type, db,
         forall types t. Type::Never.is_assignable_to(db, t)
+    );
+
+    // And it should be redundant with all types
+    type_property_test!(
+        never_redundant_with_every_type, db,
+        forall types t. Type::Never.is_redundant_with(db, t)
     );
 
     // And it should be a subtype of all types
@@ -174,16 +204,16 @@ mod stable {
             => Type::Callable(CallableType::bottom(db)).is_subtype_of(db, t)
     );
 
-    // `T` can be assigned to itself.
+    // `T` can be assigned to itself, and is redundant in a union with itself.
     type_property_test!(
         assignable_to_is_reflexive, db,
-        forall types t. t.is_assignable_to(db, t)
+        forall types t. t.is_assignable_to(db, t) && t.is_redundant_with(db, t)
     );
 
-    // For *any* pair of types, each of the pair should be assignable to the union of the two.
+    // For *any* pair of types `S` and `T`, `S | T | T` and `S | S | T` can both be simplified to `S | T`.
     type_property_test!(
-        all_type_pairs_are_assignable_to_their_union, db,
-        forall types s, t. s.is_assignable_to(db, union(db, [s, t])) && t.is_assignable_to(db, union(db, [s, t]))
+        all_type_pairs_are_redundant_with_their_union, db,
+        forall types s, t. s.is_redundant_with(db, union(db, [s, t])) && t.is_redundant_with(db, union(db, [s, t]))
     );
 
     // Only `Never` is a subtype of `Any`.
@@ -331,7 +361,7 @@ mod flaky {
     // Both the top and bottom materialization tests are flaky in part due to various failures that
     // it discovers in the current implementation of assignability of the types.
     // TODO: Create a issue with some example failures to keep track of it
-
+    //
     // `T'`, the top materialization of `T`, should be assignable to `T`.
     type_property_test!(
         top_materialization_of_type_is_assignable_to_type, db,

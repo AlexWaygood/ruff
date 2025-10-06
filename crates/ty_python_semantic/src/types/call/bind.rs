@@ -625,6 +625,16 @@ impl<'db> Bindings<'db> {
                             }
                         }
 
+                        Some(KnownFunction::IsRedundantWith) => {
+                            if let [Some(ty_a), Some(ty_b)] = overload.parameter_types() {
+                                let constraints = ty_a.when_redundant_with(db, *ty_b);
+                                let tracked = TrackedConstraintSet::new(db, constraints);
+                                overload.set_return_type(Type::KnownInstance(
+                                    KnownInstanceType::ConstraintSet(tracked),
+                                ));
+                            }
+                        }
+
                         Some(KnownFunction::IsDisjointFrom) => {
                             if let [Some(ty_a), Some(ty_b)] = overload.parameter_types() {
                                 let constraints = ty_a.when_disjoint_from(db, *ty_b);

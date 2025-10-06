@@ -1261,6 +1261,8 @@ pub enum KnownFunction {
     IsSubtypeOf,
     /// `ty_extensions.is_assignable_to`
     IsAssignableTo,
+    /// `ty_extensions.is_redundant_with`
+    IsRedundantWith,
     /// `ty_extensions.is_disjoint_from`
     IsDisjointFrom,
     /// `ty_extensions.is_singleton`
@@ -1357,6 +1359,7 @@ impl KnownFunction {
             | Self::RevealProtocolInterface
             | Self::RangeConstraint
             | Self::NegatedRangeConstraint
+            | Self::IsRedundantWith
             | Self::AllMembers => module.is_ty_extensions(),
             Self::ImportModule => module.is_importlib(),
         }
@@ -1784,6 +1787,7 @@ pub(crate) mod tests {
                 | KnownFunction::RevealProtocolInterface
                 | KnownFunction::RangeConstraint
                 | KnownFunction::NegatedRangeConstraint
+                | KnownFunction::IsRedundantWith
                 | KnownFunction::AllMembers => KnownModule::TyExtensions,
 
                 KnownFunction::ImportModule => KnownModule::ImportLib,
