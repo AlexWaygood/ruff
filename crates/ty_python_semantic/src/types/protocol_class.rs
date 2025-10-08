@@ -6,6 +6,7 @@ use itertools::Itertools;
 use ruff_python_ast::name::Name;
 use rustc_hash::FxHashMap;
 
+use crate::types::CallableSignature;
 use crate::{
     Db, FxOrderSet,
     place::{Boundness, Place, PlaceAndQualifiers, place_from_bindings, place_from_declarations},
@@ -549,28 +550,54 @@ impl<'a, 'db> ProtocolMember<'a, 'db> {
                 // 3. Looking up `__call__` on the meta-type of a class-literal, generic-alias or subclass-of type is
                 //    unfortunately not sufficient to obtain the `Callable` supertypes of these types, due to the
                 //    complex interaction between `__new__`, `__init__` and metaclass `__call__`.
-                let attribute_type = if self.name == "__call__" {
+                if self.name == "__call__" {
                     let Some(attribute_type) = other.into_callable(db) else {
                         return ConstraintSet::from(false);
                     };
-                    attribute_type
-                } else {
-                    let Place::Type(attribute_type, Boundness::Bound) = other
-                        .invoke_descriptor_protocol(
-                            db,
-                            self.name,
-                            Place::Unbound.into(),
-                            InstanceFallbackShadowsNonDataDescriptor::No,
-                            MemberLookupPolicy::default(),
-                        )
-                        .place
-                    else {
-                        return ConstraintSet::from(false);
-                    };
-                    attribute_type
-                };
+                    return attribute_type.has_relation_to_impl(
+                        db,
+                        method.bind_self(db),
+                        relation,
+                        visitor,
+                    );
+                }
 
-                attribute_type.has_relation_to_impl(db, method.bind_self(db), relation, visitor)
+                let Place::Type(attribute_type, Boundness::Bound) = other
+                    .invoke_descriptor_protocol(
+                        db,
+                        self.name,
+                        Place::Unbound.into(),
+                        InstanceFallbackShadowsNonDataDescriptor::No,
+                        MemberLookupPolicy::default(),
+                    )
+                    .place
+                else {
+                    return ConstraintSet::from(false);
+                };
+                attribute_type
+                    .has_relation_to_impl(db, method.bind_self(db), relation, visitor)
+                    .and(db, || {
+                        let Place::Type(meta_attribute_type, Boundness::Bound) =
+                            other.to_meta_type(db).member(db, self.name).place
+                        else {
+                            return ConstraintSet::from(false);
+                        };
+                        let modified_method = Type::Callable(CallableType::new(
+                            db,
+                            CallableSignature::from_overloads(method.signatures(db).iter().map(
+                                |signature| {
+                                    signature.clone().with_first_parameter_annotation(Type::Never)
+                                },
+                            )),
+                            false,
+                        ));
+                        meta_attribute_type.has_relation_to_impl(
+                            db,
+                            modified_method,
+                            relation,
+                            visitor,
+                        )
+                    })
             }
             // TODO: consider the types of the attribute on `other` for property members
             ProtocolMemberKind::Property(_) => ConstraintSet::from(matches!(

@@ -1851,10 +1851,8 @@ static_assert(not is_assignable_to(NominalSubtype2 | DefinitelyNotSubtype, P))
 
 # `m` has the correct signature when accessed on instances of `NominalWithClassMethod`,
 # but not when accessed on the class object `NominalWithClassMethod` itself
-#
-# TODO: these should pass
-static_assert(not is_assignable_to(NominalWithClassMethod, P))  # error: [static-assert-error]
-static_assert(not is_assignable_to(NominalSubtype | NominalWithClassMethod, P))  # error: [static-assert-error]
+static_assert(not is_assignable_to(NominalWithClassMethod, P))
+static_assert(not is_assignable_to(NominalSubtype | NominalWithClassMethod, P))
 
 # Conversely, `m` has the correct signature when accessed on the class object
 # `NominalWithStaticMethod`, but not when accessed on instances of `NominalWithStaticMethod`

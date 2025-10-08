@@ -476,6 +476,20 @@ impl<'db> Signature<'db> {
         self
     }
 
+    pub(crate) fn with_first_parameter_annotation(self, new_annotation: Type<'db>) -> Self {
+        let mut old_parameters = self.parameters.value;
+        let first: Vec<Parameter<'db>> = old_parameters.drain(..1).collect();
+        Self::new(
+            Parameters::new(
+                first
+                    .into_iter()
+                    .map(|param| param.with_annotated_type(new_annotation))
+                    .chain(old_parameters),
+            ),
+            self.return_ty,
+        )
+    }
+
     pub(crate) fn normalized_impl(
         &self,
         db: &'db dyn Db,
@@ -1493,6 +1507,15 @@ impl<'db, 'a> IntoIterator for &'a Parameters<'db> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.value.iter()
+    }
+}
+
+impl<'db> IntoIterator for Parameters<'db> {
+    type Item = Parameter<'db>;
+    type IntoIter = std::vec::IntoIter<Parameter<'db>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.value.into_iter()
     }
 }
 
