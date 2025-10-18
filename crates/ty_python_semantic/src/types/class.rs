@@ -1710,7 +1710,7 @@ impl<'db> ClassLiteral<'db> {
             .contains(&KnownFunction::DisjointBase)
         {
             Some(DisjointBase::due_to_decorator(self))
-        } else if SlotsKind::from(db, self) == SlotsKind::NotEmpty {
+        } else if self.own_slots(db) == SlotsKind::NotEmpty {
             Some(DisjointBase::due_to_dunder_slots(self))
         } else {
             None
@@ -3617,6 +3617,37 @@ impl<'db> ClassLiteral<'db> {
                 .unwrap_or_else(|| class_name.end()),
         )
     }
+
+    fn own_slots(self, db: &'db dyn Db) -> SlotsKind {
+        let Place::Defined(slots_ty, _, bound) = self
+            .own_class_member(db, self.inherited_generic_context(db), None, "__slots__")
+            .inner
+            .place
+        else {
+            return SlotsKind::NotSpecified;
+        };
+
+        if matches!(bound, Definedness::PossiblyUndefined) {
+            return SlotsKind::Dynamic;
+        }
+
+        match slots_ty {
+            // __slots__ = ("a", "b")
+            Type::NominalInstance(nominal) => match nominal
+                .tuple_spec(db)
+                .and_then(|spec| spec.len().into_fixed_length())
+            {
+                Some(0) => SlotsKind::Empty,
+                Some(_) => SlotsKind::NotEmpty,
+                None => SlotsKind::Dynamic,
+            },
+
+            // __slots__ = "abc"  # Same as `("abc",)`
+            Type::StringLiteral(_) => SlotsKind::NotEmpty,
+
+            _ => SlotsKind::Dynamic,
+        }
+    }
 }
 
 impl<'db> From<ClassLiteral<'db>> for Type<'db> {
@@ -5476,39 +5507,6 @@ enum SlotsKind {
     /// * `__slots__ = tuple(a for a in b)`
     /// * `__slots__ = ["a", "b"]`
     Dynamic,
-}
-
-impl SlotsKind {
-    fn from(db: &dyn Db, base: ClassLiteral) -> Self {
-        let Place::Defined(slots_ty, _, bound) = base
-            .own_class_member(db, base.inherited_generic_context(db), None, "__slots__")
-            .inner
-            .place
-        else {
-            return Self::NotSpecified;
-        };
-
-        if matches!(bound, Definedness::PossiblyUndefined) {
-            return Self::Dynamic;
-        }
-
-        match slots_ty {
-            // __slots__ = ("a", "b")
-            Type::NominalInstance(nominal) => match nominal
-                .tuple_spec(db)
-                .and_then(|spec| spec.len().into_fixed_length())
-            {
-                Some(0) => Self::Empty,
-                Some(_) => Self::NotEmpty,
-                None => Self::Dynamic,
-            },
-
-            // __slots__ = "abc"  # Same as `("abc",)`
-            Type::StringLiteral(_) => Self::NotEmpty,
-
-            _ => Self::Dynamic,
-        }
-    }
 }
 
 #[cfg(test)]
