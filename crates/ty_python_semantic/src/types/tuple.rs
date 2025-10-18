@@ -332,7 +332,7 @@ impl<T> FixedLengthTuple<T> {
         Self(Box::default())
     }
 
-    fn from_elements(elements: impl IntoIterator<Item = T>) -> Self {
+    pub(crate) fn from_elements(elements: impl IntoIterator<Item = T>) -> Self {
         Self(elements.into_iter().collect())
     }
 
@@ -359,6 +359,10 @@ impl<T> FixedLengthTuple<T> {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    pub(crate) fn get(&self, index: usize) -> Option<&T> {
+        self.0.get(index)
     }
 }
 

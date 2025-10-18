@@ -28,7 +28,7 @@ use crate::types::generics::{
 use crate::types::infer::nearest_enclosing_class;
 use crate::types::member::{Member, class_member};
 use crate::types::signatures::{CallableSignature, Parameter, Parameters, Signature};
-use crate::types::tuple::{Tuple, TupleSpec, TupleType};
+use crate::types::tuple::{FixedLengthTuple, Tuple, TupleSpec, TupleType};
 use crate::types::typed_dict::typed_dict_params_from_class_def;
 use crate::types::visitor::{NonAtomicType, TypeKind, TypeVisitor, walk_non_atomic_type};
 use crate::types::{
@@ -3618,20 +3618,8 @@ impl<'db> ClassLiteral<'db> {
         )
     }
 
-    fn known_slots(self, db: &'db dyn Db) -> FxHashSet<&'db str> {
-        self.iter_mro(db, None)
-            .filter_map(ClassBase::into_class)
-            .filter_map(|supercls| {
-                if let SlotsKind::NotEmpty { known_members } =
-                    supercls.class_literal(db).0.own_known_slots(db)
-                {
-                    Some(known_members)
-                } else {
-                    None
-                }
-            })
-            .flatten()
-            .collect()
+    fn known_slots(self, db: &'db dyn Db) -> SlotsIterator<'db> {
+        SlotsIterator::new(db, self)
     }
 
     fn own_known_slots(self, db: &'db dyn Db) -> SlotsKind<'db> {
@@ -3655,12 +3643,9 @@ impl<'db> ClassLiteral<'db> {
                     if fixed_tuple.is_empty() {
                         SlotsKind::Empty
                     } else {
-                        let known_members = fixed_tuple
-                            .elements()
-                            .filter_map(|element| element.as_string_literal())
-                            .map(|string_literal| string_literal.value(db))
-                            .collect();
-                        SlotsKind::NotEmpty { known_members }
+                        SlotsKind::NotEmpty {
+                            known_members: fixed_tuple.clone(),
+                        }
                     }
                 } else {
                     SlotsKind::Dynamic
@@ -3668,8 +3653,8 @@ impl<'db> ClassLiteral<'db> {
             }
 
             // __slots__ = "abc"  # Same as `("abc",)`
-            Type::StringLiteral(string) => SlotsKind::NotEmpty {
-                known_members: FxHashSet::from_iter([string.value(db)]),
+            Type::StringLiteral(_) => SlotsKind::NotEmpty {
+                known_members: FixedLengthTuple::from_elements([slots_ty]),
             },
 
             _ => SlotsKind::Dynamic,
@@ -5529,7 +5514,9 @@ enum SlotsKind<'db> {
     /// `__slots__` is defined but empty: `__slots__ = ()`.
     Empty,
     /// `__slots__` is defined and is not empty: `__slots__ = ("a", "b")`.
-    NotEmpty { known_members: FxHashSet<&'db str> },
+    NotEmpty {
+        known_members: FixedLengthTuple<Type<'db>>,
+    },
     /// `__slots__` is defined but its value is dynamic:
     /// * `__slots__ = tuple(a for a in b)`
     /// * `__slots__ = ["a", "b"]`
@@ -5540,6 +5527,66 @@ impl SlotsKind<'_> {
     /// Return `true` if `__slots__` is defined and is definitely not empty.
     const fn is_not_empty(&self) -> bool {
         matches!(self, SlotsKind::NotEmpty { .. })
+    }
+}
+
+struct SlotsIterator<'db> {
+    db: &'db dyn Db,
+    mro_iter: MroIterator<'db>,
+    current_slots: Option<FixedLengthTuple<Type<'db>>>,
+    current_slots_index: usize,
+}
+
+impl<'db> SlotsIterator<'db> {
+    fn new(db: &'db dyn Db, class: ClassLiteral<'db>) -> Self {
+        Self {
+            db,
+            mro_iter: class.iter_mro(db, None),
+            current_slots: None,
+            current_slots_index: 0,
+        }
+    }
+}
+
+impl<'db> Iterator for SlotsIterator<'db> {
+    type Item = &'db str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let slots = if let Some(current_slots) = &self.current_slots {
+                current_slots
+            } else {
+                loop {
+                    let base = self.mro_iter.next()?;
+                    let ClassBase::Class(class) = base else {
+                        continue;
+                    };
+                    let SlotsKind::NotEmpty { known_members } =
+                        class.class_literal(self.db).0.own_known_slots(self.db)
+                    else {
+                        continue;
+                    };
+                    self.current_slots = Some(known_members);
+                    break self.current_slots.as_ref().unwrap();
+                }
+            };
+
+            loop {
+                let Some(slot) = slots.get(self.current_slots_index) else {
+                    self.current_slots = None;
+                    self.current_slots_index = 0;
+                    break;
+                };
+
+                let Type::StringLiteral(value) = slot else {
+                    self.current_slots_index += 1;
+                    continue;
+                };
+
+                self.current_slots_index += 1;
+                return Some(value.value(self.db));
+            }
+        }
     }
 }
 
