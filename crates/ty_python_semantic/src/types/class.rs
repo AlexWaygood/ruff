@@ -28,7 +28,7 @@ use crate::types::generics::{
 use crate::types::infer::nearest_enclosing_class;
 use crate::types::member::{Member, class_member};
 use crate::types::signatures::{CallableSignature, Parameter, Parameters, Signature};
-use crate::types::tuple::{TupleSpec, TupleType};
+use crate::types::tuple::{Tuple, TupleSpec, TupleType};
 use crate::types::typed_dict::typed_dict_params_from_class_def;
 use crate::types::visitor::{NonAtomicType, TypeKind, TypeVisitor, walk_non_atomic_type};
 use crate::types::{
@@ -1710,7 +1710,7 @@ impl<'db> ClassLiteral<'db> {
             .contains(&KnownFunction::DisjointBase)
         {
             Some(DisjointBase::due_to_decorator(self))
-        } else if self.own_slots(db) == SlotsKind::NotEmpty {
+        } else if self.own_known_slots(db).is_not_empty() {
             Some(DisjointBase::due_to_dunder_slots(self))
         } else {
             None
@@ -3618,7 +3618,23 @@ impl<'db> ClassLiteral<'db> {
         )
     }
 
-    fn own_slots(self, db: &'db dyn Db) -> SlotsKind {
+    fn known_slots(self, db: &'db dyn Db) -> FxHashSet<&'db str> {
+        self.iter_mro(db, None)
+            .filter_map(ClassBase::into_class)
+            .filter_map(|supercls| {
+                if let SlotsKind::NotEmpty { known_members } =
+                    supercls.class_literal(db).0.own_known_slots(db)
+                {
+                    Some(known_members)
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect()
+    }
+
+    fn own_known_slots(self, db: &'db dyn Db) -> SlotsKind<'db> {
         let Place::Defined(slots_ty, _, bound) = self
             .own_class_member(db, self.inherited_generic_context(db), None, "__slots__")
             .inner
@@ -3633,17 +3649,28 @@ impl<'db> ClassLiteral<'db> {
 
         match slots_ty {
             // __slots__ = ("a", "b")
-            Type::NominalInstance(nominal) => match nominal
-                .tuple_spec(db)
-                .and_then(|spec| spec.len().into_fixed_length())
-            {
-                Some(0) => SlotsKind::Empty,
-                Some(_) => SlotsKind::NotEmpty,
-                None => SlotsKind::Dynamic,
-            },
+            Type::NominalInstance(nominal) => {
+                let spec = nominal.tuple_spec(db);
+                if let Some(Tuple::Fixed(fixed_tuple)) = spec.as_deref() {
+                    if fixed_tuple.is_empty() {
+                        SlotsKind::Empty
+                    } else {
+                        let known_members = fixed_tuple
+                            .elements()
+                            .filter_map(|element| element.as_string_literal())
+                            .map(|string_literal| string_literal.value(db))
+                            .collect();
+                        SlotsKind::NotEmpty { known_members }
+                    }
+                } else {
+                    SlotsKind::Dynamic
+                }
+            }
 
             // __slots__ = "abc"  # Same as `("abc",)`
-            Type::StringLiteral(_) => SlotsKind::NotEmpty,
+            Type::StringLiteral(string) => SlotsKind::NotEmpty {
+                known_members: FxHashSet::from_iter([string.value(db)]),
+            },
 
             _ => SlotsKind::Dynamic,
         }
@@ -5495,18 +5522,25 @@ pub(super) enum MetaclassErrorKind<'db> {
     Cycle,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum SlotsKind {
+#[derive(Debug, Eq, PartialEq)]
+enum SlotsKind<'db> {
     /// `__slots__` is not found in the class.
     NotSpecified,
     /// `__slots__` is defined but empty: `__slots__ = ()`.
     Empty,
     /// `__slots__` is defined and is not empty: `__slots__ = ("a", "b")`.
-    NotEmpty,
+    NotEmpty { known_members: FxHashSet<&'db str> },
     /// `__slots__` is defined but its value is dynamic:
     /// * `__slots__ = tuple(a for a in b)`
     /// * `__slots__ = ["a", "b"]`
     Dynamic,
+}
+
+impl SlotsKind<'_> {
+    /// Return `true` if `__slots__` is defined and is definitely not empty.
+    const fn is_not_empty(&self) -> bool {
+        matches!(self, SlotsKind::NotEmpty { .. })
+    }
 }
 
 #[cfg(test)]
