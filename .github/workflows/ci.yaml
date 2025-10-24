@@ -765,14 +765,15 @@ jobs:
       - name: "Cache pre-commit"
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: ~/.cache/pre-commit
+          path: ~/.cache/prek
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      # We actually run prek rather than pre-commit -- prek is a Rust rewrite of pre-commit
       - name: "Run pre-commit"
         run: |
           echo '```console' > "$GITHUB_STEP_SUMMARY"
           # Enable color output for pre-commit and remove it for the summary
           # Use --hook-stage=manual to enable slower pre-commit hooks that are skipped by default
-          SKIP=cargo-fmt,clippy,dev-generate-all uvx --python="${PYTHON_VERSION}" pre-commit run --all-files --show-diff-on-failure --color=always --hook-stage=manual | \
+          SKIP=cargo-fmt,clippy,dev-generate-all uvx --python="${PYTHON_VERSION}" prek run --all-files --show-diff-on-failure --color=always --hook-stage=manual | \
             tee >(sed -E 's/\x1B\[([0-9]{1,2}(;[0-9]{1,2})*)?[mGK]//g' >> "$GITHUB_STEP_SUMMARY") >&1
           exit_code="${PIPESTATUS[0]}"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
