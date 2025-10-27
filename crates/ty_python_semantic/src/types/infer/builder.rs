@@ -2261,6 +2261,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                         .and_then(Type::as_callable)
                         .is_some_and(|callable| callable.is_function_like(self.db()));
 
+                    assert!(is_input_function_like);
+
                     if is_input_function_like
                         && let Some(return_ty_function_like) =
                             into_function_like_callable(self.db(), return_ty)
@@ -2280,11 +2282,22 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             };
         }
 
-        self.add_declaration_with_binding(
-            function.into(),
-            definition,
-            &DeclaredAndInferredType::are_the_same_type(inferred_ty),
-        );
+        let declared_type = if self.class_context_of_current_method().is_some() {
+            Type::Callable(CallableType::new(
+                self.db(),
+                function_literal.signature(self.db()),
+                true,
+            ))
+        } else {
+            inferred_ty
+        };
+
+        let declared_and_inferred = DeclaredAndInferredType::MightBeDifferent {
+            declared_ty: TypeAndQualifiers::declared(declared_type),
+            inferred_ty,
+        };
+
+        self.add_declaration_with_binding(function.into(), definition, &declared_and_inferred);
 
         if function_decorators.contains(FunctionDecorators::OVERLOAD) {
             for stmt in &function.body {
