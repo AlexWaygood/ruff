@@ -377,12 +377,11 @@ static_assert(not is_disjoint_from(Literal[1], Literal[1]))
 static_assert(not is_disjoint_from(Literal["a"], Literal["a"]))
 static_assert(not is_disjoint_from(Literal["a"], LiteralString))
 static_assert(not is_disjoint_from(Literal["a"], str))
+static_assert(is_disjoint_from(Intersection[Not[Literal[True]], Not[Literal[False]]], bool))
 
 # TODO: No errors
 # error: [static-assert-error]
 static_assert(is_disjoint_from(AlwaysFalsy, Intersection[LiteralString, Not[Literal[""]]]))
-# error: [static-assert-error]
-static_assert(is_disjoint_from(Intersection[Not[Literal[True]], Not[Literal[False]]], bool))
 # error: [static-assert-error]
 static_assert(is_disjoint_from(Intersection[AlwaysFalsy, Not[Literal[False]]], bool))
 # error: [static-assert-error]

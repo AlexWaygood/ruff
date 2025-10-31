@@ -337,7 +337,8 @@ to return `self` in the `assert_yes` method below:
 
 ```py
 from enum import Enum
-from typing_extensions import Self, assert_never
+from typing_extensions import Self, assert_never, Literal
+from ty_extensions import is_subtype_of, TypeOf
 
 class Answer(Enum):
     NO = 0

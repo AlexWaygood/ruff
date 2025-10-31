@@ -8836,6 +8836,13 @@ impl<'db> TypeVarBoundOrConstraints<'db> {
             }
         }
     }
+
+    const fn as_upper_bound(self) -> Option<Type<'db>> {
+        match self {
+            TypeVarBoundOrConstraints::UpperBound(ty) => Some(ty),
+            TypeVarBoundOrConstraints::Constraints(_) => None,
+        }
+    }
 }
 
 /// Error returned if a type is not awaitable.

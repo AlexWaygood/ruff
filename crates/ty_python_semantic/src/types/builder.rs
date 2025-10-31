@@ -854,6 +854,11 @@ struct InnerIntersectionBuilder<'db> {
 }
 
 impl<'db> InnerIntersectionBuilder<'db> {
+    fn collapse_to_never(&mut self) {
+        *self = Self::default();
+        self.positive.insert(Type::Never);
+    }
+
     /// Adds a positive type to this intersection.
     fn add_positive(&mut self, db: &'db dyn Db, mut new_positive: Type<'db>) {
         match new_positive {
@@ -962,8 +967,7 @@ impl<'db> InnerIntersectionBuilder<'db> {
                     }
                     // A & B = Never    if A and B are disjoint
                     if new_positive.is_disjoint_from(db, *existing_positive) {
-                        *self = Self::default();
-                        self.positive.insert(Type::Never);
+                        self.collapse_to_never();
                         return;
                     }
                 }
@@ -971,19 +975,25 @@ impl<'db> InnerIntersectionBuilder<'db> {
                     self.positive.swap_remove_index(index);
                 }
 
-                let mut to_remove = SmallVec::<[usize; 1]>::new();
-                for (index, existing_negative) in self.negative.iter().enumerate() {
-                    // S & ~T = Never    if S <: T
-                    if new_positive.is_subtype_of(db, *existing_negative) {
-                        *self = Self::default();
-                        self.positive.insert(Type::Never);
-                        return;
-                    }
-                    // A & ~B = A    if A and B are disjoint
-                    if existing_negative.is_disjoint_from(db, new_positive) {
-                        to_remove.push(index);
-                    }
+                let negatives_as_union = UnionType::from_elements(db, &self.negative);
+
+                if new_positive.is_redundant_with(db, negatives_as_union) {
+                    // S & ~T & ~U = Never    if S <: (T | U)
+                    self.collapse_to_never();
+                    return;
                 }
+
+                // A & ~B = A    if A and B are disjoint
+                let to_remove: SmallVec<[usize; 1]> = self
+                    .negative
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, existing_negative)| {
+                        existing_negative
+                            .is_disjoint_from(db, new_positive)
+                            .then_some(index)
+                    })
+                    .collect();
                 for index in to_remove.into_iter().rev() {
                     self.negative.swap_remove_index(index);
                 }
@@ -1011,29 +1021,40 @@ impl<'db> InnerIntersectionBuilder<'db> {
                 for neg in inter.negative(db) {
                     self.add_positive(db, *neg);
                 }
+                return;
             }
             Type::Never => {
                 // Adding ~Never to an intersection is a no-op.
+                return;
             }
             Type::NominalInstance(instance) if instance.is_object() => {
                 // Adding ~object to an intersection results in Never.
-                *self = Self::default();
-                self.positive.insert(Type::Never);
+                self.collapse_to_never();
+                return;
             }
-            ty @ Type::Dynamic(_) => {
+            Type::Dynamic(_) => {
                 // Adding any of these types to the negative side of an intersection
                 // is equivalent to adding it to the positive side. We do this to
                 // simplify the representation.
-                self.add_positive(db, ty);
+                self.add_positive(db, new_negative);
+                return;
             }
             // `bool & ~AlwaysTruthy` -> `bool & Literal[False]`
             // `bool & ~Literal[True]` -> `bool & Literal[False]`
             Type::AlwaysTruthy | Type::BooleanLiteral(true) if contains_bool() => {
                 self.add_positive(db, Type::BooleanLiteral(false));
+                return;
+            }
+            Type::BooleanLiteral(bool_value)
+                if self.negative.contains(&Type::BooleanLiteral(!bool_value)) =>
+            {
+                self.add_negative(db, KnownClass::Bool.to_instance(db));
+                return;
             }
             // `LiteralString & ~AlwaysTruthy` -> `LiteralString & Literal[""]`
             Type::AlwaysTruthy if self.positive.contains(&Type::LiteralString) => {
                 self.add_positive(db, Type::string_literal(db, ""));
+                return;
             }
             // `bool & ~AlwaysFalsy` -> `bool & Literal[True]`
             // `bool & ~Literal[False]` -> `bool & Literal[True]`
@@ -1043,39 +1064,64 @@ impl<'db> InnerIntersectionBuilder<'db> {
             // `LiteralString & ~AlwaysFalsy` -> `LiteralString & ~Literal[""]`
             Type::AlwaysFalsy if self.positive.contains(&Type::LiteralString) => {
                 self.add_negative(db, Type::string_literal(db, ""));
+                return;
             }
-            _ => {
-                let mut to_remove = SmallVec::<[usize; 1]>::new();
-                for (index, existing_negative) in self.negative.iter().enumerate() {
-                    // ~S & ~T = ~T    if S <: T
-                    if existing_negative.is_redundant_with(db, new_negative) {
-                        to_remove.push(index);
+            Type::EnumLiteral(new_enum_literal) => {
+                let enum_class = new_enum_literal.enum_class(db);
+                let new_literal_name = new_enum_literal.name(db);
+
+                let mut literals_already_included = 0;
+                for existing_negative in &self.negative {
+                    let Type::EnumLiteral(existing_enum_literal) = existing_negative else {
+                        continue;
+                    };
+                    if existing_enum_literal.enum_class(db) != enum_class {
+                        continue;
                     }
-                    // same rule, reverse order
-                    if new_negative.is_subtype_of(db, *existing_negative) {
+                    let existing_literal_name = existing_enum_literal.name(db);
+                    if existing_literal_name == new_literal_name {
+                        // already excluded
                         return;
                     }
-                }
-                for index in to_remove.into_iter().rev() {
-                    self.negative.swap_remove_index(index);
+                    literals_already_included += 1;
                 }
 
-                for existing_positive in &self.positive {
-                    // S & ~T = Never    if S <: T
-                    if existing_positive.is_subtype_of(db, new_negative) {
-                        *self = Self::default();
-                        self.positive.insert(Type::Never);
-                        return;
-                    }
-                    // A & ~B = A    if A and B are disjoint
-                    if existing_positive.is_disjoint_from(db, new_negative) {
-                        return;
-                    }
+                let metadata = enum_metadata(db, enum_class).unwrap();
+                if literals_already_included + 1 == metadata.members.len() {
+                    self.add_negative(db, new_enum_literal.enum_class_instance(db));
+                    return;
                 }
-
-                self.negative.insert(new_negative);
+            }
+            _ => {}
+        }
+        let mut to_remove = SmallVec::<[usize; 1]>::new();
+        for (index, existing_negative) in self.negative.iter().enumerate() {
+            // ~S & ~T = ~T    if S <: T
+            if existing_negative.is_redundant_with(db, new_negative) {
+                to_remove.push(index);
+            }
+            // same rule, reverse order
+            if new_negative.is_subtype_of(db, *existing_negative) {
+                return;
             }
         }
+        for index in to_remove.into_iter().rev() {
+            self.negative.swap_remove_index(index);
+        }
+
+        for existing_positive in &self.positive {
+            // S & ~T & ~U = Never    if S <: (T | U)
+            if existing_positive.is_subtype_of(db, new_negative) {
+                self.collapse_to_never();
+                return;
+            }
+            // A & ~B = A    if A and B are disjoint
+            if existing_positive.is_disjoint_from(db, new_negative) {
+                return;
+            }
+        }
+
+        self.negative.insert(new_negative);
     }
 
     /// Tries to simplify any constrained typevars in the intersection:
@@ -1148,8 +1194,7 @@ impl<'db> InnerIntersectionBuilder<'db> {
             let Some(remaining_constraint) = iter.next() else {
                 // All of the typevar constraints have been removed, so the entire intersection is
                 // `Never`.
-                *self = Self::default();
-                self.positive.insert(Type::Never);
+                self.collapse_to_never();
                 return;
             };
 
@@ -1177,6 +1222,28 @@ impl<'db> InnerIntersectionBuilder<'db> {
 
     fn build(mut self, db: &'db dyn Db) -> Type<'db> {
         self.simplify_constrained_typevars(db);
+
+        let mut speculative = IntersectionBuilder::new(db).positive_elements(
+            self.positive
+                .iter()
+                .filter_map(|elem| elem.as_typevar())
+                .filter_map(|tvar| tvar.typevar(db).bound_or_constraints(db))
+                .filter_map(TypeVarBoundOrConstraints::as_upper_bound),
+        );
+        if !speculative.intersections.is_empty() {
+            for pos in &self.positive {
+                if !pos.is_type_var() {
+                    speculative = speculative.add_positive(*pos);
+                }
+            }
+            for neg in &self.negative {
+                speculative = speculative.add_negative(*neg);
+            }
+            if speculative.build().is_never() {
+                return Type::Never;
+            }
+        }
+
         match (self.positive.len(), self.negative.len()) {
             (0, 0) => Type::object(),
             (1, 0) => self.positive[0],
