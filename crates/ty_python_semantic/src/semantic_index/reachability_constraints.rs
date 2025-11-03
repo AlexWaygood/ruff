@@ -720,13 +720,8 @@ impl ReachabilityConstraints {
     ) -> Truthiness {
         match predicate_kind {
             PatternPredicateKind::Value(value) => {
-                let value_ty = infer_expression_type(db, *value, TypeContext::default());
-
-                if subject_ty.is_single_valued(db) {
-                    Truthiness::from(subject_ty.is_equivalent_to(db, value_ty))
-                } else {
-                    Truthiness::Ambiguous
-                }
+                infer_expression_type(db, *value, TypeContext::default())
+                    .evaluate_equality_comparison(db, subject_ty)
             }
             PatternPredicateKind::Singleton(singleton) => {
                 let singleton_ty = singleton_to_type(db, *singleton);

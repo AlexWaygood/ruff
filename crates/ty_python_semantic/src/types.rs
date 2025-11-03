@@ -856,6 +856,460 @@ impl<'db> Type<'db> {
         !(check_dunder("__eq__", true) && check_dunder("__ne__", false))
     }
 
+    fn lookup_dunder_eq(self, db: &'db dyn Db) -> PlaceAndQualifiers<'db> {
+        self.member_lookup_with_policy(
+            db,
+            Name::new_static("__eq__"),
+            MemberLookupPolicy::NO_INSTANCE_FALLBACK | MemberLookupPolicy::MRO_NO_OBJECT_FALLBACK,
+        )
+    }
+
+    pub(crate) fn evaluate_equality_comparison(self, db: &'db dyn Db, other: Self) -> Truthiness {
+        match (self, other) {
+            (Type::Union(union), other) | (other, Type::Union(union)) => {
+                let union_elements = union.elements(db);
+                if union_elements.iter().all(|element| {
+                    element
+                        .evaluate_equality_comparison(db, other)
+                        .is_always_false()
+                }) {
+                    Truthiness::AlwaysFalse
+                } else if union_elements.iter().all(|element| {
+                    element
+                        .evaluate_equality_comparison(db, other)
+                        .is_always_true()
+                }) {
+                    Truthiness::AlwaysTrue
+                } else {
+                    Truthiness::Ambiguous
+                }
+            }
+
+            (
+                Type::Dynamic(_)
+                | Type::Never
+                | Type::ProtocolInstance(_)
+                | Type::Callable(_)
+                | Type::DataclassDecorator(_)
+                | Type::DataclassTransformer(_),
+                _,
+            )
+            | (
+                _,
+                Type::Dynamic(_)
+                | Type::Never
+                | Type::ProtocolInstance(_)
+                | Type::Callable(_)
+                | Type::DataclassDecorator(_)
+                | Type::DataclassTransformer(_),
+            ) => Truthiness::Ambiguous,
+
+            (Type::LiteralString, Type::LiteralString) => Truthiness::Ambiguous,
+
+            (Type::LiteralString, Type::StringLiteral(_))
+            | (Type::StringLiteral(_), Type::LiteralString) => Truthiness::Ambiguous,
+
+            (Type::BoundMethod(_), Type::KnownBoundMethod(_))
+            | (Type::KnownBoundMethod(_), Type::BoundMethod(_)) => Truthiness::Ambiguous,
+
+            (Type::BytesLiteral(bytes), Type::BytesLiteral(other)) => {
+                debug_assert_eq!(bytes == other, bytes.value(db) == other.value(db));
+                Truthiness::from(bytes == other)
+            }
+
+            (Type::EnumLiteral(left), Type::EnumLiteral(right))
+                if left.enum_class(db) == right.enum_class(db)
+                    && self.lookup_dunder_eq(db).place.is_undefined() =>
+            {
+                Truthiness::from(left == right)
+            }
+
+            (ty @ Type::EnumLiteral(e), other) | (other, ty @ Type::EnumLiteral(e))
+                if [KnownClass::Int, KnownClass::Str].iter().any(|cls| {
+                    cls.to_class_literal(db).lookup_dunder_eq(db).place
+                        == ty.lookup_dunder_eq(db).place
+                }) =>
+            {
+                e.value(db).evaluate_equality_comparison(db, other)
+            }
+
+            (Type::BooleanLiteral(bool_value), other)
+            | (other, Type::BooleanLiteral(bool_value)) => {
+                Type::IntLiteral(i64::from(bool_value)).evaluate_equality_comparison(db, other)
+            }
+
+            (Type::IntLiteral(int), Type::IntLiteral(other)) => Truthiness::from(int == other),
+            (Type::StringLiteral(string), Type::StringLiteral(other)) => {
+                debug_assert_eq!(string == other, string.value(db) == other.value(db));
+                Truthiness::from(string == other)
+            }
+
+            (
+                e @ Type::EnumLiteral(_),
+                Type::IntLiteral(_)
+                | Type::StringLiteral(_)
+                | Type::LiteralString
+                | Type::BytesLiteral(_)
+                | Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::IntLiteral(_)
+                | Type::StringLiteral(_)
+                | Type::LiteralString
+                | Type::BytesLiteral(_)
+                | Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                e @ Type::EnumLiteral(_),
+            ) if e.lookup_dunder_eq(db).place.is_undefined() => Truthiness::AlwaysFalse,
+
+            (Type::NominalInstance(left), Type::NominalInstance(right))
+                if matches!(
+                    (
+                        left.tuple_spec(db).as_deref(),
+                        right.tuple_spec(db).as_deref()
+                    ),
+                    (Some(TupleSpec::Fixed(_)), Some(TupleSpec::Fixed(_)))
+                ) =>
+            {
+                if left == right {
+                    Truthiness::AlwaysTrue
+                } else {
+                    let left_spec = left.tuple_spec(db).expect("Checked above");
+                    let left_spec = left_spec.as_fixed_length_tuple().expect("Checked above");
+                    let right_spec = right.tuple_spec(db).expect("Checked above");
+                    let right_spec = right_spec.as_fixed_length_tuple().expect("Checked above");
+                    if left_spec.len() != right_spec.len() || left_spec
+                        .elements()
+                        .zip(right_spec.elements())
+                        .any(|(l, r)| l.evaluate_equality_comparison(db, *r).is_always_false())
+                    {
+                        Truthiness::AlwaysFalse
+                    } else if left_spec
+                        .elements()
+                        .zip(right_spec.elements())
+                        .all(|(l, r)| l.evaluate_equality_comparison(db, *r).is_always_true())
+                    {
+                        Truthiness::AlwaysTrue
+                    } else {
+                        Truthiness::Ambiguous
+                    }
+                }
+            }
+
+            (
+                Type::NominalInstance(nominal),
+                Type::IntLiteral(_)
+                | Type::StringLiteral(_)
+                | Type::LiteralString
+                | Type::BytesLiteral(_)
+                | Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::StringLiteral(_)
+                | Type::LiteralString
+                | Type::BytesLiteral(_)
+                | Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_)
+                | Type::IntLiteral(_),
+                Type::NominalInstance(nominal),
+            ) if matches!(
+                nominal.class(db).known(db),
+                Some(
+                    KnownClass::NoneType
+                        | KnownClass::EllipsisType
+                        | KnownClass::NoDefaultType
+                        | KnownClass::NotImplementedType
+                )
+            ) =>
+            {
+                Truthiness::AlwaysFalse
+            }
+
+            (
+                Type::IntLiteral(_),
+                Type::StringLiteral(_)
+                | Type::LiteralString
+                | Type::BytesLiteral(_)
+                | Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::StringLiteral(_)
+                | Type::LiteralString
+                | Type::BytesLiteral(_)
+                | Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::IntLiteral(_),
+            )
+            | (
+                Type::StringLiteral(_),
+                Type::BytesLiteral(_)
+                | Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::BytesLiteral(_)
+                | Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::StringLiteral(_),
+            )
+            | (
+                Type::BytesLiteral(_),
+                Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::BoundMethod(_)
+                | Type::BoundSuper(_)
+                | Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::BytesLiteral(_),
+            )
+            | (
+                Type::BoundMethod(_),
+                Type::BoundSuper(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::BoundSuper(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::BoundMethod(_),
+            )
+            | (
+                Type::BoundSuper(_),
+                Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::KnownBoundMethod(_)
+                | Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::BoundSuper(_),
+            )
+            | (
+                Type::KnownBoundMethod(_),
+                Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::ClassLiteral(_)
+                | Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::KnownBoundMethod(_),
+            )
+            | (
+                Type::ClassLiteral(_),
+                Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::FunctionLiteral(_)
+                | Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::ClassLiteral(_),
+            )
+            | (
+                Type::FunctionLiteral(_),
+                Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::GenericAlias(_)
+                | Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::FunctionLiteral(_),
+            )
+            | (
+                Type::GenericAlias(_),
+                Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::PropertyInstance(_)
+                | Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::GenericAlias(_),
+            )
+            | (
+                Type::PropertyInstance(_),
+                Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::SpecialForm(_)
+                | Type::KnownInstance(_)
+                | Type::TypedDict(_)
+                | Type::WrapperDescriptor(_),
+                Type::PropertyInstance(_),
+            )
+            | (
+                Type::SpecialForm(_),
+                Type::KnownInstance(_) | Type::TypedDict(_) | Type::WrapperDescriptor(_),
+            )
+            | (
+                Type::KnownInstance(_) | Type::TypedDict(_) | Type::WrapperDescriptor(_),
+                Type::SpecialForm(_),
+            )
+            | (Type::KnownInstance(_), Type::TypedDict(_) | Type::WrapperDescriptor(_))
+            | (Type::TypedDict(_) | Type::WrapperDescriptor(_), Type::KnownInstance(_))
+            | (Type::TypedDict(_), Type::WrapperDescriptor(_))
+            | (Type::WrapperDescriptor(_), Type::TypedDict(_)) => Truthiness::AlwaysFalse,
+
+            _ => Truthiness::Ambiguous,
+        }
+    }
+
     pub(crate) fn is_notimplemented(&self, db: &'db dyn Db) -> bool {
         self.as_nominal_instance()
             .is_some_and(|instance| instance.has_known_class(db, KnownClass::NotImplementedType))
@@ -11874,6 +12328,12 @@ impl get_size2::GetSize for EnumLiteralType<'_> {}
 impl<'db> EnumLiteralType<'db> {
     pub(crate) fn enum_class_instance(self, db: &'db dyn Db) -> Type<'db> {
         self.enum_class(db).to_non_generic_instance(db)
+    }
+
+    fn value(self, db: &'db dyn Db) -> Type<'db> {
+        enum_metadata(db, self.enum_class(db))
+            .expect("The class of an enum-literal should always be an enum class")
+            .members[self.name(db)]
     }
 }
 

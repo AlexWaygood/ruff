@@ -1064,6 +1064,13 @@ pub enum Tuple<T> {
 }
 
 impl<T> Tuple<T> {
+    pub(crate) const fn as_fixed_length_tuple(&self) -> Option<&FixedLengthTuple<T>> {
+        match self {
+            Tuple::Fixed(tuple) => Some(tuple),
+            Tuple::Variable(_) => None,
+        }
+    }
+
     pub(crate) fn homogeneous(element: T) -> Self {
         VariableLengthTuple::homogeneous(element)
     }
