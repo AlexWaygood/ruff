@@ -455,6 +455,24 @@ class Bad:
         return self.x == other.x
 ```
 
+## `object.__hash__` overridden with `None`
+
+As a special case, we allow `object.__hash__` to be overridden with `None`. This diverges from the
+behaviour of other type checkers.
+
+The reason we allow this is that it's common (and often the best thing to do!) to set `__hash__` to
+`None`, it isn't really helpful to get a type-checker error about it, and it doesn't really improve
+soundness significantly for us to complain about it. The rules around hashability in Python
+fundamentally violate the Liskov Substitution Principle, and there's not much a type checker can do
+to rectify this at the end of the day.
+
+```pyi
+from typing import Final, 
+
+class Foo:
+    __hash__ = None  # no error
+```
+
 ## Synthesized methods
 
 `NamedTuple` classes and dataclasses both have methods generated at runtime that do not have

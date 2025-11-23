@@ -8,7 +8,7 @@ use crate::{
     place::Place,
     semantic_index::place_table,
     types::{
-        ClassBase, ClassLiteral, ClassType, KnownClass, Type,
+        ClassBase, ClassLiteral, ClassType, Type,
         class::CodeGeneratorKind,
         context::InferContext,
         diagnostic::report_invalid_method_override,
@@ -18,9 +18,6 @@ use crate::{
 
 pub(super) fn check_class<'db>(context: &InferContext<'db, '_>, class: ClassLiteral<'db>) {
     let db = context.db();
-    if class.is_known(db, KnownClass::Object) {
-        return;
-    }
 
     let class_specialized = class.identity_specialization(db);
     let own_class_members: FxHashSet<_> =
@@ -131,6 +128,17 @@ fn check_class_declaration<'db>(
         };
 
         if type_on_subclass_instance.is_assignable_to(db, superclass_type_as_callable) {
+            continue;
+        }
+
+        // Allow `object.__hash__` to be overridden with `None`.
+        // It's common (and often the best thing to do!) to set `__hash__` to `None`,
+        // it isn't really helpful to get a type-checker error about it,
+        // and it doesn't really improve soundness significantly for us to complain about it.
+        if &member.name == "__hash__"
+            && superclass.is_object(db)
+            && type_on_subclass_instance.is_assignable_to(db, Type::none(db))
+        {
             continue;
         }
 
