@@ -148,15 +148,13 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     // anything else is an invalid annotation:
                     op => {
                         self.infer_binary_expression(binary, TypeContext::default());
-                        if let Some(mut diag) = self.report_invalid_type_expression(
+                        self.report_invalid_type_expression(
                             expression,
                             format_args!(
                                 "Invalid binary operator `{}` in type annotation",
                                 op.as_str()
                             ),
-                        ) {
-                            diag.info("Did you mean to use `|`?");
-                        }
+                        );
                         Type::unknown()
                     }
                 }
@@ -679,11 +677,13 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 }
                 Type::unknown()
             }
-            ast::Expr::Subscript(ast::ExprSubscript {
-                value,
-                slice: parameters,
-                ..
-            }) => {
+            ast::Expr::Subscript(
+                subscript @ ast::ExprSubscript {
+                    value,
+                    slice: parameters,
+                    ..
+                },
+            ) => {
                 let parameters_ty = match self.infer_expression(value, TypeContext::default()) {
                     Type::SpecialForm(SpecialFormType::Union) => match &**parameters {
                         ast::Expr::Tuple(tuple) => {
@@ -698,6 +698,40 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                         }
                         _ => self.infer_subclass_of_type_expression(parameters),
                     },
+                    value_ty @ Type::ClassLiteral(class_literal) => {
+                        if class_literal.is_protocol(self.db()) {
+                            SubclassOfType::from(
+                                self.db(),
+                                todo_type!("type[T] for protocols").expect_dynamic(),
+                            )
+                        } else {
+                            match class_literal.generic_context(self.db()) {
+                                Some(generic_context) => {
+                                    let db = self.db();
+                                    let specialize = |types: &[Option<Type<'db>>]| {
+                                        SubclassOfType::from(
+                                            db,
+                                            class_literal.apply_specialization(db, |_| {
+                                                generic_context
+                                                    .specialize_partial(db, types.iter().copied())
+                                            }),
+                                        )
+                                    };
+                                    self.infer_explicit_callable_specialization(
+                                        subscript,
+                                        value_ty,
+                                        generic_context,
+                                        specialize,
+                                    )
+                                }
+                                None => {
+                                    // TODO: emit a diagnostic if you try to specialize a non-generic class.
+                                    self.infer_type_expression(parameters);
+                                    todo_type!("specialized non-generic class")
+                                }
+                            }
+                        }
+                    }
                     _ => {
                         self.infer_type_expression(parameters);
                         todo_type!("unsupported nested subscript in type[X]")
@@ -1011,7 +1045,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         let callable_type = if let (Some(parameters), Some(return_type), true) =
             (parameters, return_type, correct_argument_number)
         {
-            CallableType::single(db, Signature::new(parameters, Some(return_type)))
+            Type::single_callable(db, Signature::new(parameters, Some(return_type)))
         } else {
             CallableType::unknown(db)
         };
@@ -1227,7 +1261,10 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
 
                 let argument_type = self.infer_expression(&arguments[0], TypeContext::default());
 
-                let Some(callable_type) = argument_type.try_upcast_to_callable(db) else {
+                let Some(callable_type) = argument_type
+                    .try_upcast_to_callable(db)
+                    .map(|callables| callables.into_type(self.db()))
+                else {
                     if let Some(builder) = self
                         .context
                         .report_lint(&INVALID_TYPE_FORM, arguments_slice)
@@ -1407,13 +1444,40 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 Type::unknown()
             }
             SpecialFormType::LiteralString => {
-                self.infer_type_expression(arguments_slice);
+                let arguments = self.infer_expression(arguments_slice, TypeContext::default());
 
                 if let Some(builder) = self.context.report_lint(&INVALID_TYPE_FORM, subscript) {
-                    let mut diag = builder.into_diagnostic(format_args!(
-                        "Type `{special_form}` expected no type parameter",
-                    ));
-                    diag.info("Did you mean to use `Literal[...]` instead?");
+                    let mut diag =
+                        builder.into_diagnostic("`LiteralString` expects no type parameter");
+
+                    let arguments_as_tuple = arguments.exact_tuple_instance_spec(db);
+
+                    let mut argument_elements = arguments_as_tuple
+                        .as_ref()
+                        .map(|tup| Either::Left(tup.all_elements().copied()))
+                        .unwrap_or(Either::Right(std::iter::once(arguments)));
+
+                    let probably_meant_literal = argument_elements.all(|ty| match ty {
+                        Type::StringLiteral(_)
+                        | Type::BytesLiteral(_)
+                        | Type::EnumLiteral(_)
+                        | Type::BooleanLiteral(_) => true,
+                        Type::NominalInstance(instance) => {
+                            instance.has_known_class(db, KnownClass::NoneType)
+                        }
+                        _ => false,
+                    });
+
+                    if probably_meant_literal {
+                        diag.annotate(
+                            self.context
+                                .secondary(&*subscript.value)
+                                .message("Did you mean `Literal`?"),
+                        );
+                        diag.set_concise_message(
+                            "`LiteralString` expects no type parameter - did you mean `Literal`?",
+                        );
+                    }
                 }
                 Type::unknown()
             }

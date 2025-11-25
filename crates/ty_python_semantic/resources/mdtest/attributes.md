@@ -1904,6 +1904,7 @@ we only consider the attribute assignment to be valid if the assigned attribute 
 from typing import Literal
 
 class Date:
+    # error: [invalid-method-override]
     def __setattr__(self, name: Literal["day", "month", "year"], value: int) -> None:
         pass
 
@@ -2710,9 +2711,9 @@ We give special diagnostics for this common case too:
 import foo
 import baz
 
-# error: [unresolved-attribute]
+# error: [possibly-missing-attribute]
 reveal_type(foo.bar)  # revealed: Unknown
-# error: [unresolved-attribute]
+# error: [possibly-missing-attribute]
 reveal_type(baz.bar)  # revealed: Unknown
 ```
 
