@@ -723,6 +723,13 @@ impl DefinitionKind<'_> {
         }
     }
 
+    pub(crate) const fn as_function(&self) -> Option<&AstNodeRef<ast::StmtFunctionDef>> {
+        match self {
+            DefinitionKind::Function(function) => Some(function),
+            _ => None,
+        }
+    }
+
     pub(crate) fn is_import(&self) -> bool {
         matches!(
             self,
