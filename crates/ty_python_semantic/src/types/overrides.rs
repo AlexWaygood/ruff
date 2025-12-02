@@ -25,7 +25,10 @@ use crate::{
             report_overridden_final_method,
         },
         function::{FunctionDecorators, FunctionType, KnownFunction},
-        list_members::{Member, MemberWithDefinition, all_members_of_scope},
+        list_members::{
+            Member, MemberWithDefinition, all_members_of_scope,
+            all_own_implicit_instance_attributes,
+        },
     },
 };
 
@@ -53,10 +56,28 @@ pub(super) fn check_class<'db>(context: &InferContext<'db, '_>, class: ClassLite
     }
 
     let class_specialized = class.identity_specialization(db);
-    let own_class_members: FxHashSet<_> = all_members_of_scope(db, class.body_scope(db)).collect();
+    let mut own_class_members: FxHashSet<_> =
+        all_members_of_scope(db, class.body_scope(db)).collect();
+
+    if configuration.check_final_method_overridden() {
+        own_class_members.extend(all_own_implicit_instance_attributes(
+            db,
+            class,
+            Type::instance(db, class_specialized),
+        ));
+    }
+
+    let (_, specialization) = class_specialized.class_literal(db);
+    let class_kind = CodeGeneratorKind::from_class(db, class, specialization);
 
     for member in own_class_members {
-        check_class_declaration(context, configuration, class_specialized, &member);
+        check_class_declaration(
+            context,
+            configuration,
+            class_specialized,
+            class_kind,
+            &member,
+        );
     }
 }
 
@@ -64,6 +85,7 @@ fn check_class_declaration<'db>(
     context: &InferContext<'db, '_>,
     configuration: OverrideRulesConfig,
     class: ClassType<'db>,
+    class_kind: Option<CodeGeneratorKind<'db>>,
     member: &MemberWithDefinition<'db>,
 ) {
     /// Salsa-tracked query to check whether any of the definitions of a symbol
@@ -114,9 +136,6 @@ fn check_class_declaration<'db>(
     else {
         return;
     };
-
-    let (literal, specialization) = class.class_literal(db);
-    let class_kind = CodeGeneratorKind::from_class(db, literal, specialization);
 
     // Check for prohibited `NamedTuple` attribute overrides.
     //

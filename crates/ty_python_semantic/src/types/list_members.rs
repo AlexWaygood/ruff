@@ -376,45 +376,29 @@ impl<'db> AllMembers<'db> {
         ty: Type<'db>,
         class_literal: ClassLiteral<'db>,
     ) {
-        for parent in class_literal
-            .iter_mro(db, None)
-            .filter_map(ClassBase::into_class)
-            .map(|class| class.class_literal(db).0)
-        {
-            let class_body_scope = parent.body_scope(db);
-            let file = class_body_scope.file(db);
-            let index = semantic_index(db, file);
-            for function_scope_id in attribute_scopes(db, class_body_scope) {
-                for place_expr in index.place_table(function_scope_id).members() {
-                    let Some(name) = place_expr.as_instance_attribute() else {
-                        continue;
-                    };
-                    let result = ty.member(db, name);
-                    let Some(ty) = result.place.ignore_possibly_undefined() else {
-                        continue;
-                    };
-                    self.members.insert(Member {
-                        name: Name::new(name),
-                        ty,
-                    });
-                }
-            }
+        self.members.extend(
+            class_literal
+                .iter_mro(db, None)
+                .filter_map(ClassBase::into_class)
+                .map(|class| class.class_literal(db).0)
+                .flat_map(|class| all_own_implicit_instance_attributes(db, class, ty))
+                .map(|member|member.member),
+        );
 
-            // This is very similar to `extend_with_class_members`,
-            // but uses the type of the class instance to query the
-            // class member. This gets us the right type for each
-            // member, e.g., `SomeClass.__delattr__` is not a bound
-            // method, but `instance_of_SomeClass.__delattr__` is.
-            for memberdef in all_members_of_scope(db, class_body_scope) {
-                let result = ty.member(db, memberdef.member.name.as_str());
-                let Some(ty) = result.place.ignore_possibly_undefined() else {
-                    continue;
-                };
-                self.members.insert(Member {
-                    name: memberdef.member.name,
-                    ty,
-                });
-            }
+        // This is very similar to `extend_with_class_members`,
+        // but uses the type of the class instance to query the
+        // class member. This gets us the right type for each
+        // member, e.g., `SomeClass.__delattr__` is not a bound
+        // method, but `instance_of_SomeClass.__delattr__` is.
+        for memberdef in all_members_of_scope(db, class_literal.body_scope(db)) {
+            let result = ty.member(db, memberdef.member.name.as_str());
+            let Some(ty) = result.place.ignore_possibly_undefined() else {
+                continue;
+            };
+            self.members.insert(Member {
+                name: memberdef.member.name,
+                ty,
+            });
         }
     }
 
@@ -447,6 +431,47 @@ impl<'db> AllMembers<'db> {
             None => {}
         }
     }
+}
+
+/// List all instance attributes that are implicitly defined in methods of this class.
+/// Return the type of the attribute as accessed on `on`
+/// (which should generally be a specialized instance-type of this class).
+///
+/// This does *not* include attributes that are explicitly declared in the class body,
+/// or any attributes implicitly defined on superclasses.
+pub(super) fn all_own_implicit_instance_attributes<'db>(
+    db: &'db dyn Db,
+    class: ClassLiteral<'db>,
+    on: Type<'db>,
+) -> impl Iterator<Item = MemberWithDefinition<'db>> {
+    let class_body_scope = class.body_scope(db);
+    let file = class_body_scope.file(db);
+    let index = semantic_index(db, file);
+    attribute_scopes(db, class_body_scope)
+        .flat_map(|function_scope_id| {
+            index
+                .place_table(function_scope_id)
+                .members()
+                .zip(std::iter::repeat(function_scope_id))
+        })
+        .filter_map(|(member, scope)| member.as_instance_attribute().map(|name| (name, scope)))
+        .filter_map(move |(attribute, scope)| {
+            let ty = on.member(db, attribute).place.ignore_possibly_undefined()?;
+            let member = Member {
+                name: Name::new(attribute),
+                ty,
+            };
+            let scope = scope.to_scope_id(db, file);
+            let member_id = place_table(db, scope).member_id_by_instance_attribute_name(attribute);
+            let definition = member_id
+                .and_then(|id| {
+                    use_def_map(db, scope)
+                        .end_of_scope_member_bindings(id)
+                        .next()
+                })
+                .and_then(|binding| binding.binding.definition());
+            Some(MemberWithDefinition { member, definition })
+        })
 }
 
 /// A member of a type or scope, with an optional definition.
