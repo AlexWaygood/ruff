@@ -29,8 +29,8 @@ use crate::types::constraints::{ConstraintSet, IteratorConstraintsExtension};
 use crate::types::generics::InferableTypeVars;
 use crate::types::{
     ApplyTypeMappingVisitor, BoundTypeVarInstance, FindLegacyTypeVarsVisitor, HasRelationToVisitor,
-    IsDisjointVisitor, IsEquivalentVisitor, NormalizedVisitor, Type, TypeMapping, TypeRelation,
-    UnionBuilder, UnionType,
+    IntersectionType, IsDisjointVisitor, IsEquivalentVisitor, NormalizedVisitor, Type, TypeMapping,
+    TypeRelation, UnionBuilder, UnionType,
 };
 use crate::types::{Truthiness, TypeContext};
 use crate::{Db, FxOrderSet, Program};
@@ -1781,6 +1781,96 @@ impl<'db> TupleSpecBuilder<'db> {
                 TupleSpecBuilder::Variable {
                     prefix: vec![],
                     variable: unioned,
+                    suffix: vec![],
+                }
+            }
+        }
+    }
+
+    /// Return a new tuple-spec builder that reflects the intersection of this tuple and another tuple.
+    ///
+    /// For example, if `self` is a tuple-spec builder for `tuple[int, str]` and `other` is a
+    /// tuple-spec for `tuple[object, object]`, the result will be a tuple-spec builder for
+    /// `tuple[int, str]` (since `int & object` simplifies to `int`, and `str & object` to `str`).
+    pub(crate) fn intersect(mut self, db: &'db dyn Db, other: &TupleSpec<'db>) -> Self {
+        match (&mut self, other) {
+            // `tuple[T, U] & tuple[S, V]` -> `tuple[T & S, U & V]`
+            (TupleSpecBuilder::Fixed(our_elements), TupleSpec::Fixed(new_elements))
+                if our_elements.len() == new_elements.len() =>
+            {
+                for (existing, new) in our_elements.iter_mut().zip(new_elements.elements()) {
+                    *existing = IntersectionType::from_elements(db, [*existing, *new]);
+                }
+                self
+            }
+
+            // `tuple[T, U] & tuple[S, ...]` -> `tuple[T & S, U & S]`
+            (
+                TupleSpecBuilder::Fixed(our_elements),
+                TupleSpec::Variable(VariableLengthTuple {
+                    prefix,
+                    variable,
+                    suffix,
+                }),
+            ) if prefix.is_empty() && suffix.is_empty() => {
+                for existing in our_elements.iter_mut() {
+                    *existing = IntersectionType::from_elements(db, [existing, variable]);
+                }
+                self
+            }
+
+            // tuple[S, ...] & tuple[T, U]` -> `tuple[T & S, U & S]`
+            (
+                TupleSpecBuilder::Variable {
+                    prefix,
+                    variable,
+                    suffix,
+                },
+                TupleSpec::Fixed(fixed),
+            ) if prefix.is_empty() && suffix.is_empty() => {
+                let mut spec = TupleSpecBuilder::with_capacity(fixed.len());
+                for element in fixed.elements() {
+                    spec.push(IntersectionType::from_elements(db, [variable, element]));
+                }
+                spec
+            }
+
+            (
+                TupleSpecBuilder::Variable {
+                    prefix: our_prefix,
+                    variable: our_variable,
+                    suffix: our_suffix,
+                },
+                TupleSpec::Variable(VariableLengthTuple {
+                    prefix: their_prefix,
+                    variable: their_variable,
+                    suffix: their_suffix,
+                }),
+            ) if our_prefix.len() == their_prefix.len()
+                && our_suffix.len() == their_suffix.len() =>
+            {
+                for (our_element, their_element) in our_prefix.iter_mut().zip(their_prefix) {
+                    *our_element =
+                        IntersectionType::from_elements(db, [our_element, their_element]);
+                }
+                *our_variable = IntersectionType::from_elements(db, [our_variable, their_variable]);
+                for (our_element, their_element) in our_suffix.iter_mut().zip(their_suffix) {
+                    *our_element =
+                        IntersectionType::from_elements(db, [our_element, their_element]);
+                }
+                self
+            }
+
+            // TODO: probably incorrect? `tuple[int, str] & tuple[int, str, bytes]` should resolve to `Never`.
+            // So maybe this function should be fallible (return an `Option`)?
+            _ => {
+                let intersected = IntersectionType::from_elements(
+                    db,
+                    self.all_elements().chain(other.all_elements()),
+                );
+                TupleSpecBuilder::Variable {
+                    prefix: vec![],
+                    variable: intersected,
                     suffix: vec![],
                 }
             }

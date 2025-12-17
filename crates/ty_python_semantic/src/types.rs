@@ -1159,9 +1159,44 @@ impl<'db> Type<'db> {
     ///
     /// I.e., for the type `tuple[int, str]`, this will return the tuple spec `[int, str]`.
     /// For a subclass of `tuple[int, str]`, it will return the same tuple spec.
+    ///
+    /// Note that this method does *not* return the tuple spec for types that have
+    /// "tuple-like behaviour" when you iterate over them. For example, it returns `None` if called
+    /// on a string-literal type or a bytes-literal type. To obtain the tuple-spec for these types,
+    /// call [`Type::try_iterate`] instead.
     fn tuple_instance_spec(&self, db: &'db dyn Db) -> Option<Cow<'db, TupleSpec<'db>>> {
-        self.as_nominal_instance()
-            .and_then(|instance| instance.tuple_spec(db))
+        match self {
+            Type::NominalInstance(instance) => instance.tuple_spec(db),
+            Type::Union(union) => {
+                let mut elements = union.elements(db).iter();
+                let mut builder =
+                    TupleSpecBuilder::from(&*elements.next()?.tuple_instance_spec(db)?);
+                for element in elements {
+                    builder = builder.union(db, &*element.tuple_instance_spec(db)?);
+                }
+                Some(Cow::Owned(builder.build()))
+            }
+            Type::Intersection(intersection) => {
+                let mut intersection_elements = intersection.positive(db).iter();
+                let mut builder = TupleSpecBuilder::from(
+                    &*intersection_elements.find_map(|element| element.tuple_instance_spec(db))?,
+                );
+                for element in intersection_elements {
+                    if let Some(spec) = element.tuple_instance_spec(db) {
+                        builder = builder.intersect(db, &spec);
+                    }
+                }
+                Some(Cow::Owned(builder.build()))
+            }
+            Type::TypeAlias(alias) => alias.value_type(db).tuple_instance_spec(db),
+            Type::TypeVar(var) => match var.typevar(db).bound_or_constraints(db)? {
+                TypeVarBoundOrConstraints::UpperBound(bound) => bound.tuple_instance_spec(db),
+                TypeVarBoundOrConstraints::Constraints(constraints) => {
+                    constraints.as_type(db).tuple_instance_spec(db)
+                }
+            },
+            _ => None,
+        }
     }
 
     /// If this type is an *exact* tuple type (*not* a subclass of `tuple`), returns the
@@ -6695,6 +6730,18 @@ impl<'db> Type<'db> {
                         None
                     }
                 }
+                Type::Intersection(intersection) => {
+                    let mut intersection_elements = intersection.positive(db).iter();
+                    let mut builder = TupleSpecBuilder::from(
+                        &*intersection_elements.find_map(|element| element.try_iterate_with_mode(db, EvaluationMode::Sync).ok())?,
+                    );
+                    for element in intersection_elements {
+                        if let Some(spec) = non_async_special_case(db, *element) {
+                            builder = builder.intersect(db, &spec);
+                        }
+                    }
+                    Some(Cow::Owned(builder.build()))
+                }
                 // N.B. These special cases aren't strictly necessary, they're just obvious optimizations
                 Type::LiteralString | Type::Dynamic(_) => Some(Cow::Owned(TupleSpec::homogeneous(ty))),
 
@@ -6717,7 +6764,6 @@ impl<'db> Type<'db> {
                 | Type::SpecialForm(_)
                 | Type::KnownInstance(_)
                 | Type::PropertyInstance(_)
-                | Type::Intersection(_)
                 | Type::AlwaysTruthy
                 | Type::AlwaysFalsy
                 | Type::IntLiteral(_)
