@@ -2642,7 +2642,7 @@ def function():
 
             Wow these are good docs!
             """
-        
+
         x = Foo()
         x.a<CURSOR>
         "#,
@@ -3102,7 +3102,7 @@ def function():
         let test = cursor_test(
             r#"
         def a<CURSOR>b():
-            """wow cool docs""" 
+            """wow cool docs"""
             # and a comment that shouldn't be included
             """and docs"""
             return
@@ -3129,7 +3129,7 @@ def function():
           |     ||
           |     |Cursor offset
           |     source
-        3 |     """wow cool docs""" 
+        3 |     """wow cool docs"""
         4 |     # and a comment that shouldn't be included
           |
         "#);
@@ -3141,7 +3141,7 @@ def function():
             r#"
         def a<CURSOR>b():
             (
-                """wow cool docs""" 
+                """wow cool docs"""
                 """and docs"""
             )
             return
@@ -3169,7 +3169,7 @@ def function():
           |     |Cursor offset
           |     source
         3 |     (
-        4 |         """wow cool docs""" 
+        4 |         """wow cool docs"""
           |
         "#);
     }
@@ -3180,7 +3180,7 @@ def function():
             r#"
         def a<CURSOR>b():
             (
-                """wow cool docs""" 
+                """wow cool docs"""
                 # and a comment that shouldn't be included
                 """and docs"""
             )
@@ -3209,7 +3209,7 @@ def function():
           |     |Cursor offset
           |     source
         3 |     (
-        4 |         """wow cool docs""" 
+        4 |         """wow cool docs"""
           |
         "#);
     }

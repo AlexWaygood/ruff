@@ -3,35 +3,79 @@ import sys
 import types
 from collections.abc import Iterable
 from enum import Enum
-from typing import (
-    Any,
-    ClassVar,
-    LiteralString,
-    Protocol,
-    _SpecialForm,
-)
+from typing import Any, ClassVar, Protocol, _SpecialForm
 
-from typing_extensions import Self  # noqa: UP035
+from typing_extensions import Self, LiteralString  # noqa: UP035
 
 # Special operations
 def static_assert(condition: object, msg: LiteralString | None = None) -> None: ...
 
 # Types
-Unknown = object()
-AlwaysTruthy = object()
-AlwaysFalsy = object()
+Unknown: _SpecialForm
+AlwaysTruthy: _SpecialForm
+AlwaysFalsy: _SpecialForm
 
 # Special forms
 Not: _SpecialForm
 Intersection: _SpecialForm
 TypeOf: _SpecialForm
 CallableTypeOf: _SpecialForm
-# Top[T] evaluates to the top materialization of T, a type that is a supertype
-# of every materialization of T.
+
 Top: _SpecialForm
-# Bottom[T] evaluates to the bottom materialization of T, a type that is a subtype
-# of every materialization of T.
+"""
+`Top[T]` represents the "top materialization" of `T`.
+
+For any type `T`, the top [materialization] of `T` is a type that is
+a supertype of all materializations of `T`.
+
+For a [fully static] type `T`, `Top[T]` is always exactly the same type
+as `T` itself. For example, the top materialization of `Sequence[int]`
+is simply `Sequence[int]`.
+
+For a [gradual type] `T` that contains `Any` or `Unknown` inside it,
+however, `Top[T]` will not be equivalent to `T`. `Top[Sequence[Any]]`
+evaluates to `Sequence[object]`: since `Sequence` is covariant, no
+possible materialization of `Any` exists such that a fully static
+materialization of `Sequence[Any]` would not be a subtype of
+`Sequence[object]`.
+
+`Top[T]` cannot be simplified further for invariant gradual types.
+`Top[list[Any]]` cannot be simplified to any other type: because `list`
+is invariant, `list[object]` is not a supertype of `list[int]`. The
+top materialization of `list[Any]` is simply `Top[list[Any]]`.
+
+[materialization]: https://typing.python.org/en/latest/spec/concepts.html#materialization
+[fully static]: https://typing.python.org/en/latest/spec/concepts.html#fully-static-types
+[gradual type]: https://typing.python.org/en/latest/spec/concepts.html#gradual-types
+"""
+
 Bottom: _SpecialForm
+"""
+`Bottom[T]` represents the "bottom materialization" of `T`.
+
+For any type `T`, the bottom [materialization] of `T` is a type that is
+a subtype of all materializations of `T`.
+
+For a [fully static] type `T`, `Bottom[T]` is always exactly the same type
+as `T` itself. For example, the bottom materialization of `Sequence[int]`
+is simply `Sequence[int]`.
+
+For a [gradual type] `T` that contains `Any` or `Unknown` inside it,
+however, `Bottom[T]` will not be equivalent to `T`. `Bottom[Sequence[Any]]`
+evaluates to `Sequence[Never]`: since `Sequence` is covariant, no
+possible materialization of `Any` exists such that a fully static
+materialization of `Sequence[Any]` would not be a subtype of
+`Sequence[Never]`.
+
+For many invariant gradual types `T`, `Bottom[T]` is equivalent to
+[`Never`][Never]. There is no inhabited fully static type that is a subtype
+of both `list[int]` and `list[str]`, so `Bottom[list[Any]]` is simply `Never`.
+
+[materialization]: https://typing.python.org/en/latest/spec/concepts.html#materialization
+[fully static]: https://typing.python.org/en/latest/spec/concepts.html#fully-static-types
+[gradual type]: https://typing.python.org/en/latest/spec/concepts.html#gradual-types
+[Never]: https://typing.python.org/en/latest/spec/special-types.html#never
+"""
 
 # ty treats annotations of `float` to mean `float | int`, and annotations of `complex`
 # to mean `complex | float | int`. This is to support a typing-system special case [1].
