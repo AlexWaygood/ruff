@@ -26,6 +26,13 @@ pub fn hover(db: &dyn Db, file: File, offset: TextSize) -> Option<RangedValue<Ho
             ty_python_semantic::ImportAliasResolution::ResolveAliases,
         )
         .and_then(|definitions| definitions.docstring(db))
+        .or_else(|| {
+            goto_target
+                .inferred_type(&model)
+                .and_then(|ty| ty.definition(db))
+                .and_then(|definition| definition.docstring(db))
+                .map(Docstring::new)
+        })
         .map(HoverContent::Docstring);
 
     let mut contents = Vec::new();
@@ -208,8 +215,8 @@ mod tests {
         Literal[10]
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -262,10 +269,10 @@ mod tests {
         ) -> Unknown
         ```
         ---
-        This is such a great func!!  
-          
-        Args:  
-        &nbsp;&nbsp;&nbsp;&nbsp;a: first for a reason  
+        This is such a great func!!
+
+        Args:
+        &nbsp;&nbsp;&nbsp;&nbsp;a: first for a reason
         &nbsp;&nbsp;&nbsp;&nbsp;b: coming for `a`'s title
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -317,10 +324,10 @@ mod tests {
         ) -> Unknown
         ```
         ---
-        This is such a great func!!  
-          
-        Args:  
-        &nbsp;&nbsp;&nbsp;&nbsp;a: first for a reason  
+        This is such a great func!!
+
+        Args:
+        &nbsp;&nbsp;&nbsp;&nbsp;a: first for a reason
         &nbsp;&nbsp;&nbsp;&nbsp;b: coming for `a`'s title
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -380,10 +387,10 @@ mod tests {
         <class 'MyClass'>
         ```
         ---
-        This is such a great class!!  
-          
-        &nbsp;&nbsp;&nbsp;&nbsp;Don't you know?  
-          
+        This is such a great class!!
+
+        &nbsp;&nbsp;&nbsp;&nbsp;Don't you know?
+
         Everyone loves my class!!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -442,10 +449,10 @@ mod tests {
         <class 'MyClass'>
         ```
         ---
-        This is such a great class!!  
-          
-        &nbsp;&nbsp;&nbsp;&nbsp;Don't you know?  
-          
+        This is such a great class!!
+
+        &nbsp;&nbsp;&nbsp;&nbsp;Don't you know?
+
         Everyone loves my class!!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -617,10 +624,10 @@ mod tests {
         <class 'MyClass'>
         ```
         ---
-        This is such a great class!!  
-          
-        &nbsp;&nbsp;&nbsp;&nbsp;Don't you know?  
-          
+        This is such a great class!!
+
+        &nbsp;&nbsp;&nbsp;&nbsp;Don't you know?
+
         Everyone loves my class!!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -688,10 +695,10 @@ mod tests {
         ) -> Unknown
         ```
         ---
-        This is such a great func!!  
-          
-        Args:  
-        &nbsp;&nbsp;&nbsp;&nbsp;a: first for a reason  
+        This is such a great func!!
+
+        Args:
+        &nbsp;&nbsp;&nbsp;&nbsp;a: first for a reason
         &nbsp;&nbsp;&nbsp;&nbsp;b: coming for `a`'s title
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -1706,8 +1713,8 @@ def ab(a: int, *, c: int):
         <module 'lib'>
         ```
         ---
-        The cool lib/_py module!  
-          
+        The cool lib/_py module!
+
         Wow this module rocks.
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2260,8 +2267,8 @@ def function():
         <module 'lib'>
         ```
         ---
-        The cool lib/_py module!  
-          
+        The cool lib/_py module!
+
         Wow this module rocks.
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2381,8 +2388,8 @@ def function():
         Literal[1]
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2430,8 +2437,8 @@ def function():
         Literal[1]
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2479,8 +2486,8 @@ def function():
         Literal[2]
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2530,8 +2537,8 @@ def function():
         Unknown | Literal[1]
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2573,8 +2580,8 @@ def function():
         int
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2615,8 +2622,8 @@ def function():
         Literal[1]
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2660,8 +2667,8 @@ def function():
         int
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2702,8 +2709,8 @@ def function():
         int
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
@@ -2749,8 +2756,8 @@ def function():
         int
         ```
         ---
-        This is the docs for this value  
-          
+        This is the docs for this value
+
         Wow these are good docs!
         ---------------------------------------------
         info[hover]: Hovered content is
