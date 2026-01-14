@@ -69,11 +69,11 @@ use crate::types::diagnostic::{
     INVALID_NEWTYPE, INVALID_OVERLOAD, INVALID_PARAMETER_DEFAULT, INVALID_PARAMSPEC,
     INVALID_PROTOCOL, INVALID_TYPE_ARGUMENTS, INVALID_TYPE_FORM, INVALID_TYPE_GUARD_CALL,
     INVALID_TYPE_VARIABLE_CONSTRAINTS, INVALID_TYPED_DICT_STATEMENT, IncompatibleBases,
-    NOT_SUBSCRIPTABLE, POSSIBLY_MISSING_ATTRIBUTE, POSSIBLY_MISSING_IMPLICIT_CALL,
-    POSSIBLY_MISSING_IMPORT, SUBCLASS_OF_FINAL_CLASS, TypedDictDeleteErrorKind, UNDEFINED_REVEAL,
-    UNRESOLVED_ATTRIBUTE, UNRESOLVED_GLOBAL, UNRESOLVED_IMPORT, UNRESOLVED_REFERENCE,
-    UNSUPPORTED_DYNAMIC_BASE, UNSUPPORTED_OPERATOR, USELESS_OVERLOAD_BODY,
-    hint_if_stdlib_attribute_exists_on_other_versions,
+    NO_MATCHING_OVERLOAD, NOT_SUBSCRIPTABLE, POSSIBLY_MISSING_ATTRIBUTE,
+    POSSIBLY_MISSING_IMPLICIT_CALL, POSSIBLY_MISSING_IMPORT, SUBCLASS_OF_FINAL_CLASS,
+    TypedDictDeleteErrorKind, UNDEFINED_REVEAL, UNRESOLVED_ATTRIBUTE, UNRESOLVED_GLOBAL,
+    UNRESOLVED_IMPORT, UNRESOLVED_REFERENCE, UNSUPPORTED_DYNAMIC_BASE, UNSUPPORTED_OPERATOR,
+    USELESS_OVERLOAD_BODY, hint_if_stdlib_attribute_exists_on_other_versions,
     hint_if_stdlib_submodule_exists_on_other_versions, report_attempted_protocol_instantiation,
     report_bad_dunder_set_call, report_bad_frozen_dataclass_inheritance,
     report_cannot_delete_typed_dict_key, report_cannot_pop_required_field_on_typed_dict,
@@ -5448,10 +5448,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                             // Try to extract the dynamic class with definition.
                             // This returns `None` if it's not a three-arg call to `type()`,
                             // signalling that we must fall back to normal call inference.
-                            self.infer_dynamic_type_expression(call_expr, Some(definition))
-                                .unwrap_or_else(|| {
-                                    self.infer_call_expression_impl(call_expr, callable_type, tcx)
-                                })
+                            self.infer_builtins_type_call(call_expr, Some(definition))
                         }
                         Some(_) | None => {
                             self.infer_call_expression_impl(call_expr, callable_type, tcx)
@@ -6056,19 +6053,15 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         }
     }
 
-    /// Try to infer a 3-argument `type(name, bases, dict)` call expression, capturing the definition.
+    /// Try to infer a call to `builtins.type()`.
     ///
-    /// This is called when we detect a `type()` call in assignment context and want to
-    /// associate the resulting `DynamicClassLiteral` with its definition for go-to-definition.
-    ///
-    /// Returns `None` if any keywords were provided or the number of arguments is not three,
-    /// signalling that no types were stored for any AST sub-expressions and that we should
-    /// therefore fallback to normal call binding for error reporting.
-    fn infer_dynamic_type_expression(
+    /// `builtins.type` has two overloads: a single-argument overload (e.g. `type("foo")`,
+    /// and a 3-argument `type(name, bases, dict)` overload. Both are handled here.
+    fn infer_builtins_type_call(
         &mut self,
         call_expr: &ast::ExprCall,
         definition: Option<Definition<'db>>,
-    ) -> Option<Type<'db>> {
+    ) -> Type<'db> {
         let db = self.db();
 
         let ast::Arguments {
@@ -6078,18 +6071,92 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             node_index: _,
         } = &call_expr.arguments;
 
-        if !keywords.is_empty() {
-            return None;
+        for keyword in keywords {
+            self.infer_expression(&keyword.value, TypeContext::default());
         }
 
-        let [name_arg, bases_arg, namespace_arg] = &**args else {
-            return None;
+        let [name_arg, bases_arg, namespace_arg] = match &**args {
+            [single] => {
+                let arg_type = self.infer_expression(single, TypeContext::default());
+                return if keywords.is_empty() {
+                    arg_type.dunder_class(db)
+                } else {
+                    if keywords.iter().any(|keyword| keyword.arg.is_some())
+                        && let Some(builder) =
+                            self.context.report_lint(&NO_MATCHING_OVERLOAD, call_expr)
+                    {
+                        let mut diagnostic = builder
+                            .into_diagnostic("No overload of class `type` matches arguments");
+                        diagnostic.help(format_args!(
+                            "`builtins.type()` expects no keyword arguments",
+                        ));
+                    }
+                    SubclassOfType::subclass_of_unknown()
+                };
+            }
+
+            [first, second] if second.is_starred_expr() => {
+                self.infer_expression(first, TypeContext::default());
+                self.infer_expression(second, TypeContext::default());
+
+                match &**keywords {
+                    [single] if single.arg.is_none() => {
+                        return SubclassOfType::subclass_of_unknown();
+                    }
+                    _ => {
+                        if let Some(builder) =
+                            self.context.report_lint(&NO_MATCHING_OVERLOAD, call_expr)
+                        {
+                            let mut diagnostic = builder
+                                .into_diagnostic("No overload of class `type` matches arguments");
+                            diagnostic.help(format_args!(
+                                "`builtins.type()` expects no keyword arguments",
+                            ));
+                        }
+                        return SubclassOfType::subclass_of_unknown();
+                    }
+                }
+            }
+
+            [name, bases, namespace] => [name, bases, namespace],
+
+            _ => {
+                for arg in args {
+                    self.infer_expression(arg, TypeContext::default());
+                }
+                if let Some(builder) = self.context.report_lint(&NO_MATCHING_OVERLOAD, call_expr) {
+                    let mut diagnostic =
+                        builder.into_diagnostic("No overload of class `type` matches arguments");
+                    diagnostic.help(format_args!(
+                        "`builtins.type()` can either be called with one or three \
+                        positional arguments (got {})",
+                        args.len()
+                    ));
+                }
+                return SubclassOfType::subclass_of_unknown();
+            }
         };
+
+        if keywords
+            .iter()
+            .filter_map(|keyword| keyword.arg.as_deref())
+            .contains("metaclass")
+        {
+            if let Some(builder) = self.context.report_lint(&NO_MATCHING_OVERLOAD, call_expr) {
+                let mut diagnostic =
+                    builder.into_diagnostic("No overload of class `type` matches arguments");
+                diagnostic
+                    .help("The `metaclass` keyword argument is not supported in `type()` calls");
+            }
+        } else if !keywords.is_empty() {
+            // TODO: validate other keywords against `__init_subclass__` methods of superclasses
+            return SubclassOfType::subclass_of_unknown();
+        }
 
         // If any argument is a starred expression, we can't know how many positional arguments
         // we're receiving, so fall back to normal call binding.
         if args.iter().any(ast::Expr::is_starred_expr) {
-            return None;
+            return SubclassOfType::subclass_of_unknown();
         }
 
         // Infer the argument types.
@@ -6271,7 +6338,7 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             );
         }
 
-        Some(Type::ClassLiteral(ClassLiteral::Dynamic(dynamic_class)))
+        Type::ClassLiteral(ClassLiteral::Dynamic(dynamic_class))
     }
 
     /// Extract base classes from the second argument of a `type()` call.
@@ -9316,9 +9383,8 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
         // Handle 3-argument `type(name, bases, dict)`.
         if let Type::ClassLiteral(class) = callable_type
             && class.is_known(self.db(), KnownClass::Type)
-            && let Some(dynamic_type) = self.infer_dynamic_type_expression(call_expression, None)
         {
-            return dynamic_type;
+            return self.infer_builtins_type_call(call_expression, None);
         }
 
         // We don't call `Type::try_call`, because we want to perform type inference on the

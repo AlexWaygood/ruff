@@ -496,19 +496,19 @@ Other numbers of arguments are invalid:
 
 ```py
 # error: [no-matching-overload] "No overload of class `type` matches arguments"
-reveal_type(type("Foo", ()))  # revealed: Unknown
+reveal_type(type("Foo", ()))  # revealed: type[Unknown]
 
 # TODO: the keyword arguments for `Foo`/`Bar`/`Baz` here are invalid
-# (you cannot pass `metaclass=` to `type()`, and none of them have
-# base classes with `__init_subclass__` methods),
-# but `type[Unknown]` would be better than `Unknown` here
+# (none of them have base classes with `__init_subclass__` methods).
 #
+# We return `type[Unknown]` to reduce false positives from attribute access.
+reveal_type(type("Foo", (), {}, weird_other_arg=42))  # revealed: type[Unknown]
+reveal_type(type("Bar", (int,), {}, weird_other_arg=42))  # revealed: type[Unknown]
+
+# You can't pass `metaclass=` to the `type()` constructor, but the intent is clear,
+# so we infer `<class 'Baz'>` here rather than `type[Unknown]`
 # error: [no-matching-overload] "No overload of class `type` matches arguments"
-reveal_type(type("Foo", (), {}, weird_other_arg=42))  # revealed: Unknown
-# error: [no-matching-overload] "No overload of class `type` matches arguments"
-reveal_type(type("Bar", (int,), {}, weird_other_arg=42))  # revealed: Unknown
-# error: [no-matching-overload] "No overload of class `type` matches arguments"
-reveal_type(type("Baz", (), {}, metaclass=type))  # revealed: Unknown
+reveal_type(type("Baz", (), {}, metaclass=type))  # revealed: <class 'Baz'>
 ```
 
 The following calls are also invalid, due to incorrect argument types:
@@ -1004,9 +1004,6 @@ class Child(Base, required_arg="value"):
 # The dynamically assigned attribute has Unknown in its type
 reveal_type(Child.config)  # revealed: Unknown | str
 
-# Dynamic class creation - keyword arguments are not yet supported
-# TODO: This should work: type("DynamicChild", (Base,), {}, required_arg="value")
-# error: [no-matching-overload]
 DynamicChild = type("DynamicChild", (Base,), {}, required_arg="value")
 ```
 
