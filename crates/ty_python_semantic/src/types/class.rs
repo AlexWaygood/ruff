@@ -3268,14 +3268,14 @@ impl<'db> StaticClassLiteral<'db> {
                 }
                 .with_annotated_type(field_ty);
 
-                if matches!(name, "__replace__" | "_replace") {
+                parameter = if matches!(name, "__replace__" | "_replace") {
                     // When replacing, we know there is a default value for the field
                     // (the value that is currently assigned to the field)
                     // assume this to be the declared type of the field
-                    parameter = parameter.with_default_type(field_ty);
-                } else if let Some(default_ty) = default_ty {
-                    parameter = parameter.with_default_type(default_ty);
-                }
+                    parameter.with_default_type(field_ty)
+                } else {
+                    parameter.with_optional_default_type(default_ty)
+                };
 
                 parameters.push(parameter);
             }
@@ -3338,7 +3338,11 @@ impl<'db> StaticClassLiteral<'db> {
                         FieldKind::NamedTuple { default_ty } => *default_ty,
                         _ => None,
                     };
-                    (name.clone(), field.declared_ty, default_ty)
+                    NamedTupleField {
+                        name: name.clone(),
+                        ty: field.declared_ty,
+                        default: default_ty,
+                    }
                 });
                 synthesize_namedtuple_class_member(
                     db,
@@ -5304,7 +5308,7 @@ fn synthesize_namedtuple_class_member<'db>(
     db: &'db dyn Db,
     name: &str,
     instance_ty: Type<'db>,
-    fields: impl Iterator<Item = (Name, Type<'db>, Option<Type<'db>>)>,
+    fields: impl Iterator<Item = NamedTupleField<'db>>,
     inherited_generic_context: Option<GenericContext<'db>>,
 ) -> Option<Type<'db>> {
     match name {
@@ -5321,19 +5325,16 @@ fn synthesize_namedtuple_class_member<'db>(
 
             let generic_context = GenericContext::from_typevar_instances(db, variables);
 
-            let mut parameters = vec![
-                Parameter::positional_or_keyword(Name::new_static("cls"))
-                    .with_annotated_type(SubclassOfType::from(db, self_typevar)),
-            ];
+            let first_parameter = Parameter::positional_or_keyword(Name::new_static("cls"))
+                .with_annotated_type(SubclassOfType::from(db, self_typevar));
 
-            for (field_name, field_ty, default_ty) in fields {
-                let mut param =
-                    Parameter::positional_or_keyword(field_name).with_annotated_type(field_ty);
-                if let Some(default) = default_ty {
-                    param = param.with_default_type(default);
-                }
-                parameters.push(param);
-            }
+            let parameters = std::iter::once(first_parameter).chain(fields.map(
+                |NamedTupleField { name, ty, default }| {
+                    Parameter::positional_or_keyword(name)
+                        .with_annotated_type(ty)
+                        .with_optional_default_type(default)
+                },
+            ));
 
             let signature = Signature::new_generic(
                 Some(generic_context),
@@ -5344,8 +5345,7 @@ fn synthesize_namedtuple_class_member<'db>(
         }
         "_fields" => {
             // _fields: tuple[Literal["field1"], Literal["field2"], ...]
-            let field_types =
-                fields.map(|(field_name, _, _)| Type::string_literal(db, &field_name));
+            let field_types = fields.map(|field| Type::string_literal(db, &field.name));
             Some(Type::heterogeneous_tuple(db, field_types))
         }
         "__slots__" => {
@@ -5364,18 +5364,16 @@ fn synthesize_namedtuple_class_member<'db>(
                 BindingContext::Synthetic,
             ));
 
-            let mut parameters = vec![
-                Parameter::positional_or_keyword(Name::new_static("self"))
-                    .with_annotated_type(self_ty),
-            ];
+            let first_parameter = Parameter::positional_or_keyword(Name::new_static("self"))
+                .with_annotated_type(self_ty);
 
-            for (field_name, field_ty, _) in fields {
-                parameters.push(
-                    Parameter::keyword_only(field_name)
-                        .with_annotated_type(field_ty)
-                        .with_default_type(field_ty),
-                );
-            }
+            let parameters = std::iter::once(first_parameter).chain(fields.map(
+                |NamedTupleField { name, ty, .. }| {
+                    Parameter::keyword_only(name)
+                        .with_annotated_type(ty)
+                        .with_default_type(ty)
+                },
+            ));
 
             let signature = Signature::new(Parameters::new(db, parameters), self_ty);
             Some(Type::function_like_callable(db, signature))
@@ -5394,6 +5392,13 @@ fn synthesize_namedtuple_class_member<'db>(
                 .ignore_possibly_undefined()
         }
     }
+}
+
+#[derive(Debug, salsa::Update, get_size2::GetSize, Clone, PartialEq, Eq, Hash)]
+pub struct NamedTupleField<'db> {
+    pub(crate) name: Name,
+    pub(crate) ty: Type<'db>,
+    pub(crate) default: Option<Type<'db>>,
 }
 
 /// A namedtuple created via the functional form `namedtuple(name, fields)` or
@@ -5420,8 +5425,8 @@ pub struct DynamicNamedTupleLiteral<'db> {
     /// For `collections.namedtuple`, all types are `Any`.
     /// For `typing.NamedTuple`, types come from the field definitions.
     /// The third element is the default type, if any.
-    #[returns(ref)]
-    pub fields: Box<[(Name, Type<'db>, Option<Type<'db>>)]>,
+    #[returns(deref)]
+    pub fields: Box<[NamedTupleField<'db>]>,
 
     /// Whether the fields are known statically.
     ///
@@ -5542,7 +5547,7 @@ impl<'db> DynamicNamedTupleLiteral<'db> {
             return TupleType::homogeneous(db, Type::unknown()).to_class_type(db);
         }
 
-        let field_types = self.fields(db).iter().map(|(_, ty, _)| *ty);
+        let field_types = self.fields(db).iter().map(|field| field.ty);
         TupleType::heterogeneous(db, field_types)
             .map(|t| t.to_class_type(db))
             .unwrap_or_else(|| {
@@ -5559,9 +5564,14 @@ impl<'db> DynamicNamedTupleLiteral<'db> {
     /// For dynamic namedtuples, instance members are the field names.
     /// If fields are unknown (dynamic), returns `Any` for any attribute.
     pub(super) fn own_instance_member(self, db: &'db dyn Db, name: &str) -> Member<'db> {
-        for (field_name, field_ty, _) in self.fields(db).as_ref() {
-            if field_name.as_str() == name {
-                return Member::definitely_declared(*field_ty);
+        for NamedTupleField {
+            name: field_name,
+            ty,
+            ..
+        } in self.fields(db)
+        {
+            if field_name == name {
+                return Member::definitely_declared(*ty);
             }
         }
 
@@ -5623,9 +5633,14 @@ impl<'db> DynamicNamedTupleLiteral<'db> {
         }
 
         // Check if it's a field name (returns a property descriptor).
-        for (field_name, field_ty, _) in self.fields(db).as_ref() {
-            if field_name.as_str() == name {
-                return Member::definitely_declared(create_field_property(db, *field_ty));
+        for NamedTupleField {
+            name: field_name,
+            ty,
+            ..
+        } in self.fields(db)
+        {
+            if field_name == name {
+                return Member::definitely_declared(create_field_property(db, *ty));
             }
         }
 
