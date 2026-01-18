@@ -2731,6 +2731,10 @@ impl<'db> FmtDetailed<'db> for DisplayKnownInstanceRepr<'db> {
                 f.with_type(ty).write_str(declaration.name(self.db))?;
                 f.write_str("'>")
             }
+            KnownInstanceType::NamedTupleSpec(_) => {
+                f.set_invalid_type_annotation();
+                f.write_str("<NamedTupleSpec>")
+            }
         }
     }
 }

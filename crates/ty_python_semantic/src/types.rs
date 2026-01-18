@@ -49,6 +49,7 @@ use crate::suppression::check_suppressions;
 use crate::types::bound_super::BoundSuperType;
 use crate::types::builder::RecursivelyDefined;
 use crate::types::call::{Binding, Bindings, CallArguments, CallableBinding};
+use crate::types::class::NamedTupleSpec;
 pub(crate) use crate::types::class_base::ClassBase;
 use crate::types::constraints::{ConstraintSet, IteratorConstraintsExtension};
 use crate::types::context::{LintDiagnosticGuard, LintDiagnosticGuardBuilder};
@@ -5496,23 +5497,37 @@ impl<'db> Type<'db> {
                     .unwrap_or(*self))
                 }
                 KnownInstanceType::Deprecated(_) => Err(InvalidTypeExpressionError {
-                    invalid_expressions: smallvec::smallvec![InvalidTypeExpression::Deprecated],
+                    invalid_expressions: smallvec::smallvec_inline![
+                        InvalidTypeExpression::Deprecated
+                    ],
                     fallback_type: Type::unknown(),
                 }),
                 KnownInstanceType::Field(__call__) => Err(InvalidTypeExpressionError {
-                    invalid_expressions: smallvec::smallvec![InvalidTypeExpression::Field],
+                    invalid_expressions: smallvec::smallvec_inline![InvalidTypeExpression::Field],
                     fallback_type: Type::unknown(),
                 }),
                 KnownInstanceType::ConstraintSet(__call__) => Err(InvalidTypeExpressionError {
-                    invalid_expressions: smallvec::smallvec![InvalidTypeExpression::ConstraintSet],
+                    invalid_expressions: smallvec::smallvec_inline![
+                        InvalidTypeExpression::ConstraintSet
+                    ],
                     fallback_type: Type::unknown(),
                 }),
                 KnownInstanceType::GenericContext(__call__) => Err(InvalidTypeExpressionError {
-                    invalid_expressions: smallvec::smallvec![InvalidTypeExpression::GenericContext],
+                    invalid_expressions: smallvec::smallvec_inline![
+                        InvalidTypeExpression::GenericContext
+                    ],
                     fallback_type: Type::unknown(),
                 }),
                 KnownInstanceType::Specialization(__call__) => Err(InvalidTypeExpressionError {
-                    invalid_expressions: smallvec::smallvec![InvalidTypeExpression::Specialization],
+                    invalid_expressions: smallvec::smallvec_inline![
+                        InvalidTypeExpression::Specialization
+                    ],
+                    fallback_type: Type::unknown(),
+                }),
+                KnownInstanceType::NamedTupleSpec(_) => Err(InvalidTypeExpressionError {
+                    invalid_expressions: smallvec::smallvec_inline![
+                        InvalidTypeExpression::NamedTupleSpec
+                    ],
                     fallback_type: Type::unknown(),
                 }),
                 KnownInstanceType::SubscriptedProtocol(_) => Err(InvalidTypeExpressionError {
@@ -5953,6 +5968,7 @@ impl<'db> Type<'db> {
                 KnownInstanceType::Specialization(_) |
                 KnownInstanceType::Literal(_) |
                 KnownInstanceType::LiteralStringAlias(_) |
+                KnownInstanceType::NamedTupleSpec(_) |
                 KnownInstanceType::NewType(_) => {
                     // TODO: For some of these, we may need to apply the type mapping to inner types.
                     self
@@ -6360,6 +6376,7 @@ impl<'db> Type<'db> {
                 | KnownInstanceType::Specialization(_)
                 | KnownInstanceType::Literal(_)
                 | KnownInstanceType::LiteralStringAlias(_)
+                | KnownInstanceType::NamedTupleSpec(_)
                 | KnownInstanceType::NewType(_) => {
                     // TODO: For some of these, we may need to try to find legacy typevars in inner types.
                 }
@@ -7027,6 +7044,8 @@ pub enum KnownInstanceType<'db> {
     /// An identity callable created with `typing.NewType(name, base)`, which behaves like a
     /// subtype of `base` in type expressions. See the `struct NewType` payload for an example.
     NewType(NewType<'db>),
+
+    NamedTupleSpec(NamedTupleSpec<'db>),
 }
 
 fn walk_known_instance_type<'db, V: visitor::TypeVisitor<'db> + ?Sized>(
@@ -7073,6 +7092,11 @@ fn walk_known_instance_type<'db, V: visitor::TypeVisitor<'db> + ?Sized>(
         KnownInstanceType::NewType(newtype) => {
             visitor.visit_type(db, newtype.concrete_base_type(db));
         }
+        KnownInstanceType::NamedTupleSpec(spec) => {
+            for field in spec.fields(db) {
+                visitor.visit_type(db, field.ty);
+            }
+        }
     }
 }
 
@@ -7113,6 +7137,7 @@ impl<'db> KnownInstanceType<'db> {
                 newtype
                     .map_base_class_type(db, |class_type| class_type.normalized_impl(db, visitor)),
             ),
+            Self::NamedTupleSpec(spec) => Self::NamedTupleSpec(spec.normalized_impl(db, visitor)),
             Self::Deprecated(_)
             | Self::ConstraintSet(_)
             | Self::GenericContext(_)
@@ -7169,6 +7194,9 @@ impl<'db> KnownInstanceType<'db> {
             Self::Specialization(specialization) => specialization
                 .recursive_type_normalized_impl(db, div, true)
                 .map(Self::Specialization),
+            Self::NamedTupleSpec(spec) => spec
+                .recursive_type_normalized_impl(db, div, true)
+                .map(Self::NamedTupleSpec),
         }
     }
 
@@ -7195,6 +7223,7 @@ impl<'db> KnownInstanceType<'db> {
             | Self::Callable(_) => KnownClass::GenericAlias,
             Self::LiteralStringAlias(_) => KnownClass::Str,
             Self::NewType(_) => KnownClass::NewType,
+            Self::NamedTupleSpec(_) => KnownClass::Sequence,
         }
     }
 
@@ -7466,6 +7495,8 @@ enum InvalidTypeExpression<'db> {
     GenericContext,
     /// Same for `ty_extensions.Specialization`
     Specialization,
+    /// Same for `NamedTupleSpec`
+    NamedTupleSpec,
     /// Same for `typing.TypedDict`
     TypedDict,
     /// Same for `typing.TypeAlias`, anywhere except for as the sole annotation on an annotated
@@ -7524,6 +7555,9 @@ impl<'db> InvalidTypeExpression<'db> {
                     InvalidTypeExpression::Specialization => f.write_str(
                         "`ty_extensions.GenericContext` is not allowed in type expressions",
                     ),
+                    InvalidTypeExpression::NamedTupleSpec => {
+                        f.write_str("`NamedTupleSpec` is not allowed in type expressions")
+                    }
                     InvalidTypeExpression::TypedDict => f.write_str(
                         "The special form `typing.TypedDict` \
                             is not allowed in type expressions",
