@@ -6161,13 +6161,15 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
             .try_expression_type(func)
             .unwrap_or_else(|| self.infer_expression(func, TypeContext::default()));
         if func_ty == Type::SpecialForm(SpecialFormType::NamedTuple) {
+            // Only the `fields` argument is deferred for `NamedTuple`;
+            // other arguments are inferred eagerly.
             self.infer_typing_namedtuple_fields(&arguments.args[1]);
             return;
         }
         let known_class = func_ty
             .as_class_literal()
             .and_then(|cls| cls.known(self.db()));
-        if let Some(KnownClass::NewType) = known_class {
+        if known_class == Some(KnownClass::NewType) {
             self.infer_newtype_assignment_deferred(arguments);
             return;
         }
@@ -6869,6 +6871,9 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                     DynamicNamedTupleAnchor::CollectionsDefinition { definition, spec }
                 }
                 NamedTupleKind::Typing => {
+                    // The `fields` argument to `typing.NamedTuple` cannot be inferred
+                    // eagerly if it's not a dangling call, as it may contain forward references
+                    // or recursive references.
                     self.deferred.insert(definition, self.multi_inference_state);
                     DynamicNamedTupleAnchor::TypingDefinition(definition)
                 }
