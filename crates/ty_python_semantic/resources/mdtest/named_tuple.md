@@ -228,23 +228,26 @@ from typing import NamedTuple
 from ty_extensions import static_assert, is_subtype_of, reveal_mro
 
 fields = (("host", str), ("port", int))
-Url = NamedTuple("Url", fields)  # error: [invalid-named-tuple]
+# error: [invalid-named-tuple] "Invalid argument to parameter `fields` of `NamedTuple()`: `fields` must be a literal list or tuple"
+Url = NamedTuple("Url", fields)
 
 url = Url("localhost", 8080)
 reveal_type(url.host)  # revealed: Any
 reveal_type(url.port)  # revealed: Any
 
 generic_fields = (("items", list[int]), ("mapping", dict[str, bool]))
-Container = NamedTuple("Container", generic_fields)  # error: [invalid-named-tuple]
+# error: [invalid-named-tuple] "Invalid argument to parameter `fields` of `NamedTuple()`: `fields` must be a literal list or tuple"
+Container = NamedTuple("Container", generic_fields)
 container = Container([1, 2, 3], {"a": True})
 reveal_type(container.items)  # revealed: Any
 reveal_type(container.mapping)  # revealed: Any
 
-# revealed: (<class 'Url'>, <class 'tuple[Unknown, ...]'>, <class 'object'>)
+# revealed: (<class 'Url'>, <class 'tuple[Unknown, ...]'>, <class 'Sequence[Unknown]'>, <class 'Reversible[Unknown]'>, <class 'Collection[Unknown]'>, <class 'Iterable[Unknown]'>, <class 'Container[Unknown]'>, typing.Protocol, typing.Generic, <class 'object'>)
 reveal_mro(Url)
 
 invalid_fields = (("x", 42),)  # 42 is not a valid type
-InvalidNT = NamedTuple("InvalidNT", invalid_fields)  # error: [invalid-named-tuple]
+# error: [invalid-named-tuple] "Invalid argument to parameter `fields` of `NamedTuple()`: `fields` must be a literal list or tuple"
+InvalidNT = NamedTuple("InvalidNT", invalid_fields)
 reveal_type(InvalidNT)  # revealed: <class 'InvalidNT'>
 
 host, port = url
@@ -302,11 +305,13 @@ def get_fields() -> tuple[tuple[str, type[int]], *tuple[tuple[str, type[str]], .
     return (("x", int), ("y", str))
 
 fields = get_fields()
-NT = NamedTuple("NT", fields)  # error: [invalid-named-tuple]
+# error: [invalid-named-tuple] "Invalid argument to parameter `fields` of `NamedTuple()`: `fields` must be a literal list or tuple"
+NT = NamedTuple("NT", fields)
 
 # Fields are unknown, so attribute access returns Any and MRO has Unknown tuple.
 reveal_type(NT)  # revealed: <class 'NT'>
-reveal_mro(NT)  # revealed: (<class 'NT'>, <class 'tuple[Unknown, ...]'>, <class 'object'>)
+# revealed: (<class 'NT'>, <class 'tuple[Unknown, ...]'>, <class 'Sequence[Unknown]'>, <class 'Reversible[Unknown]'>, <class 'Collection[Unknown]'>, <class 'Iterable[Unknown]'>, <class 'Container[Unknown]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(NT)
 reveal_type(NT(1, "a").x)  # revealed: Any
 ```
 
@@ -324,7 +329,8 @@ NT = collections.namedtuple("NT", field_names)
 
 # Fields are unknown, so attribute access returns Any and MRO has Unknown tuple.
 reveal_type(NT)  # revealed: <class 'NT'>
-reveal_mro(NT)  # revealed: (<class 'NT'>, <class 'tuple[Unknown, ...]'>, <class 'object'>)
+# revealed: (<class 'NT'>, <class 'tuple[Unknown, ...]'>, <class 'Sequence[Unknown]'>, <class 'Reversible[Unknown]'>, <class 'Collection[Unknown]'>, <class 'Iterable[Unknown]'>, <class 'Container[Unknown]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(NT)
 reveal_type(NT(1, 2).x)  # revealed: Any
 ```
 
@@ -341,7 +347,7 @@ class Url(NamedTuple("Url", [("host", str), ("path", str)])):
     pass
 
 reveal_type(Url)  # revealed: <class 'Url'>
-# revealed: (<class 'mdtest_snippet.Url @ src/mdtest_snippet.py:4:7'>, <class 'mdtest_snippet.Url @ src/mdtest_snippet.py:4:11'>, <class 'tuple[str, str]'>, <class 'object'>)
+# revealed: (<class 'mdtest_snippet.Url @ src/mdtest_snippet.py:4:7'>, <class 'mdtest_snippet.Url @ src/mdtest_snippet.py:4:11'>, <class 'tuple[str, str]'>, <class 'Sequence[str]'>, <class 'Reversible[str]'>, <class 'Collection[str]'>, <class 'Iterable[str]'>, <class 'Container[str]'>, typing.Protocol, typing.Generic, <class 'object'>)
 reveal_mro(Url)
 reveal_type(Url.__new__)  # revealed: [Self](cls: type[Self], host: str, path: str) -> Self
 
@@ -426,7 +432,8 @@ from typing_extensions import Self
 
 fields = [("host", str), ("port", int)]
 
-class Url(NamedTuple("Url", fields)):  # error: [invalid-named-tuple]
+# error: [invalid-named-tuple] "Invalid argument to parameter `fields` of `NamedTuple()`: `fields` must be a literal list or tuple"
+class Url(NamedTuple("Url", fields)):
     def with_port(self, port: int) -> Self:
         # Fields are unknown, so attribute access returns Any.
         reveal_type(self.host)  # revealed: Any
@@ -451,7 +458,7 @@ reveal_type(config)  # revealed: GroundTruth
 reveal_type(config.duration)  # revealed: Any
 
 # Namedtuples with unknown fields inherit from tuple[Unknown, ...] to avoid false positives.
-# revealed: (<class 'GroundTruth'>, <class 'tuple[Unknown, ...]'>, <class 'object'>)
+# revealed: (<class 'GroundTruth'>, <class 'tuple[Unknown, ...]'>, <class 'Sequence[Unknown]'>, <class 'Reversible[Unknown]'>, <class 'Collection[Unknown]'>, <class 'Iterable[Unknown]'>, <class 'Container[Unknown]'>, typing.Protocol, typing.Generic, <class 'object'>)
 reveal_mro(GroundTruth)
 
 # No index-out-of-bounds error since the tuple length is unknown.
@@ -470,33 +477,38 @@ from ty_extensions import reveal_mro
 # String field names (space-separated)
 Point1 = collections.namedtuple("Point", "x y")
 reveal_type(Point1)  # revealed: <class 'Point'>
-reveal_mro(Point1)  # revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'object'>)
+# revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Point1)
 
 # String field names with multiple spaces
 Point1a = collections.namedtuple("Point", "x       y")
 reveal_type(Point1a)  # revealed: <class 'Point'>
-reveal_mro(Point1a)  # revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'object'>)
+# revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Point1a)
 
 # String field names (comma-separated also works at runtime)
 Point2 = collections.namedtuple("Point", "x, y")
 reveal_type(Point2)  # revealed: <class 'Point'>
-reveal_mro(Point2)  # revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'object'>)
+# revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Point2)
 
 # List of strings
 Point3 = collections.namedtuple("Point", ["x", "y"])
 reveal_type(Point3)  # revealed: <class 'Point'>
-reveal_mro(Point3)  # revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'object'>)
+# revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Point3)
 
 # Tuple of strings
 Point4 = collections.namedtuple("Point", ("x", "y"))
 reveal_type(Point4)  # revealed: <class 'Point'>
-reveal_mro(Point4)  # revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'object'>)
-
+# revealed: (<class 'Point'>, <class 'tuple[Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Point4)
 # Invalid: integer is not a valid typename
 # error: [invalid-argument-type]
 Invalid = collections.namedtuple(123, ["x", "y"])
 reveal_type(Invalid)  # revealed: <class '<unknown>'>
-reveal_mro(Invalid)  # revealed: (<class '<unknown>'>, <class 'tuple[Any, Any]'>, <class 'object'>)
+# revealed: (<class '<unknown>'>, <class 'tuple[Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Invalid)
 
 # Invalid: too many positional arguments
 # error: [too-many-positional-arguments] "Too many positional arguments to function `namedtuple`: expected 2, got 4"
@@ -539,7 +551,8 @@ from ty_extensions import reveal_mro
 # Both `typename` and `field_names` can be passed as keyword arguments
 NT1 = collections.namedtuple(typename="NT1", field_names="x y")
 reveal_type(NT1)  # revealed: <class 'NT1'>
-reveal_mro(NT1)  # revealed: (<class 'NT1'>, <class 'tuple[Any, Any]'>, <class 'object'>)
+# revealed: (<class 'NT1'>, <class 'tuple[Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(NT1)
 
 nt1 = NT1(1, 2)
 reveal_type(nt1.x)  # revealed: Any
@@ -548,7 +561,8 @@ reveal_type(nt1.y)  # revealed: Any
 # Only `field_names` as keyword argument
 NT2 = collections.namedtuple("NT2", field_names=["a", "b", "c"])
 reveal_type(NT2)  # revealed: <class 'NT2'>
-reveal_mro(NT2)  # revealed: (<class 'NT2'>, <class 'tuple[Any, Any, Any]'>, <class 'object'>)
+# revealed: (<class 'NT2'>, <class 'tuple[Any, Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(NT2)
 
 nt2 = NT2(1, 2, 3)
 reveal_type(nt2.a)  # revealed: Any
@@ -581,7 +595,8 @@ from ty_extensions import reveal_mro
 Point = collections.namedtuple("Point", ["x", "class", "_y", "z", "z"], rename=True)
 reveal_type(Point)  # revealed: <class 'Point'>
 reveal_type(Point.__new__)  # revealed: [Self](cls: type[Self], x: Any, _1: Any, _2: Any, z: Any, _4: Any) -> Self
-reveal_mro(Point)  # revealed: (<class 'Point'>, <class 'tuple[Any, Any, Any, Any, Any]'>, <class 'object'>)
+# revealed: (<class 'Point'>, <class 'tuple[Any, Any, Any, Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Point)
 p = Point(1, 2, 3, 4, 5)
 reveal_type(p.x)  # revealed: Any
 reveal_type(p._1)  # revealed: Any
@@ -621,7 +636,8 @@ Person = collections.namedtuple("Person", ["name", "age", "city"], defaults=["Un
 reveal_type(Person)  # revealed: <class 'Person'>
 reveal_type(Person.__new__)  # revealed: [Self](cls: type[Self], name: Any, age: Any, city: Any = "Unknown") -> Self
 
-reveal_mro(Person)  # revealed: (<class 'Person'>, <class 'tuple[Any, Any, Any]'>, <class 'object'>)
+# revealed: (<class 'Person'>, <class 'tuple[Any, Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Person)
 # Can create with all fields
 person1 = Person("Alice", 30, "NYC")
 # Can omit the field with default
@@ -643,14 +659,16 @@ reveal_type(TooManyDefaults.__new__)  # revealed: [Self](cls: type[Self], x: Any
 # error: [unknown-argument]
 Bad1 = collections.namedtuple("Bad1", ["x", "y"], foobarbaz=42)
 reveal_type(Bad1)  # revealed: <class 'Bad1'>
-reveal_mro(Bad1)  # revealed: (<class 'Bad1'>, <class 'tuple[Any, Any]'>, <class 'object'>)
+# revealed: (<class 'Bad1'>, <class 'tuple[Any, Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Bad1)
 
 # Multiple unknown keyword arguments
 # error: [unknown-argument]
 # error: [unknown-argument]
 Bad2 = collections.namedtuple("Bad2", ["x"], invalid1=True, invalid2=False)
 reveal_type(Bad2)  # revealed: <class 'Bad2'>
-reveal_mro(Bad2)  # revealed: (<class 'Bad2'>, <class 'tuple[Any]'>, <class 'object'>)
+# revealed: (<class 'Bad2'>, <class 'tuple[Any]'>, <class 'Sequence[Any]'>, <class 'Reversible[Any]'>, <class 'Collection[Any]'>, <class 'Iterable[Any]'>, <class 'Container[Any]'>, typing.Protocol, typing.Generic, <class 'object'>)
+reveal_mro(Bad2)
 
 # Invalid type for `defaults` (not Iterable[Any] | None)
 # error: [invalid-argument-type] "Invalid argument to parameter `defaults` of `namedtuple()`"

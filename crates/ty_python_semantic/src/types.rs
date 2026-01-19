@@ -7045,6 +7045,7 @@ pub enum KnownInstanceType<'db> {
     /// subtype of `base` in type expressions. See the `struct NewType` payload for an example.
     NewType(NewType<'db>),
 
+    /// The inferred spec for a functional `NamedTuple` class.
     NamedTupleSpec(NamedTupleSpec<'db>),
 }
 
