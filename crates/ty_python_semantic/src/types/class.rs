@@ -5737,35 +5737,70 @@ fn dynamic_namedtuple_mro_cycle_initial<'db>(
     )
 }
 
-/// Anchor for identifying a dynamic class literal.
+/// Anchor for identifying a dynamic `namedtuple`/`NamedTuple` class literal.
 ///
-/// This enum provides stable identity for `DynamicClassLiteral`:
+/// This enum provides stable identity for `DynamicNamedTupleLiteral` instances:
 /// - For assigned calls, the `Definition` uniquely identifies the class.
 /// - For dangling calls, a relative offset provides stable identity.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, salsa::Update, get_size2::GetSize)]
 pub enum DynamicNamedTupleAnchor<'db> {
-    /// The `namedtuple()`/`NamedTuple` call is assigned to a variable.
+    /// We're dealing with a `collections.namedtuple()` call
+    /// that's assigned to a variable.
     ///
-    /// The `Definition` uniquely identifies this class. The `type()` call expression
-    /// is the `value` of the assignment, so we can get its range from the definition.
+    /// The `Definition` uniquely identifies this class. The `namedtuple()`
+    /// call expression is the `value` of the assignment, so we can get its
+    /// range from the definition.
     CollectionsDefinition {
         definition: Definition<'db>,
         spec: NamedTupleSpec<'db>,
     },
 
-    /// The `type()` call is "dangling" (not assigned to a variable).
+    /// We're dealing with a `typing.NamedTuple()` call
+    /// that's assigned to a variable.
+    ///
+    /// The `Definition` uniquely identifies this class. The `NamedTuple()`
+    /// call expression is the `value` of the assignment, so we can get its
+    /// range from the definition.
+    ///
+    /// Unlike the `CollectionsDefinition` variant, this variant does not
+    /// hold a `NamedTupleSpec`. This is because the spec for a
+    /// `typing.NamedTuple` call can contain forward references and recursive
+    /// references that must be evaluated lazily. The spec is computed
+    /// on-demand from the definition.
+    TypingDefinition(Definition<'db>),
+
+    /// We're dealing with a `namedtuple()` or `NamedTuple` call that is
+    /// "dangling" (not assigned to a variable).
     ///
     /// The offset is relative to the enclosing scope's anchor node index.
     /// For module scope, this is equivalent to an absolute index (anchor is 0).
+    ///
+    /// Dangling calls can always store the spec. They *can* contain
+    /// forward references if they appear in class bases:
+    ///
+    /// ```python
+    /// from typing import NamedTuple
+    ///
+    /// class F(NamedTuple("F", [("x", "F | None")]):
+    ///     pass
+    /// ```
+    ///
+    /// But this doesn't matter, because all class bases are deferred in their
+    /// entirety during type inference.
     ScopeOffset {
         scope: ScopeId<'db>,
         offset: u32,
         spec: NamedTupleSpec<'db>,
     },
-
-    TypingDefinition(Definition<'db>),
 }
 
+/// A specification describing the fields of a dynamic `namedtuple`
+/// or `NamedTuple` class.
+///
+/// # Ordering
+///
+/// Ordering is based on the spec's salsa-assigned id and not on its values.
+/// The id may change between runs, or when the spec was garbage collected and recreated.
 #[salsa::interned(debug, heap_size=ruff_memory_usage::heap_size)]
 #[derive(PartialOrd, Ord)]
 pub struct NamedTupleSpec<'db> {
@@ -5776,10 +5811,12 @@ pub struct NamedTupleSpec<'db> {
 }
 
 impl<'db> NamedTupleSpec<'db> {
+    /// Create a [`NamedTupleSpec`] with the given fields.
     pub(crate) fn known(db: &'db dyn Db, fields: Box<[NamedTupleField<'db>]>) -> Self {
         Self::new(db, fields, true)
     }
 
+    /// Create a [`NamedTupleSpec`] that indicates a namedtuple class has unknown fields.
     pub(crate) fn unknown(db: &'db dyn Db) -> Self {
         Self::new(db, Box::default(), false)
     }
