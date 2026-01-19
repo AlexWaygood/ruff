@@ -5511,16 +5511,9 @@ impl<'db> DynamicNamedTupleLiteral<'db> {
     pub(crate) fn mro(self, db: &'db dyn Db) -> Mro<'db> {
         let self_base = ClassBase::Class(ClassType::NonGeneric(self.into()));
         let tuple_class = self.tuple_base_class(db);
-        let object_class = KnownClass::Object
-            .to_class_literal(db)
-            .as_class_literal()
-            .expect("object should be a class literal")
-            .default_specialization(db);
-        Mro::from([
-            self_base,
-            ClassBase::Class(tuple_class),
-            ClassBase::Class(object_class),
-        ])
+        std::iter::once(self_base)
+            .chain(tuple_class.iter_mro(db))
+            .collect()
     }
 
     /// Get the metaclass of this dynamic namedtuple.
@@ -5558,14 +5551,9 @@ impl<'db> DynamicNamedTupleLiteral<'db> {
     /// For dynamic namedtuples, instance members are the field names.
     /// If fields are unknown (dynamic), returns `Any` for any attribute.
     pub(super) fn own_instance_member(self, db: &'db dyn Db, name: &str) -> Member<'db> {
-        for NamedTupleField {
-            name: field_name,
-            ty,
-            ..
-        } in self.fields(db)
-        {
-            if field_name == name {
-                return Member::definitely_declared(*ty);
+        for field in self.fields(db) {
+            if field.name == name {
+                return Member::definitely_declared(field.ty);
             }
         }
 
@@ -5627,14 +5615,9 @@ impl<'db> DynamicNamedTupleLiteral<'db> {
         }
 
         // Check if it's a field name (returns a property descriptor).
-        for NamedTupleField {
-            name: field_name,
-            ty,
-            ..
-        } in self.fields(db)
-        {
-            if field_name == name {
-                return Member::definitely_declared(create_field_property(db, *ty));
+        for field in self.fields(db) {
+            if field.name == name {
+                return Member::definitely_declared(create_field_property(db, field.ty));
             }
         }
 
@@ -5748,18 +5731,10 @@ fn dynamic_namedtuple_mro_cycle_initial<'db>(
     _id: salsa::Id,
     self_: DynamicNamedTupleLiteral<'db>,
 ) -> Mro<'db> {
-    let self_base = ClassBase::Class(ClassType::NonGeneric(self_.into()));
-    let tuple_class = self_.tuple_base_class(db);
-    let object_class = KnownClass::Object
-        .to_class_literal(db)
-        .as_class_literal()
-        .expect("object should be a class literal")
-        .default_specialization(db);
-    Mro::from([
-        self_base,
-        ClassBase::Class(tuple_class),
-        ClassBase::Class(object_class),
-    ])
+    Mro::from_error(
+        db,
+        ClassType::NonGeneric(ClassLiteral::DynamicNamedTuple(self_)),
+    )
 }
 
 /// Anchor for identifying a dynamic class literal.
