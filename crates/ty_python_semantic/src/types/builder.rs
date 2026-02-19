@@ -235,7 +235,7 @@ enum ReduceResult<'db> {
     Type(Type<'db>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, get_size2::GetSize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, get_size2::GetSize)]
 pub enum RecursivelyDefined {
     Yes,
     No,
