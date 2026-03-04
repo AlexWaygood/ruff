@@ -62,6 +62,7 @@ if sys.version_info >= (3, 14):
         def __init__(
             self, arg: str, *, module: str | None = None, owner: object = None, is_argument: bool = True, is_class: bool = False
         ) -> None: ...
+
         @overload
         def evaluate(
             self,
@@ -76,7 +77,6 @@ if sys.version_info >= (3, 14):
 
             If the forward reference cannot be evaluated, raise an exception.
             """
-
         @overload
         def evaluate(
             self,
@@ -97,6 +97,7 @@ if sys.version_info >= (3, 14):
             owner: object = None,
             format: Format = Format.VALUE,  # noqa: Y011
         ) -> AnnotationForm: ...
+
         @deprecated("Use `ForwardRef.evaluate()` or `typing.evaluate_forward_ref()` instead.")
         def _evaluate(
             self,
@@ -121,13 +122,13 @@ if sys.version_info >= (3, 14):
         the value of type aliases and the bounds, constraints, and defaults of
         type parameter objects.
         """
-
     @overload
     def call_evaluate_function(
         evaluate: EvaluateFunc, format: Literal[Format.FORWARDREF], *, owner: object = None
     ) -> AnnotationForm | ForwardRef: ...
     @overload
     def call_evaluate_function(evaluate: EvaluateFunc, format: Format, *, owner: object = None) -> AnnotationForm: ...
+
     @overload
     def call_annotate_function(annotate: AnnotateFunc, format: Literal[Format.STRING], *, owner: object = None) -> dict[str, str]:
         """Call an __annotate__ function. __annotate__ functions are normally
@@ -149,13 +150,13 @@ if sys.version_info >= (3, 14):
         on the generated ForwardRef objects.
 
         """
-
     @overload
     def call_annotate_function(
         annotate: AnnotateFunc, format: Literal[Format.FORWARDREF], *, owner: object = None
     ) -> dict[str, AnnotationForm | ForwardRef]: ...
     @overload
     def call_annotate_function(annotate: AnnotateFunc, format: Format, *, owner: object = None) -> dict[str, AnnotationForm]: ...
+
     def get_annotate_from_class_namespace(obj: Mapping[str, object]) -> AnnotateFunc | None:
         """Retrieve the annotate function from a class namespace dictionary.
 
@@ -222,7 +223,6 @@ if sys.version_info >= (3, 14):
             although if obj is a wrapped function (using
             functools.update_wrapper()) it is first unwrapped.
         """
-
     @overload
     def get_annotations(
         obj: Any,
@@ -241,6 +241,7 @@ if sys.version_info >= (3, 14):
         eval_str: bool = False,
         format: Format = Format.VALUE,  # noqa: Y011
     ) -> dict[str, AnnotationForm]: ...
+
     def type_repr(value: object) -> str:
         """Convert a Python value to a format suitable for use with the STRING format.
 

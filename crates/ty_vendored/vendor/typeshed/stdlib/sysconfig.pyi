@@ -26,9 +26,9 @@ def get_config_var(name: Literal["SO"]) -> Any:
 
     Equivalent to get_config_vars().get(name)
     """
-
 @overload
 def get_config_var(name: str) -> Any: ...
+
 @overload
 def get_config_vars() -> dict[str, Any]:
     """With no arguments, return a dictionary of all configuration
@@ -40,9 +40,9 @@ def get_config_vars() -> dict[str, Any]:
     With arguments, return a list of values that result from looking up
     each argument in the configuration variable dictionary.
     """
-
 @overload
 def get_config_vars(arg: str, /, *args: str) -> list[Any]: ...
+
 def get_scheme_names() -> tuple[str, ...]:
     """Return a tuple containing the schemes names."""
 

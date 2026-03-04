@@ -484,12 +484,14 @@ class _patch(Generic[_T]):
         ) -> None: ...
 
     def copy(self) -> _patch[_T]: ...
+
     @overload
     def __call__(self, func: _TT) -> _TT: ...
     # If new==DEFAULT, this should add a MagicMock parameter to the function
     # arguments. See the _patch_default_new class below for this functionality.
     @overload
     def __call__(self, func: Callable[_P, _R]) -> Callable[_P, _R]: ...
+
     def decoration_helper(
         self, patched: _patch[Any], args: Sequence[Any], keywargs: Any
     ) -> _GeneratorContextManager[tuple[Sequence[Any], Any]]: ...
@@ -583,6 +585,7 @@ class _patch_dict:
 class _patcher:
     TEST_PREFIX: str
     dict: type[_patch_dict]
+
     # This overload also covers the case, where new==DEFAULT. In this case, the return type is _patch[Any].
     # Ideally we'd be able to add an overload for it so that the return type is _patch[MagicMock],
     # but that's impossible with the current type system.
@@ -629,6 +632,7 @@ class _patcher:
         # kwargs are passed to the MagicMock/AsyncMock constructor
         **kwargs: Any,
     ) -> _patch_pass_arg[MagicMock | AsyncMock]: ...
+
     # This overload also covers the case, where new==DEFAULT. In this case, the return type is _patch[Any].
     # Ideally we'd be able to add an overload for it so that the return type is _patch[MagicMock],
     # but that's impossible with the current type system.
@@ -678,6 +682,7 @@ class _patcher:
         # kwargs are passed to the MagicMock/AsyncMock constructor
         **kwargs: Any,
     ) -> _patch_pass_arg[MagicMock | AsyncMock]: ...
+
     @overload
     @staticmethod
     def multiple(
@@ -719,6 +724,7 @@ class _patcher:
         # The kwargs are the mock objects or DEFAULT
         **kwargs: Any,
     ) -> _patch[Any]: ...
+
     @staticmethod
     def stopall() -> None: ...
 

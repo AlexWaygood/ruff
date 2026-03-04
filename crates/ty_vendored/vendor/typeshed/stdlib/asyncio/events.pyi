@@ -271,6 +271,7 @@ class AbstractEventLoop:
     ) -> list[tuple[AddressFamily, SocketKind, int, str, tuple[str, int] | tuple[str, int, int, int]]]: ...
     @abstractmethod
     async def getnameinfo(self, sockaddr: tuple[str, int] | tuple[str, int, int, int], flags: int = 0) -> tuple[str, str]: ...
+
     if sys.version_info >= (3, 11):
         @overload
         @abstractmethod
@@ -425,7 +426,6 @@ class AbstractEventLoop:
             the user should await Server.start_serving() or Server.serve_forever()
             to make the server to start accepting connections.
             """
-
         @overload
         @abstractmethod
         async def create_server(
@@ -514,7 +514,6 @@ class AbstractEventLoop:
             the user should await Server.start_serving() or Server.serve_forever()
             to make the server to start accepting connections.
             """
-
         @overload
         @abstractmethod
         async def create_server(
@@ -597,7 +596,6 @@ class AbstractEventLoop:
             the user should await Server.start_serving() or Server.serve_forever()
             to make the server to start accepting connections.
             """
-
         @overload
         @abstractmethod
         async def create_server(

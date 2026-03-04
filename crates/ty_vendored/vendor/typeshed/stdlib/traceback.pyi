@@ -64,11 +64,11 @@ if sys.version_info >= (3, 10):
         occurred with a caret on the next line indicating the approximate
         position of the error.
         """
-
     @overload
     def print_exception(
         exc: BaseException, /, *, limit: int | None = None, file: SupportsWrite[str] | None = None, chain: bool = True
     ) -> None: ...
+
     @overload
     def format_exception(
         exc: type[BaseException] | None,
@@ -86,7 +86,6 @@ if sys.version_info >= (3, 10):
         these lines are concatenated and printed, exactly the same text is
         printed as does print_exception().
         """
-
     @overload
     def format_exception(exc: BaseException, /, *, limit: int | None = None, chain: bool = True) -> list[str]: ...
 
@@ -199,7 +198,6 @@ if sys.version_info >= (3, 13):
         :exc:`BaseExceptionGroup`, the nested exceptions are included as
         well, recursively, with indentation relative to their nesting depth.
         """
-
     @overload
     def format_exception_only(exc: Unused, /, value: BaseException | None, *, show_group: bool = False) -> list[str]: ...
 
@@ -216,7 +214,6 @@ elif sys.version_info >= (3, 10):
         about where the syntax error occurred. Following the message, the list
         contains the exception's ``__notes__``.
         """
-
     @overload
     def format_exception_only(exc: Unused, /, value: BaseException | None) -> list[str]: ...
 
@@ -574,6 +571,7 @@ class FrameSummary:
     locals: dict[str, str] | None
     @property
     def line(self) -> str | None: ...
+
     @overload
     def __getitem__(self, pos: Literal[0]) -> str: ...
     @overload
@@ -586,6 +584,7 @@ class FrameSummary:
     def __getitem__(self, pos: SupportsIndex) -> Any: ...
     @overload
     def __getitem__(self, pos: slice[SupportsIndex | None]) -> tuple[Any, ...]: ...
+
     def __iter__(self) -> Iterator[Any]: ...
     def __eq__(self, other: object) -> bool: ...
     def __len__(self) -> Literal[4]: ...

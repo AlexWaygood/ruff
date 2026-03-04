@@ -142,7 +142,6 @@ def contextmanager(func: Callable[_P, Generator[_T_co, None, object]]) -> Callab
         finally:
             <cleanup>
     """
-
 @overload
 @deprecated(
     "Annotating the return type as `-> Iterator[Foo]` with `@contextmanager` is deprecated. Use `-> Generator[Foo]` instead."
@@ -209,13 +208,13 @@ def asynccontextmanager(func: Callable[_P, AsyncGenerator[_T_co]]) -> Callable[_
         finally:
             <cleanup>
     """
-
 @overload
 @deprecated(
     "Annotating the return type as `-> AsyncIterator[Foo]` with `@asynccontextmanager` is deprecated. "
     "Use `-> AsyncGenerator[Foo]` instead."
 )
 def asynccontextmanager(func: Callable[_P, AsyncIterator[_T_co]]) -> Callable[_P, _AsyncGeneratorContextManager[_T_co]]: ...
+
 @type_check_only
 class _SupportsClose(Protocol):
     def close(self) -> object: ...
@@ -433,10 +432,12 @@ if sys.version_info >= (3, 10):
         """
 
         enter_result: _T
+
         @overload
         def __init__(self: nullcontext[None], enter_result: None = None) -> None: ...
         @overload
         def __init__(self: nullcontext[_T], enter_result: _T) -> None: ...  # pyright: ignore[reportInvalidTypeVarUse]  #11780
+
         def __enter__(self) -> _T: ...
         def __exit__(self, *exctype: Unused) -> None: ...
         async def __aenter__(self) -> _T: ...
@@ -455,10 +456,12 @@ else:
         """
 
         enter_result: _T
+
         @overload
         def __init__(self: nullcontext[None], enter_result: None = None) -> None: ...
         @overload
         def __init__(self: nullcontext[_T], enter_result: _T) -> None: ...  # pyright: ignore[reportInvalidTypeVarUse]  #11780
+
         def __enter__(self) -> _T: ...
         def __exit__(self, *exctype: Unused) -> None: ...
 

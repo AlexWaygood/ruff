@@ -242,6 +242,7 @@ class BaseEventLoop(AbstractEventLoop):
         flags: int = 0,
     ) -> list[tuple[AddressFamily, SocketKind, int, str, tuple[str, int] | tuple[str, int, int, int]]]: ...
     async def getnameinfo(self, sockaddr: tuple[str, int] | tuple[str, int, int, int], flags: int = 0) -> tuple[str, str]: ...
+
     if sys.version_info >= (3, 12):
         @overload
         async def create_connection(
@@ -274,7 +275,6 @@ class BaseEventLoop(AbstractEventLoop):
             in the background.  When successful, the coroutine returns a
             (transport, protocol) pair.
             """
-
         @overload
         async def create_connection(
             self,
@@ -326,7 +326,6 @@ class BaseEventLoop(AbstractEventLoop):
             in the background.  When successful, the coroutine returns a
             (transport, protocol) pair.
             """
-
         @overload
         async def create_connection(
             self,
@@ -376,7 +375,6 @@ class BaseEventLoop(AbstractEventLoop):
             in the background.  When successful, the coroutine returns a
             (transport, protocol) pair.
             """
-
         @overload
         async def create_connection(
             self,
@@ -432,7 +430,6 @@ class BaseEventLoop(AbstractEventLoop):
 
             This method is a coroutine.
             """
-
         @overload
         async def create_server(
             self,
@@ -486,7 +483,6 @@ class BaseEventLoop(AbstractEventLoop):
 
             This method is a coroutine.
             """
-
         @overload
         async def create_server(
             self,
@@ -538,7 +534,6 @@ class BaseEventLoop(AbstractEventLoop):
 
             This method is a coroutine.
             """
-
         @overload
         async def create_server(
             self,

@@ -281,9 +281,9 @@ def quote(string: str, safe: str | Iterable[int] = "/", encoding: str | None = N
     By default, encoding='utf-8' (characters are encoded with UTF-8), and
     errors='strict' (unsupported characters raise a UnicodeEncodeError).
     """
-
 @overload
 def quote(string: bytes | bytearray, safe: str | Iterable[int] = "/") -> str: ...
+
 def quote_from_bytes(bs: bytes | bytearray, safe: str | Iterable[int] = "/") -> str:
     """Like quote(), but accepts a bytes object rather than a str, and does
     not perform string-to-bytes encoding.  It always returns an ASCII string.
@@ -296,9 +296,9 @@ def quote_plus(string: str, safe: str | Iterable[int] = "", encoding: str | None
     HTML form values. Plus signs in the original string are escaped unless
     they are included in safe. It also does not have safe default to '/'.
     """
-
 @overload
 def quote_plus(string: bytes | bytearray, safe: str | Iterable[int] = "") -> str: ...
+
 def unquote(string: str | bytes, encoding: str = "utf-8", errors: str = "replace") -> str:
     """Replace %xx escapes by their single-character equivalent. The optional
     encoding and errors parameters specify how to decode percent-encoded
@@ -328,7 +328,6 @@ def urldefrag(url: str) -> DefragResult:
     the URL contained no fragments, the second element is the
     empty string.
     """
-
 @overload
 def urldefrag(url: bytes | bytearray | None) -> DefragResultBytes: ...
 
@@ -400,11 +399,11 @@ def urlparse(url: str, scheme: str = "", allow_fragments: bool = True) -> ParseR
 
     Note that % escapes are not expanded.
     """
-
 @overload
 def urlparse(
     url: bytes | bytearray | None, scheme: bytes | bytearray | None | Literal[""] = "", allow_fragments: bool = True
 ) -> ParseResultBytes: ...
+
 @overload
 def urlsplit(url: str, scheme: str = "", allow_fragments: bool = True) -> SplitResult:
     """Parse a URL into 5 components:
@@ -483,7 +482,6 @@ def urlunparse(components: Iterable[None]) -> Literal[b""]:  # type: ignore[over
     originally had redundant delimiters, e.g. a ? with an empty query
     (the draft states that these are equivalent).
     """
-
 @overload
 def urlunparse(components: Iterable[AnyStr | None]) -> AnyStr: ...
 
@@ -496,9 +494,9 @@ def urlunsplit(components: Iterable[None]) -> Literal[b""]:  # type: ignore[over
     was parsed originally had unnecessary delimiters (for example, a ? with an
     empty query; the RFC states that these are equivalent).
     """
-
 @overload
 def urlunsplit(components: Iterable[AnyStr | None]) -> AnyStr: ...
+
 def unwrap(url: str) -> str:
     """Transform a string like '<URL:scheme://host/path>' into 'scheme://host/path'.
 

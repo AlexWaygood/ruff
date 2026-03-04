@@ -184,6 +184,7 @@ if sys.platform == "win32":
     def ConnectNamedPipe(handle: int, overlapped: Literal[False] = False) -> None: ...
     @overload
     def ConnectNamedPipe(handle: int, overlapped: bool) -> Overlapped | None: ...
+
     def CreateFile(
         file_name: str,
         desired_access: int,
@@ -309,6 +310,7 @@ if sys.platform == "win32":
     def ReadFile(handle: int, size: int, overlapped: Literal[False] = False) -> tuple[bytes, int]: ...
     @overload
     def ReadFile(handle: int, size: int, overlapped: int | bool) -> tuple[Any, int]: ...
+
     def SetNamedPipeHandleState(
         named_pipe: int, mode: int | None, max_collection_count: int | None, collect_data_timeout: int | None, /
     ) -> None: ...
@@ -326,12 +328,14 @@ if sys.platform == "win32":
         """
 
     def WaitNamedPipe(name: str, timeout: int, /) -> None: ...
+
     @overload
     def WriteFile(handle: int, buffer: ReadableBuffer, overlapped: Literal[True]) -> tuple[Overlapped, int]: ...
     @overload
     def WriteFile(handle: int, buffer: ReadableBuffer, overlapped: Literal[False] = False) -> tuple[int, int]: ...
     @overload
     def WriteFile(handle: int, buffer: ReadableBuffer, overlapped: int | bool) -> tuple[Any, int]: ...
+
     @final
     class Overlapped:
         """OVERLAPPED structure wrapper"""

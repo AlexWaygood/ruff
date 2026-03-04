@@ -122,6 +122,7 @@ if sys.version_info >= (3, 11):
         class_: Callable[[io.BufferedReader], NullTranslations] | None = None,
         fallback: bool = False,
     ) -> NullTranslations: ...
+
     def install(domain: str, localedir: StrPath | None = None, *, names: Container[str] | None = None) -> None: ...
 
 else:
@@ -162,6 +163,7 @@ else:
         fallback: bool = False,
         codeset: str | None = ...,
     ) -> NullTranslations: ...
+
     @overload
     def install(domain: str, localedir: StrPath | None = None, names: Container[str] | None = None) -> None: ...
     @overload

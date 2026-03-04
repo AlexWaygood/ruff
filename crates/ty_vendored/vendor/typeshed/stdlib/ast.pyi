@@ -524,6 +524,7 @@ class AnnAssign(stmt):
     annotation: expr
     value: expr | None
     simple: int
+
     @overload
     def __init__(
         self,
@@ -1343,15 +1344,14 @@ class Constant(expr):
         @deprecated("Removed in Python 3.14. Use `value` instead.")
         def n(self) -> _ConstantValue:
             """Deprecated. Use value instead."""
-
         @n.setter
         @deprecated("Removed in Python 3.14. Use `value` instead.")
         def n(self, value: _ConstantValue) -> None: ...
+
         @property
         @deprecated("Removed in Python 3.14. Use `value` instead.")
         def s(self) -> _ConstantValue:
             """Deprecated. Use value instead."""
-
         @s.setter
         @deprecated("Removed in Python 3.14. Use `value` instead.")
         def s(self, value: _ConstantValue) -> None: ...
@@ -1785,6 +1785,7 @@ class keyword(AST):
         __match_args__ = ("arg", "value")
     arg: str | None
     value: expr
+
     @overload
     def __init__(self, arg: str | None, value: expr, **kwargs: Unpack[_Attributes]) -> None: ...
     @overload
@@ -2194,7 +2195,6 @@ if sys.version_info >= (3, 13):
         Equivalent to compile(source, filename, mode, PyCF_ONLY_AST).
         Pass type_comments=True to get back type comments where the syntax allows.
         """
-
     @overload
     def parse(
         source: str | ReadableBuffer,
@@ -2288,7 +2288,6 @@ else:
         Equivalent to compile(source, filename, mode, PyCF_ONLY_AST).
         Pass type_comments=True to get back type comments where the syntax allows.
         """
-
     @overload
     def parse(
         source: str | ReadableBuffer,

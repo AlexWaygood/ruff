@@ -217,9 +217,9 @@ if sys.version_info >= (3, 11):
 @overload
 def adapt(obj: Any, proto: Any, /) -> Any:
     """Adapt given object to given protocol."""
-
 @overload
 def adapt(obj: Any, proto: Any, alt: _T, /) -> Any | _T: ...
+
 def complete_statement(statement: str) -> bool:
     """Checks if a string contains a complete SQL statement."""
 
@@ -246,7 +246,6 @@ if sys.version_info >= (3, 12):
         'check_same_thread', 'factory', 'cached_statements' and 'uri' will
         become keyword-only parameters in Python 3.15.
         """
-
     @overload
     def connect(
         database: StrOrBytesPath,
@@ -290,7 +289,6 @@ else:
         You can use ":memory:" to open a database connection to a database that resides
         in RAM instead of on disk.
         """
-
     @overload
     def connect(
         database: StrOrBytesPath,

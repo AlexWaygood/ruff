@@ -155,28 +155,28 @@ def countOf(a: Iterable[object], b: object, /) -> int:
 @overload
 def delitem(a: MutableSequence[Any], b: int, /) -> None:
     """Same as del a[b]."""
-
 @overload
 def delitem(a: MutableSequence[Any], b: slice[int | None], /) -> None: ...
 @overload
 def delitem(a: MutableMapping[_K, Any], b: _K, /) -> None: ...
+
 @overload
 def getitem(a: Sequence[_T], b: slice[int | None], /) -> Sequence[_T]:
     """Same as a[b]."""
-
 @overload
 def getitem(a: SupportsGetItem[_K, _V], b: _K, /) -> _V: ...
+
 def indexOf(a: Iterable[_T], b: _T, /) -> int:
     """Return the first index of b in a."""
 
 @overload
 def setitem(a: MutableSequence[_T], b: int, c: _T, /) -> None:
     """Same as a[b] = c."""
-
 @overload
 def setitem(a: MutableSequence[_T], b: slice[int | None], c: Sequence[_T], /) -> None: ...
 @overload
 def setitem(a: MutableMapping[_K, _V], b: _K, c: _V, /) -> None: ...
+
 def length_hint(obj: object, default: int = 0, /) -> int:
     """Return an estimate of the number of items in obj.
 

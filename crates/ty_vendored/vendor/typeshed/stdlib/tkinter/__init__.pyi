@@ -1224,9 +1224,9 @@ class Misc:
         set to this list. The bindtags determine in which order events are
         processed (see bind).
         """
-
     @overload
     def bindtags(self, tagList: list[str] | tuple[str, ...]) -> None: ...
+
     # bind with isinstance(func, str) doesn't return anything, but all other
     # binds do. The default value of func is not str.
     @overload
@@ -1274,11 +1274,11 @@ class Misc:
         If FUNC or SEQUENCE is omitted the bound function or list
         of bound events are returned.
         """
-
     @overload
     def bind(self, sequence: str | None, func: str, add: Literal["", "+"] | bool | None = None) -> None: ...
     @overload
     def bind(self, *, func: str, add: Literal["", "+"] | bool | None = None) -> None: ...
+
     # There's no way to know what type of widget bind_all and bind_class
     # callbacks will get, so those are Misc.
     @overload
@@ -1293,11 +1293,11 @@ class Misc:
         be called additionally to the other bound function or whether
         it will replace the previous function. See bind for the return value.
         """
-
     @overload
     def bind_all(self, sequence: str | None, func: str, add: Literal["", "+"] | bool | None = None) -> None: ...
     @overload
     def bind_all(self, *, func: str, add: Literal["", "+"] | bool | None = None) -> None: ...
+
     @overload
     def bind_class(
         self,
@@ -1313,11 +1313,11 @@ class Misc:
         whether it will replace the previous function. See bind for
         the return value.
         """
-
     @overload
     def bind_class(self, className: str, sequence: str | None, func: str, add: Literal["", "+"] | bool | None = None) -> None: ...
     @overload
     def bind_class(self, className: str, *, func: str, add: Literal["", "+"] | bool | None = None) -> None: ...
+
     def unbind(self, sequence: str, funcid: str | None = None) -> None:
         """Unbind for this widget the event SEQUENCE.
 
@@ -1371,9 +1371,9 @@ class Misc:
         be determined by the geometry information of its content.
         If no argument is given the current setting will be returned.
         """
-
     @overload
     def pack_propagate(self) -> None: ...
+
     propagate = pack_propagate
     def grid_anchor(self, anchor: Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"] | None = None) -> None:
         """The anchor value controls how to place the grid within the
@@ -1382,6 +1382,7 @@ class Misc:
         The default anchor is nw.
         """
     anchor = grid_anchor
+
     @overload
     def grid_bbox(
         self, column: None = None, row: None = None, col2: None = None, row2: None = None
@@ -1397,11 +1398,11 @@ class Misc:
         The returned integers specify the offset of the upper left
         corner in the container widget and the width and height.
         """
-
     @overload
     def grid_bbox(self, column: int, row: int, col2: None = None, row2: None = None) -> tuple[int, int, int, int] | None: ...
     @overload
     def grid_bbox(self, column: int, row: int, col2: int, row2: int) -> tuple[int, int, int, int] | None: ...
+
     bbox = grid_bbox
     def grid_columnconfigure(
         self,
@@ -1452,9 +1453,9 @@ class Misc:
         be determined by the geometry information of its content.
         If no argument is given the current setting will be returned.
         """
-
     @overload
     def grid_propagate(self) -> bool: ...
+
     def grid_size(self) -> tuple[int, int]:
         """Return a tuple of the number of column and rows in the grid."""
     size = grid_size
@@ -1580,9 +1581,9 @@ class XView:
     @overload
     def xview(self) -> tuple[float, float]:
         """Query and change the horizontal position of the view."""
-
     @overload
     def xview(self, *args) -> None: ...
+
     def xview_moveto(self, fraction: float) -> None:
         """Adjusts the view in the window so that FRACTION of the
         total width of the canvas is off-screen to the left.
@@ -1593,7 +1594,6 @@ class XView:
         """Shift the x-view according to NUMBER which is measured in "units"
         or "pages" (WHAT).
         """
-
     @overload
     def xview_scroll(self, number: float | str, what: Literal["pixels"]) -> None: ...
 
@@ -1605,9 +1605,9 @@ class YView:
     @overload
     def yview(self) -> tuple[float, float]:
         """Query and change the vertical position of the view."""
-
     @overload
     def yview(self, *args) -> None: ...
+
     def yview_moveto(self, fraction: float) -> None:
         """Adjusts the view in the window so that FRACTION of the
         total height of the canvas is off-screen to the top.
@@ -1618,7 +1618,6 @@ class YView:
         """Shift the y-view according to NUMBER which is measured in
         "units" or "pages" (WHAT).
         """
-
     @overload
     def yview_scroll(self, number: float | str, what: Literal["pixels"]) -> None: ...
 
@@ -1663,11 +1662,11 @@ class Wm:
         of this widget to be between MINNUMER/MINDENOM and MAXNUMER/MAXDENOM. Return a tuple
         of the actual values if no argument is given.
         """
-
     @overload
     def wm_aspect(
         self, minNumer: None = None, minDenom: None = None, maxNumer: None = None, maxDenom: None = None
     ) -> tuple[int, int, int, int] | None: ...
+
     aspect = wm_aspect
     if sys.version_info >= (3, 13):
         @overload
@@ -1684,7 +1683,6 @@ class Wm:
             specific option.  When called with keyword arguments, set the
             corresponding attributes.
             """
-
         @overload
         def wm_attributes(self, *, return_python_dict: Literal[True]) -> _WmAttributes: ...
 
@@ -1723,7 +1721,6 @@ class Wm:
         specific option.  When called with keyword arguments, set the
         corresponding attributes.
         """
-
     @overload
     def wm_attributes(self, option: Literal["-fullscreen"], /) -> bool: ...
     @overload
@@ -1748,7 +1745,6 @@ class Wm:
 
             On Unix, there are currently no special attribute values.
             """
-
         @overload
         def wm_attributes(self, option: Literal["-notify"], /) -> bool: ...
         @overload
@@ -1772,7 +1768,6 @@ class Wm:
             specific option.  When called with keyword arguments, set the
             corresponding attributes.
             """
-
         @overload
         def wm_attributes(self, option: Literal["-disabled"], /) -> bool: ...
         @overload
@@ -1793,7 +1788,6 @@ class Wm:
             specific option.  When called with keyword arguments, set the
             corresponding attributes.
             """
-
         @overload
         def wm_attributes(self, option: Literal["-type"], /) -> str: ...
     if sys.version_info >= (3, 13):
@@ -1811,7 +1805,6 @@ class Wm:
             specific option.  When called with keyword arguments, set the
             corresponding attributes.
             """
-
         @overload
         def wm_attributes(self, option: Literal["fullscreen"], /) -> bool: ...
         @overload
@@ -1842,7 +1835,6 @@ class Wm:
                 specific option.  When called with keyword arguments, set the
                 corresponding attributes.
                 """
-
             @overload
             def wm_attributes(self, option: Literal["disabled"], /) -> bool: ...
             @overload
@@ -1863,7 +1855,6 @@ class Wm:
                 specific option.  When called with keyword arguments, set the
                 corresponding attributes.
                 """
-
             @overload
             def wm_attributes(self, option: Literal["type"], /) -> str: ...
 
@@ -1895,7 +1886,6 @@ class Wm:
 
             On Unix, there are currently no special attribute values.
             """
-
         @overload
         def wm_attributes(self, option: Literal["-notify"], value: bool, /) -> Literal[""]: ...
         @overload
@@ -1917,7 +1907,6 @@ class Wm:
             specific option.  When called with keyword arguments, set the
             corresponding attributes.
             """
-
         @overload
         def wm_attributes(self, option: Literal["-disabled"], value: bool, /) -> Literal[""]: ...
         @overload
@@ -1938,12 +1927,12 @@ class Wm:
             specific option.  When called with keyword arguments, set the
             corresponding attributes.
             """
-
         @overload
         def wm_attributes(self, option: Literal["-type"], value: str, /) -> Literal[""]: ...
 
     @overload
     def wm_attributes(self, option: str, value, /, *__other_option_value_pairs: Any) -> Literal[""]: ...
+
     if sys.version_info >= (3, 13):
         if sys.platform == "darwin":
             @overload
@@ -2000,23 +1989,25 @@ class Wm:
                 specific option.  When called with keyword arguments, set the
                 corresponding attributes.
                 """
+
     attributes = wm_attributes
     def wm_client(self, name: str | None = None) -> str:
         """Store NAME in WM_CLIENT_MACHINE property of this widget. Return
         current value.
         """
     client = wm_client
+
     @overload
     def wm_colormapwindows(self) -> list[Misc]:
         """Store list of window names (WLIST) into WM_COLORMAPWINDOWS property
         of this widget. This list contains windows whose colormaps differ from their
         parents. Return current list of widgets if WLIST is empty.
         """
-
     @overload
     def wm_colormapwindows(self, wlist: list[Misc] | tuple[Misc, ...], /) -> None: ...
     @overload
     def wm_colormapwindows(self, first_wlist_item: Misc, /, *other_wlist_items: Misc) -> None: ...
+
     colormapwindows = wm_colormapwindows
     def wm_command(self, value: str | None = None) -> str:
         """Store VALUE in WM_COMMAND property. It is the command
@@ -2047,14 +2038,15 @@ class Wm:
     def wm_frame(self) -> str:
         """Return identifier for decorative frame of this widget if present."""
     frame = wm_frame
+
     @overload
     def wm_geometry(self, newGeometry: None = None) -> str:
         """Set geometry to NEWGEOMETRY of the form =widthxheight+x+y. Return
         current value if None is given.
         """
-
     @overload
     def wm_geometry(self, newGeometry: str) -> None: ...
+
     geometry = wm_geometry
     def wm_grid(self, baseWidth=None, baseHeight=None, widthInc=None, heightInc=None):
         """Instruct the window manager that this widget shall only be
@@ -2130,35 +2122,38 @@ class Wm:
         etc.
         """
     manage = wm_manage
+
     @overload
     def wm_maxsize(self, width: None = None, height: None = None) -> tuple[int, int]:
         """Set max WIDTH and HEIGHT for this widget. If the window is gridded
         the values are given in grid units. Return the current values if None
         is given.
         """
-
     @overload
     def wm_maxsize(self, width: int, height: int) -> None: ...
+
     maxsize = wm_maxsize
+
     @overload
     def wm_minsize(self, width: None = None, height: None = None) -> tuple[int, int]:
         """Set min WIDTH and HEIGHT for this widget. If the window is gridded
         the values are given in grid units. Return the current values if None
         is given.
         """
-
     @overload
     def wm_minsize(self, width: int, height: int) -> None: ...
+
     minsize = wm_minsize
+
     @overload
     def wm_overrideredirect(self, boolean: None = None) -> bool | None:  # returns True or None
         """Instruct the window manager to ignore this widget
         if BOOLEAN is given with 1. Return the current value if None
         is given.
         """
-
     @overload
     def wm_overrideredirect(self, boolean: bool) -> None: ...
+
     overrideredirect = wm_overrideredirect
     def wm_positionfrom(self, who: Literal["program", "user"] | None = None) -> Literal["", "program", "user"]:
         """Instruct the window manager that the position of this widget shall
@@ -2166,26 +2161,28 @@ class Wm:
         "program".
         """
     positionfrom = wm_positionfrom
+
     @overload
     def wm_protocol(self, name: str, func: Callable[[], object] | str) -> None:
         """Bind function FUNC to command NAME for this widget.
         Return the function bound to NAME if None is given. NAME could be
         e.g. "WM_SAVE_YOURSELF" or "WM_DELETE_WINDOW".
         """
-
     @overload
     def wm_protocol(self, name: str, func: None = None) -> str: ...
     @overload
     def wm_protocol(self, name: None = None, func: None = None) -> tuple[str, ...]: ...
+
     protocol = wm_protocol
+
     @overload
     def wm_resizable(self, width: None = None, height: None = None) -> tuple[bool, bool]:
         """Instruct the window manager whether this width can be resized
         in WIDTH or HEIGHT. Both values are boolean values.
         """
-
     @overload
     def wm_resizable(self, width: bool, height: bool) -> None: ...
+
     resizable = wm_resizable
     def wm_sizefrom(self, who: Literal["program", "user"] | None = None) -> Literal["", "program", "user"]:
         """Instruct the window manager that the size of this widget shall
@@ -2193,30 +2190,33 @@ class Wm:
         "program".
         """
     sizefrom = wm_sizefrom
+
     @overload
     def wm_state(self, newstate: None = None) -> str:
         """Query or set the state of this widget as one of normal, icon,
         iconic (see wm_iconwindow), withdrawn, or zoomed (Windows only).
         """
-
     @overload
     def wm_state(self, newstate: str) -> None: ...
+
     state = wm_state
+
     @overload
     def wm_title(self, string: None = None) -> str:
         """Set the title of this widget."""
-
     @overload
     def wm_title(self, string: str) -> None: ...
+
     title = wm_title
+
     @overload
     def wm_transient(self, master: None = None) -> _tkinter.Tcl_Obj:
         """Instruct the window manager that this widget is transient
         with regard to widget MASTER.
         """
-
     @overload
     def wm_transient(self, master: Wm | _tkinter.Tcl_Obj) -> None: ...
+
     transient = wm_transient
     def wm_withdraw(self) -> None:
         """Withdraw this widget from the screen such that it is unmapped
@@ -2248,6 +2248,7 @@ class Tk(Misc, Wm):
         It is constructed from sys.argv[0] without extensions if None is given. CLASSNAME
         is the name of the widget class.
         """
+
     # Keep this in sync with ttktheme.ThemedTk. See issue #13858
     @overload
     def configure(
@@ -2283,9 +2284,9 @@ class Tk(Misc, Wm):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def destroy(self) -> None:
         """Destroy this and all descendants widgets. This will
@@ -2329,6 +2330,7 @@ class Tk(Misc, Wm):
 
     def splitlist(self, arg, /) -> tuple[Incomplete, ...]: ...
     def unsetvar(self, *args, **kwargs): ...
+
     if sys.version_info >= (3, 14):
         @overload
         def wantobjects(self) -> Literal[0, 1]: ...
@@ -2338,6 +2340,7 @@ class Tk(Misc, Wm):
 
     @overload
     def wantobjects(self, wantobjects: Literal[0, 1] | bool, /) -> None: ...
+
     def willdispatch(self) -> None: ...
 
 def Tcl(screenName: str | None = None, baseName: str | None = None, className: str = "Tk", useTk: bool = False) -> Tk: ...
@@ -2620,7 +2623,6 @@ class Widget(BaseWidget, Pack, Place, Grid):
         If FUNC or SEQUENCE is omitted the bound function or list
         of bound events are returned.
         """
-
     @overload
     def bind(self, sequence: str | None, func: str, add: Literal["", "+"] | bool | None = None) -> None: ...
     @overload
@@ -2703,9 +2705,9 @@ class Toplevel(BaseWidget, Wm):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
 
 class Button(Widget):
@@ -2832,9 +2834,9 @@ class Button(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def flash(self) -> None:
         """Flash the button.
@@ -2958,9 +2960,9 @@ class Canvas(Widget, XView, YView):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def addtag(self, *args):  # internal method
         """Internal function."""
@@ -3049,13 +3051,13 @@ class Canvas(Widget, XView, YView):
         called additionally to the other bound function or whether it will
         replace the previous function. See bind for the return value.
         """
-
     @overload
     def tag_bind(
         self, tagOrId: str | int, sequence: str | None, func: str, add: Literal["", "+"] | bool | None = None
     ) -> None: ...
     @overload
     def tag_bind(self, tagOrId: str | int, *, func: str, add: Literal["", "+"] | bool | None = None) -> None: ...
+
     def tag_unbind(self, tagOrId: str | int, sequence: str, funcid: str | None = None) -> None:
         """Unbind for all items with TAGORID for event SEQUENCE  the
         function identified with FUNCID.
@@ -3074,11 +3076,11 @@ class Canvas(Widget, XView, YView):
     @overload
     def coords(self, tagOrId: str | int, /) -> list[float]:
         """Return a list of coordinates for the item given in ARGS."""
-
     @overload
     def coords(self, tagOrId: str | int, args: list[int] | list[float] | tuple[float, ...], /) -> None: ...
     @overload
     def coords(self, tagOrId: str | int, x1: float, y1: float, /, *args: float) -> None: ...
+
     # create_foo() methods accept coords as a list or tuple, or as separate arguments.
     # Lists and tuples can be flat as in [1, 2, 3, 4], or nested as in [(1, 2), (3, 4)].
     # Keyword arguments should be the same in all overloads of each method.
@@ -3124,7 +3126,6 @@ class Canvas(Widget, XView, YView):
         width: float | str = ...,
     ) -> int:
         """Create line with coordinates x1,y1,...,xn,yn."""
-
     @overload
     def create_line(
         self,
@@ -3191,6 +3192,7 @@ class Canvas(Widget, XView, YView):
         tags: str | list[str] | tuple[str, ...] = ...,
         width: float | str = ...,
     ) -> int: ...
+
     @overload
     def create_oval(
         self,
@@ -3225,7 +3227,6 @@ class Canvas(Widget, XView, YView):
         width: float | str = ...,
     ) -> int:
         """Create oval with coordinates x1,y1,x2,y2."""
-
     @overload
     def create_oval(
         self,
@@ -3294,6 +3295,7 @@ class Canvas(Widget, XView, YView):
         tags: str | list[str] | tuple[str, ...] = ...,
         width: float | str = ...,
     ) -> int: ...
+
     @overload
     def create_polygon(
         self,
@@ -3331,7 +3333,6 @@ class Canvas(Widget, XView, YView):
         width: float | str = ...,
     ) -> int:
         """Create polygon with coordinates x1,y1,...,xn,yn."""
-
     @overload
     def create_polygon(
         self,
@@ -3406,6 +3407,7 @@ class Canvas(Widget, XView, YView):
         tags: str | list[str] | tuple[str, ...] = ...,
         width: float | str = ...,
     ) -> int: ...
+
     @overload
     def create_rectangle(
         self,
@@ -3440,7 +3442,6 @@ class Canvas(Widget, XView, YView):
         width: float | str = ...,
     ) -> int:
         """Create rectangle with coordinates x1,y1,x2,y2."""
-
     @overload
     def create_rectangle(
         self,
@@ -3509,6 +3510,7 @@ class Canvas(Widget, XView, YView):
         tags: str | list[str] | tuple[str, ...] = ...,
         width: float | str = ...,
     ) -> int: ...
+
     @overload
     def create_text(
         self,
@@ -3533,7 +3535,6 @@ class Canvas(Widget, XView, YView):
         width: float | str = ...,
     ) -> int:
         """Create text with coordinates x1,y1."""
-
     @overload
     def create_text(
         self,
@@ -3556,6 +3557,7 @@ class Canvas(Widget, XView, YView):
         text: float | str = ...,
         width: float | str = ...,
     ) -> int: ...
+
     @overload
     def create_window(
         self,
@@ -3571,7 +3573,6 @@ class Canvas(Widget, XView, YView):
         window: Widget = ...,
     ) -> int:
         """Create window with coordinates x1,y1,x2,y2."""
-
     @overload
     def create_window(
         self,
@@ -3585,6 +3586,7 @@ class Canvas(Widget, XView, YView):
         width: float | str = ...,
         window: Widget = ...,
     ) -> int: ...
+
     def dchars(self, *args) -> None:
         """Delete characters of text items identified by tag or id in ARGS (possibly
         several times) from FIRST to LAST character (including).
@@ -3598,9 +3600,9 @@ class Canvas(Widget, XView, YView):
         """Delete tag or id given as last arguments in ARGS from items
         identified by first argument in ARGS.
         """
-
     @overload
     def dtag(self, id: int, tag_to_delete: str, /) -> None: ...
+
     def focus(self, *args):
         """Set focus to the first item specified in ARGS."""
 
@@ -3842,9 +3844,9 @@ class Checkbutton(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def deselect(self) -> None:
         """Put the button in off-state."""
@@ -3975,9 +3977,9 @@ class Entry(Widget, XView):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def delete(self, first: str | int, last: str | int | None = None) -> None:
         """Delete text from FIRST to LAST (not included)."""
@@ -4098,9 +4100,9 @@ class Frame(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
 
 class Label(Widget):
@@ -4211,9 +4213,9 @@ class Label(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
 
 class Listbox(Widget, XView, YView):
@@ -4326,9 +4328,9 @@ class Listbox(Widget, XView, YView):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def activate(self, index: str | int) -> None:
         """Activate item identified by INDEX."""
@@ -4476,9 +4478,9 @@ class Menu(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def tk_popup(self, x: int, y: int, entry: str | int = "") -> None:
         """Post the menu at position X,Y with entry ENTRY."""
@@ -4786,6 +4788,7 @@ class Menubutton(Widget):
         width: float | str = 0,
         wraplength: float | str = 0,
     ) -> None: ...
+
     @overload
     def configure(
         self,
@@ -4838,9 +4841,9 @@ class Menubutton(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
 
 class Message(Widget):
@@ -4876,6 +4879,7 @@ class Message(Widget):
         # there's width but no height
         width: float | str = 0,
     ) -> None: ...
+
     @overload
     def configure(
         self,
@@ -4916,9 +4920,9 @@ class Message(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
 
 class Radiobutton(Widget):
@@ -5042,9 +5046,9 @@ class Radiobutton(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def deselect(self) -> None:
         """Put the button in off-state."""
@@ -5165,9 +5169,9 @@ class Scale(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def get(self) -> float:
         """Get the current value as integer or float."""
@@ -5270,9 +5274,9 @@ class Scrollbar(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def activate(self, index=None):
         """Marks the element indicated by index as active.
@@ -5457,9 +5461,9 @@ class Text(Widget, XView, YView):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def bbox(self, index: str | float | _tkinter.Tcl_Obj | Widget) -> tuple[int, int, int, int] | None:  # type: ignore[override]
         """Return a tuple of (x,y,width,height) which gives the bounding
@@ -5500,7 +5504,6 @@ class Text(Widget, XView, YView):
             which if given then all subsequent options ensure that any
             possible out of date information is recalculated.
             """
-
         @overload
         def count(
             self,
@@ -5636,7 +5639,6 @@ class Text(Widget, XView, YView):
             option "update", which if given then all subsequent options ensure
             that any possible out of date information is recalculated.
             """
-
         @overload
         def count(
             self,
@@ -5689,9 +5691,9 @@ class Text(Widget, XView, YView):
         """Turn on the internal consistency checks of the B-Tree inside the text
         widget according to BOOLEAN.
         """
-
     @overload
     def debug(self, boolean: bool) -> None: ...
+
     def delete(
         self, index1: str | float | _tkinter.Tcl_Obj | Widget, index2: str | float | _tkinter.Tcl_Obj | Widget | None = None
     ) -> None:
@@ -5729,7 +5731,6 @@ class Text(Widget, XView, YView):
         of the list of triples, with the values of each triple serving as the
         arguments to the function. In this case the list is not returned.
         """
-
     @overload
     def dump(
         self,
@@ -5758,6 +5759,7 @@ class Text(Widget, XView, YView):
         text: bool = ...,
         window: bool = ...,
     ) -> None: ...
+
     def edit(self, *args):  # docstring says "Internal method"
         """Internal method
 
@@ -5782,9 +5784,9 @@ class Text(Widget, XView, YView):
         modified flag. If boolean is specified, sets the
         modified flag of the widget to arg.
         """
-
     @overload
     def edit_modified(self, arg: bool) -> None: ...  # actually returns empty string
+
     def edit_redo(self) -> None:  # actually returns empty string
         """Redo the last undone edit
 
@@ -5821,7 +5823,6 @@ class Text(Widget, XView, YView):
     @overload
     def image_cget(self, index: str | float | _tkinter.Tcl_Obj | Widget, option: Literal["image", "name"]) -> str:
         """Return the value of OPTION of an embedded image at INDEX."""
-
     @overload
     def image_cget(self, index: str | float | _tkinter.Tcl_Obj | Widget, option: Literal["padx", "pady"]) -> int: ...
     @overload
@@ -5830,6 +5831,7 @@ class Text(Widget, XView, YView):
     ) -> Literal["baseline", "bottom", "center", "top"]: ...
     @overload
     def image_cget(self, index: str | float | _tkinter.Tcl_Obj | Widget, option: str) -> Any: ...
+
     @overload
     def image_configure(self, index: str | float | _tkinter.Tcl_Obj | Widget, cnf: str) -> tuple[str, str, str, str, str | int]:
         """Query or modify the configuration options of an embedded image at INDEX.
@@ -5837,7 +5839,6 @@ class Text(Widget, XView, YView):
         Similar to configure() except that it applies to the specified
         embedded image.
         """
-
     @overload
     def image_configure(
         self,
@@ -5850,6 +5851,7 @@ class Text(Widget, XView, YView):
         padx: float | str = ...,
         pady: float | str = ...,
     ) -> dict[str, tuple[str, str, str, str, str | int]] | None: ...
+
     def image_create(
         self,
         index: str | float | _tkinter.Tcl_Obj | Widget,
@@ -5881,9 +5883,9 @@ class Text(Widget, XView, YView):
         """Change the gravity of a mark MARKNAME to DIRECTION (LEFT or RIGHT).
         Return the current value if None is given for DIRECTION.
         """
-
     @overload
     def mark_gravity(self, markName: str, direction: Literal["left", "right"]) -> None: ...  # actually returns empty string
+
     def mark_names(self) -> tuple[str, ...]:
         """Return all mark names."""
 
@@ -5961,6 +5963,7 @@ class Text(Widget, XView, YView):
         """Add tag TAGNAME to all characters between INDEX1 and index2 in ARGS.
         Additional pairs of indices may follow in ARGS.
         """
+
     # tag_bind stuff is very similar to Canvas
     @overload
     def tag_bind(
@@ -5976,9 +5979,9 @@ class Text(Widget, XView, YView):
         called additionally to the other bound function or whether it will
         replace the previous function. See bind for the return value.
         """
-
     @overload
     def tag_bind(self, tagName: str, sequence: str | None, func: str, add: Literal["", "+"] | bool | None = None) -> None: ...
+
     def tag_unbind(self, tagName: str, sequence: str, funcid: str | None = None) -> None:
         """Unbind for all characters with TAGNAME for event SEQUENCE  the
         function identified with FUNCID.
@@ -6026,9 +6029,9 @@ class Text(Widget, XView, YView):
 
         Similar to configure() except that it applies to the specified tag.
         """
-
     @overload
     def tag_configure(self, tagName: str, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     tag_config = tag_configure
     def tag_delete(self, first_tag_name: str, /, *tagNames: str) -> None:  # error if no tag names given
         """Delete all tags in TAGNAMES."""
@@ -6082,7 +6085,6 @@ class Text(Widget, XView, YView):
     @overload
     def window_cget(self, index: str | float | _tkinter.Tcl_Obj | Widget, option: Literal["padx", "pady"]) -> int:
         """Return the value of OPTION of an embedded window at INDEX."""
-
     @overload
     def window_cget(
         self, index: str | float | _tkinter.Tcl_Obj | Widget, option: Literal["stretch"]
@@ -6095,6 +6097,7 @@ class Text(Widget, XView, YView):
     def window_cget(self, index: str | float | _tkinter.Tcl_Obj | Widget, option: Literal["create", "window"]) -> str: ...
     @overload
     def window_cget(self, index: str | float | _tkinter.Tcl_Obj | Widget, option: str) -> Any: ...
+
     @overload
     def window_configure(self, index: str | float | _tkinter.Tcl_Obj | Widget, cnf: str) -> tuple[str, str, str, str, str | int]:
         """Query or modify the configuration options of an embedded window at INDEX.
@@ -6102,7 +6105,6 @@ class Text(Widget, XView, YView):
         Similar to configure() except that it applies to the specified
         embedded window.
         """
-
     @overload
     def window_configure(
         self,
@@ -6116,6 +6118,7 @@ class Text(Widget, XView, YView):
         stretch: bool | Literal[0, 1] = ...,
         window: Misc | str = ...,
     ) -> dict[str, tuple[str, str, str, str, str | int]] | None: ...
+
     window_config = window_configure
     def window_create(
         self,
@@ -6467,7 +6470,6 @@ class PhotoImage(Image, _PhotoImageLike):
             If GRAYSCALE is true, the data will not contain color information.
             All pixel data will be transformed into grayscale.
             """
-
         @overload
         def data(
             self,
@@ -6671,9 +6673,9 @@ class Spinbox(Widget, XView):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def bbox(self, index) -> tuple[int, int, int, int] | None:  # type: ignore[override]
         """Return a tuple of X1,Y1,X2,Y2 coordinates for a
@@ -6887,9 +6889,9 @@ class LabelFrame(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
 
 class PanedWindow(Widget):
@@ -6976,9 +6978,9 @@ class PanedWindow(Widget):
         is specified, then modify the widget option(s) to have the given
         value(s).
         """
-
     @overload
     def configure(self, cnf: str) -> tuple[str, str, str, Any, Any]: ...
+
     config = configure
     def add(self, child: Widget, **kw) -> None:
         """Add a child widget to the panedwindow in a new pane.

@@ -111,7 +111,6 @@ def canonicalize(
 
     The configuration options are the same as for the ``C14NWriterTarget``.
     """
-
 @overload
 def canonicalize(
     xml_data: str | ReadableBuffer | None = None,
@@ -154,21 +153,26 @@ class Element(Generic[_Tag]):
     def extend(self, elements: Iterable[Element[Any]], /) -> None: ...
     def find(self, path: str, namespaces: dict[str, str] | None = None) -> Element | None: ...
     def findall(self, path: str, namespaces: dict[str, str] | None = None) -> list[Element]: ...
+
     @overload
     def findtext(self, path: str, default: None = None, namespaces: dict[str, str] | None = None) -> str | None: ...
     @overload
     def findtext(self, path: str, default: _T, namespaces: dict[str, str] | None = None) -> _T | str: ...
+
     @overload
     def get(self, key: str, default: None = None) -> str | None: ...
     @overload
     def get(self, key: str, default: _T) -> str | _T: ...
+
     def insert(self, index: int, subelement: Element[Any], /) -> None: ...
     def items(self) -> ItemsView[str, str]: ...
     def iter(self, tag: str | None = None) -> Generator[Element, None, None]: ...
+
     @overload
     def iterfind(self, path: Literal[""], namespaces: dict[str, str] | None = None) -> None: ...  # type: ignore[overload-overlap]
     @overload
     def iterfind(self, path: str, namespaces: dict[str, str] | None = None) -> Generator[Element, None, None]: ...
+
     def itertext(self) -> Generator[str, None, None]: ...
     def keys(self) -> dict_keys[str, str]: ...
     # makeelement returns the type of self in Python impl, but not in C impl
@@ -183,17 +187,17 @@ class Element(Generic[_Tag]):
     @overload
     def __getitem__(self, key: SupportsIndex, /) -> Element:
         """Return self[key]."""
-
     @overload
     def __getitem__(self, key: slice[SupportsIndex | None], /) -> list[Element]: ...
+
     def __len__(self) -> int:
         """Return len(self)."""
     # Doesn't actually exist at runtime, but instance of the class are indeed iterable due to __getitem__.
     def __iter__(self) -> Iterator[Element]: ...
+
     @overload
     def __setitem__(self, key: SupportsIndex, value: Element[Any], /) -> None:
         """Set self[key] to value."""
-
     @overload
     def __setitem__(self, key: slice[SupportsIndex | None], value: Iterable[Element[Any]], /) -> None: ...
 
@@ -322,9 +326,9 @@ class ElementTree(Generic[_Root]):
         Return the first matching element, or None if no element was found.
 
         """
-
     @overload
     def findtext(self, path: str, default: _T, namespaces: dict[str, str] | None = None) -> _T | str: ...
+
     def findall(self, path: str, namespaces: dict[str, str] | None = None) -> list[Element]:
         """Find all matching subelements by tag name or path.
 
@@ -349,9 +353,9 @@ class ElementTree(Generic[_Root]):
         Return an iterable yielding all matching elements in document order.
 
         """
-
     @overload
     def iterfind(self, path: str, namespaces: dict[str, str] | None = None) -> Generator[Element, None, None]: ...
+
     def write(
         self,
         file_or_filename: _FileWrite,
@@ -426,7 +430,6 @@ def tostring(
     Returns an (optionally) encoded string containing the XML data.
 
     """
-
 @overload
 def tostring(
     element: Element[Any],
@@ -447,6 +450,7 @@ def tostring(
     default_namespace: str | None = None,
     short_empty_elements: bool = True,
 ) -> Any: ...
+
 @overload
 def tostringlist(
     element: Element[Any],
@@ -477,6 +481,7 @@ def tostringlist(
     default_namespace: str | None = None,
     short_empty_elements: bool = True,
 ) -> list[Any]: ...
+
 def dump(elem: Element[Any] | ElementTree[Any]) -> None:
     """Write element tree or element structure to sys.stdout.
 
@@ -539,7 +544,6 @@ def iterparse(source: _FileRead, events: Sequence[str] | None = None) -> _IterPa
     Returns an iterator providing (event, elem) pairs.
 
     """
-
 @overload
 @deprecated("The `parser` parameter is deprecated since Python 3.4.")
 def iterparse(source: _FileRead, events: Sequence[str] | None = None, parser: XMLParser | None = None) -> _IterParseIterator: ...

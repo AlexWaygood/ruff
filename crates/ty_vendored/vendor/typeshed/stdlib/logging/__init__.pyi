@@ -1288,7 +1288,6 @@ def getLevelName(level: int) -> str:
     If no matching numeric or string value is passed in, the string
     'Level %s' % level is returned.
     """
-
 @overload
 @deprecated("The str -> int case is considered a mistake.")
 def getLevelName(level: str) -> Any: ...
@@ -1381,7 +1380,6 @@ def basicConfig(
     .. versionchanged:: 3.9
        Added the ``encoding`` and ``errors`` parameters.
     """
-
 @overload  # handlers is None, filename is passed (but possibly None)
 def basicConfig(
     *,
@@ -1407,6 +1405,7 @@ def basicConfig(
     handlers: None = None,
     force: bool | None = False,
 ) -> None: ...
+
 def shutdown(handlerList: Sequence[Any] = ...) -> None:  # handlerList is undocumented
     """
     Perform any cleanup actions in the logging system (e.g. flushing
@@ -1450,6 +1449,7 @@ class StreamHandler(Handler, Generic[_StreamT]):
 
     stream: _StreamT  # undocumented
     terminator: str
+
     @overload
     def __init__(self: StreamHandler[TextIO], stream: None = None) -> None:
         """
@@ -1457,9 +1457,9 @@ class StreamHandler(Handler, Generic[_StreamT]):
 
         If stream is not specified, sys.stderr is used.
         """
-
     @overload
     def __init__(self: StreamHandler[_StreamT], stream: _StreamT) -> None: ...  # pyright: ignore[reportInvalidTypeVarUse]  #11780
+
     def setStream(self, stream: _StreamT) -> _StreamT | None:
         """
         Sets the StreamHandler's stream to the specified value,

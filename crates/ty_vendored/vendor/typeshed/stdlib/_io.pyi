@@ -884,6 +884,5 @@ if sys.version_info >= (3, 10):
         This can be used in APIs with an encoding=None parameter.
         However, please consider using encoding="utf-8" for new APIs.
         """
-
     @overload
     def text_encoding(encoding: _T, stacklevel: int = 2, /) -> _T: ...

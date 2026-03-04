@@ -218,27 +218,27 @@ class TestCase:
     @overload
     def assertGreater(self, a: SupportsDunderGT[_T], b: _T, msg: Any = None) -> None:
         """Just like self.assertTrue(a > b), but with a nicer default message."""
-
     @overload
     def assertGreater(self, a: _T, b: SupportsDunderLT[_T], msg: Any = None) -> None: ...
+
     @overload
     def assertGreaterEqual(self, a: SupportsDunderGE[_T], b: _T, msg: Any = None) -> None:
         """Just like self.assertTrue(a >= b), but with a nicer default message."""
-
     @overload
     def assertGreaterEqual(self, a: _T, b: SupportsDunderLE[_T], msg: Any = None) -> None: ...
+
     @overload
     def assertLess(self, a: SupportsDunderLT[_T], b: _T, msg: Any = None) -> None:
         """Just like self.assertTrue(a < b), but with a nicer default message."""
-
     @overload
     def assertLess(self, a: _T, b: SupportsDunderGT[_T], msg: Any = None) -> None: ...
+
     @overload
     def assertLessEqual(self, a: SupportsDunderLE[_T], b: _T, msg: Any = None) -> None:
         """Just like self.assertTrue(a <= b), but with a nicer default message."""
-
     @overload
     def assertLessEqual(self, a: _T, b: SupportsDunderGE[_T], msg: Any = None) -> None: ...
+
     # `assertRaises`, `assertRaisesRegex`, and `assertRaisesRegexp`
     # are not using `ParamSpec` intentionally,
     # because they might be used with explicitly wrong arg types to raise some error in tests.
@@ -275,11 +275,11 @@ class TestCase:
             the_exception = cm.exception
             self.assertEqual(the_exception.error_code, 3)
         """
-
     @overload
     def assertRaises(
         self, expected_exception: type[_E] | tuple[type[_E], ...], *, msg: Any = ...
     ) -> _AssertRaisesContext[_E]: ...
+
     @overload
     def assertRaisesRegex(
         self,
@@ -300,11 +300,11 @@ class TestCase:
             msg: Optional message used in case of failure. Can only be used
                     when assertRaisesRegex is used as a context manager.
         """
-
     @overload
     def assertRaisesRegex(
         self, expected_exception: type[_E] | tuple[type[_E], ...], expected_regex: str | Pattern[str], *, msg: Any = ...
     ) -> _AssertRaisesContext[_E]: ...
+
     @overload
     def assertWarns(
         self,
@@ -340,11 +340,11 @@ class TestCase:
             the_warning = cm.warning
             self.assertEqual(the_warning.some_attribute, 147)
         """
-
     @overload
     def assertWarns(
         self, expected_warning: type[Warning] | tuple[type[Warning], ...], *, msg: Any = ...
     ) -> _AssertWarnsContext: ...
+
     @overload
     def assertWarnsRegex(
         self,
@@ -368,11 +368,11 @@ class TestCase:
             msg: Optional message used in case of failure. Can only be used
                     when assertWarnsRegex is used as a context manager.
         """
-
     @overload
     def assertWarnsRegex(
         self, expected_warning: type[Warning] | tuple[type[Warning], ...], expected_regex: str | Pattern[str], *, msg: Any = ...
     ) -> _AssertWarnsContext: ...
+
     def assertLogs(
         self, logger: str | logging.Logger | None = None, level: int | str | None = None
     ) -> _AssertLogsContext[_LoggingWatcher]:
@@ -419,7 +419,6 @@ class TestCase:
         If the two objects compare equal then they will automatically
         compare almost equal.
         """
-
     @overload
     def assertAlmostEqual(
         self, first: _S, second: _S, places: None = None, msg: Any = None, *, delta: _SupportsAbsAndDunderGE
@@ -442,6 +441,7 @@ class TestCase:
         msg: Any = None,
         delta: None = None,
     ) -> None: ...
+
     @overload
     def assertNotAlmostEqual(self, first: _S, second: _S, places: None, msg: Any, delta: _SupportsAbsAndDunderGE) -> None:
         """Fail if the two objects are equal as determined by their
@@ -454,7 +454,6 @@ class TestCase:
 
         Objects that are equal automatically fail.
         """
-
     @overload
     def assertNotAlmostEqual(
         self, first: _S, second: _S, places: None = None, msg: Any = None, *, delta: _SupportsAbsAndDunderGE
@@ -477,6 +476,7 @@ class TestCase:
         msg: Any = None,
         delta: None = None,
     ) -> None: ...
+
     def assertRegex(self, text: AnyStr, expected_regex: AnyStr | Pattern[AnyStr], msg: Any = None) -> None:
         """Fail the test unless the text matches the regular expression."""
 

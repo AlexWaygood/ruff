@@ -402,7 +402,6 @@ if sys.platform == "win32":
         2048 bytes) should be stored as files with the filenames stored in
         the configuration registry to help the registry perform efficiently.
         """
-
     @overload  # type=REG_SZ|REG_EXPAND_SZ
     def SetValueEx(
         key: _KeyType, value_name: str | None, reserved: Unused, type: Literal[1, 2], value: str | None, /
@@ -429,6 +428,7 @@ if sys.platform == "win32":
         value: int | str | list[str] | ReadableBuffer | None,
         /,
     ) -> None: ...
+
     def DisableReflectionKey(key: _KeyType, /) -> None:
         """Disables registry reflection for 32bit processes running on a 64bit OS.
 

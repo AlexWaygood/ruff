@@ -83,9 +83,9 @@ def asdict(obj: DataclassInstance) -> dict[str, Any]:
     dataclass instances. This will also look into built-in containers:
     tuples, lists, and dicts. Other objects are copied with 'copy.deepcopy()'.
     """
-
 @overload
 def asdict(obj: DataclassInstance, *, dict_factory: Callable[[list[tuple[str, Any]]], _T]) -> _T: ...
+
 @overload
 def astuple(obj: DataclassInstance) -> tuple[Any, ...]:
     """Return the fields of a dataclass instance as a new tuple of field values.
@@ -105,7 +105,6 @@ def astuple(obj: DataclassInstance) -> tuple[Any, ...]:
     dataclass instances. This will also look into built-in containers:
     tuples, lists, and dicts. Other objects are copied with 'copy.deepcopy()'.
     """
-
 @overload
 def astuple(obj: DataclassInstance, *, tuple_factory: Callable[[list[Any]], _T]) -> _T: ...
 
@@ -139,7 +138,6 @@ if sys.version_info >= (3, 11):
         all fields are keyword-only. If slots is true, a new class with a
         __slots__ attribute is returned.
         """
-
     @overload
     def dataclass(
         cls: None = None,
@@ -187,7 +185,6 @@ elif sys.version_info >= (3, 10):
         default all fields are keyword-only. If slots is true, an
         __slots__ attribute is added.
         """
-
     @overload
     def dataclass(
         cls: None = None,
@@ -228,7 +225,6 @@ else:
         __hash__() method function is added. If frozen is true, fields may
         not be assigned to after instance creation.
         """
-
     @overload
     def dataclass(
         cls: None = None,
@@ -370,7 +366,6 @@ if sys.version_info >= (3, 14):
 
         It is an error to specify both default and default_factory.
         """
-
     @overload
     def field(
         *,
@@ -426,7 +421,6 @@ elif sys.version_info >= (3, 10):
 
         It is an error to specify both default and default_factory.
         """
-
     @overload
     def field(
         *,
@@ -477,7 +471,6 @@ else:
 
         It is an error to specify both default and default_factory.
         """
-
     @overload
     def field(
         *,
@@ -514,7 +507,6 @@ def is_dataclass(obj: Never) -> TypeIs[DataclassInstance | type[DataclassInstanc
     """Returns True if obj is a dataclass or an instance of a
     dataclass.
     """
-
 @overload
 def is_dataclass(obj: type) -> TypeIs[type[DataclassInstance]]: ...
 @overload
@@ -526,6 +518,7 @@ class InitVar(Generic[_T]):
     __slots__ = ("type",)
     type: Type[_T]
     def __init__(self, type: Type[_T]) -> None: ...
+
     @overload
     def __class_getitem__(cls, type: Type[_T]) -> InitVar[_T]: ...  # pyright: ignore[reportInvalidTypeForm]
     @overload

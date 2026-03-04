@@ -34,7 +34,6 @@ if sys.version_info >= (3, 10):
 
         A custom key function can be supplied to customize the sort order.
         """
-
     @overload
     def bisect_left(
         a: SupportsLenAndGetItem[_T],
@@ -44,6 +43,7 @@ if sys.version_info >= (3, 10):
         *,
         key: Callable[[_T], SupportsRichComparisonT],
     ) -> int: ...
+
     @overload
     def bisect_right(
         a: SupportsLenAndGetItem[SupportsRichComparisonT],
@@ -64,7 +64,6 @@ if sys.version_info >= (3, 10):
 
         A custom key function can be supplied to customize the sort order.
         """
-
     @overload
     def bisect_right(
         a: SupportsLenAndGetItem[_T],
@@ -74,6 +73,7 @@ if sys.version_info >= (3, 10):
         *,
         key: Callable[[_T], SupportsRichComparisonT],
     ) -> int: ...
+
     @overload
     def insort_left(
         a: MutableSequence[SupportsRichComparisonT],
@@ -92,11 +92,11 @@ if sys.version_info >= (3, 10):
 
         A custom key function can be supplied to customize the sort order.
         """
-
     @overload
     def insort_left(
         a: MutableSequence[_T], x: _T, lo: int = 0, hi: int | None = None, *, key: Callable[[_T], SupportsRichComparisonT]
     ) -> None: ...
+
     @overload
     def insort_right(
         a: MutableSequence[SupportsRichComparisonT],
@@ -115,7 +115,6 @@ if sys.version_info >= (3, 10):
 
         A custom key function can be supplied to customize the sort order.
         """
-
     @overload
     def insort_right(
         a: MutableSequence[_T], x: _T, lo: int = 0, hi: int | None = None, *, key: Callable[[_T], SupportsRichComparisonT]

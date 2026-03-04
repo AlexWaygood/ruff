@@ -499,7 +499,6 @@ class TarFile:
             'w|xz'       open an lzma compressed stream for writing
             'w|zst'      open a zstd compressed stream for writing
             """
-
         @overload
         @classmethod
         def open(
@@ -638,6 +637,7 @@ class TarFile:
         errorlevel: int | None = ...,
         compresslevel: int = 9,
     ) -> Self: ...
+
     @classmethod
     def taropen(
         cls,
@@ -678,7 +678,6 @@ class TarFile:
         """Open gzip compressed tar archive name for reading or writing.
         Appending is not allowed.
         """
-
     @overload
     @classmethod
     def gzopen(
@@ -697,6 +696,7 @@ class TarFile:
         debug: int | None = ...,
         errorlevel: int | None = ...,
     ) -> Self: ...
+
     @overload
     @classmethod
     def bz2open(
@@ -718,7 +718,6 @@ class TarFile:
         """Open bzip2 compressed tar archive name for reading or writing.
         Appending is not allowed.
         """
-
     @overload
     @classmethod
     def bz2open(
@@ -737,6 +736,7 @@ class TarFile:
         debug: int | None = ...,
         errorlevel: int | None = ...,
     ) -> Self: ...
+
     @classmethod
     def xzopen(
         cls,
@@ -781,7 +781,6 @@ class TarFile:
             """Open zstd compressed tar archive name for reading or writing.
             Appending is not allowed.
             """
-
         @overload
         @classmethod
         def zstopen(
@@ -1162,9 +1161,9 @@ class TarInfo:
     @property
     def linkpath(self) -> str:
         """In pax headers, "linkname" is called "linkpath"."""
-
     @linkpath.setter
     def linkpath(self, linkname: str) -> None: ...
+
     def replace(
         self,
         *,

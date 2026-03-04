@@ -372,12 +372,14 @@ if sys.version_info >= (3, 10) and sys.version_info < (3, 12):
         """
 
         def __getitem__(self, name: _KT) -> _VT: ...
+
         @overload
         def get(self, name: _KT, default: None = None) -> _VT | None: ...
         @overload
         def get(self, name: _KT, default: _VT) -> _VT: ...
         @overload
         def get(self, name: _KT, default: _T) -> _VT | _T: ...
+
         def __iter__(self) -> Iterator[_KT]: ...
         def __contains__(self, *args: object) -> bool: ...
         def keys(self) -> dict_keys[_KT, _VT]: ...
@@ -504,12 +506,12 @@ class Distribution(_distribution_parent):
         :return: Iterable of Distribution objects for packages matching
           the context.
         """
-
     @overload
     @classmethod
     def discover(
         cls, *, context: None = None, name: str | None = ..., path: list[str] = ..., **kwargs: Any
     ) -> Iterable[Distribution]: ...
+
     @staticmethod
     def at(path: StrPath) -> PathDistribution:
         """Return a Distribution for the indicated metadata path.
@@ -697,7 +699,6 @@ def distributions(*, context: DistributionFinder.Context) -> Iterable[Distributi
 
     :return: An iterable of ``Distribution`` instances.
     """
-
 @overload
 def distributions(
     *, context: None = None, name: str | None = ..., path: list[str] = ..., **kwargs: Any
@@ -751,7 +752,6 @@ elif sys.version_info >= (3, 10):
 
         :return: EntryPoints or SelectableGroups for all installed packages.
         """
-
     @overload
     def entry_points(
         *, name: str = ..., value: str = ..., group: str = ..., module: str = ..., attr: str = ..., extras: list[str] = ...

@@ -116,7 +116,6 @@ if sys.version_info >= (3, 10):
         The returned instance, in addition to being an iterator,
         keeps global state for the functions of this module,.
         """
-
     @overload
     def input(
         files: StrOrBytesPath | Iterable[StrOrBytesPath] | None = None,
@@ -157,7 +156,6 @@ else:
         The returned instance, in addition to being an iterator,
         keeps global state for the functions of this module,.
         """
-
     @overload
     def input(
         files: StrOrBytesPath | Iterable[StrOrBytesPath] | None = None,

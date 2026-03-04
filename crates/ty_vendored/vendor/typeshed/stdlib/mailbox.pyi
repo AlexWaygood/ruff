@@ -53,12 +53,13 @@ class Mailbox(Generic[_MessageT]):
 
     _path: str  # undocumented
     _factory: Callable[[IO[Any]], _MessageT] | None  # undocumented
+
     @overload
     def __init__(self, path: StrPath, factory: Callable[[IO[Any]], _MessageT], create: bool = True) -> None:
         """Initialize a Mailbox instance."""
-
     @overload
     def __init__(self, path: StrPath, factory: None = None, create: bool = True) -> None: ...
+
     @abstractmethod
     def add(self, message: _MessageData) -> str:
         """Add message and return assigned key."""
@@ -78,9 +79,9 @@ class Mailbox(Generic[_MessageT]):
     @overload
     def get(self, key: str, default: None = None) -> _MessageT | None:
         """Return the keyed message, or default if it doesn't exist."""
-
     @overload
     def get(self, key: str, default: _T) -> _MessageT | _T: ...
+
     def __getitem__(self, key: str) -> _MessageT:
         """Return the keyed message; raise KeyError if it doesn't exist."""
 
@@ -137,9 +138,9 @@ class Mailbox(Generic[_MessageT]):
     @overload
     def pop(self, key: str, default: None = None) -> _MessageT | None:
         """Delete the keyed message and return it, or default."""
-
     @overload
     def pop(self, key: str, default: _T) -> _MessageT | _T: ...
+
     def popitem(self) -> tuple[str, _MessageT]:
         """Delete an arbitrary (key, message) pair and return it."""
 

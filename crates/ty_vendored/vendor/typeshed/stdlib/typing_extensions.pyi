@@ -384,18 +384,19 @@ class _TypedDict(Mapping[str, object], metaclass=abc.ABCMeta):
     def keys(self) -> dict_keys[str, object]: ...
     def values(self) -> dict_values[str, object]: ...
     def __delitem__(self, k: Never) -> None: ...
+
     @overload
     def __or__(self, value: Self, /) -> Self:
         """Return self|value."""
-
     @overload
     def __or__(self, value: dict[str, Any], /) -> dict[str, object]: ...
+
     @overload
     def __ror__(self, value: Self, /) -> Self:
         """Return value|self."""
-
     @overload
     def __ror__(self, value: dict[str, Any], /) -> dict[str, object]: ...
+
     # supposedly incompatible definitions of `__ior__` and `__or__`:
     # Since this module defines "Self" it is not recognized by Ruff as typing_extensions.Self
     def __ior__(self, value: Self, /) -> Self: ...  # type: ignore[misc]
@@ -496,7 +497,6 @@ def get_origin(tp: GenericAlias) -> type:
         >>> assert get_origin(List[Tuple[T, T]][int]) is list
         >>> assert get_origin(P.args) is P
     """
-
 @overload
 def get_origin(tp: ParamSpecArgs | ParamSpecKwargs) -> ParamSpec: ...
 @overload
@@ -976,10 +976,12 @@ else:
         _field_defaults: ClassVar[dict[str, Any]]
         _fields: ClassVar[tuple[str, ...]]
         __orig_bases__: ClassVar[tuple[Any, ...]]
+
         @overload
         def __init__(self, typename: str, fields: Iterable[tuple[str, Any]] = ...) -> None: ...
         @overload
         def __init__(self, typename: str, fields: None = None, **kwargs: Any) -> None: ...
+
         @classmethod
         def _make(cls, iterable: Iterable[Any]) -> Self: ...
         def _asdict(self) -> dict[str, Any]: ...
@@ -1152,6 +1154,7 @@ else:
         """
 
         __slots__ = ()
+
         @overload
         @abc.abstractmethod
         def __round__(self) -> int: ...
@@ -1608,7 +1611,6 @@ else:
             typing_extensions.get_annotations(obj, format=Format.FORWARDREF)
 
         """
-
     @overload
     def get_annotations(
         obj: Any,  # any object with __annotations__ or __annotate__
@@ -1627,6 +1629,7 @@ else:
         eval_str: bool = False,
         format: Format = Format.VALUE,  # noqa: Y011
     ) -> dict[str, AnnotationForm]: ...
+
     @overload
     def evaluate_forward_ref(
         forward_ref: ForwardRef,
@@ -1660,7 +1663,6 @@ else:
         annotation and is a member of the annotationlib.Format enum.
 
         """
-
     @overload
     def evaluate_forward_ref(
         forward_ref: ForwardRef,
@@ -1683,6 +1685,7 @@ else:
         format: Format | None = None,
         _recursive_guard: Container[str] = ...,
     ) -> AnnotationForm: ...
+
     def type_repr(value: object) -> str:
         """Convert a Python value to a format suitable for use with the STRING format.
 

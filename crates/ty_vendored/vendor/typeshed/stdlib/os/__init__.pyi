@@ -733,24 +733,25 @@ class _Environ(MutableMapping[AnyStr, AnyStr], Generic[AnyStr]):
         encodevalue: _EnvironCodeFunc[AnyStr],
         decodevalue: _EnvironCodeFunc[AnyStr],
     ) -> None: ...
+
     @overload
     def get(self, key: AnyStr, default: None = None) -> AnyStr | None:
         """D.get(k[,d]) -> D[k] if k in D, else d.  d defaults to None."""
-
     @overload
     def get(self, key: AnyStr, default: AnyStr) -> AnyStr: ...
     @overload
     def get(self, key: AnyStr, default: _T) -> AnyStr | _T: ...
+
     @overload
     def pop(self, key: AnyStr) -> AnyStr:
         """D.pop(k[,d]) -> v, remove specified key and return the corresponding value.
         If key is not found, d is returned if given, otherwise KeyError is raised.
         """
-
     @overload
     def pop(self, key: AnyStr, default: AnyStr) -> AnyStr: ...
     @overload
     def pop(self, key: AnyStr, default: _T) -> AnyStr | _T: ...
+
     def setdefault(self, key: AnyStr, value: AnyStr) -> AnyStr: ...
     def copy(self) -> dict[AnyStr, AnyStr]: ...
     def __delitem__(self, key: AnyStr) -> None: ...
@@ -760,6 +761,7 @@ class _Environ(MutableMapping[AnyStr, AnyStr], Generic[AnyStr]):
     def __len__(self) -> int: ...
     def __or__(self, other: Mapping[_T1, _T2]) -> dict[AnyStr | _T1, AnyStr | _T2]: ...
     def __ror__(self, other: Mapping[_T1, _T2]) -> dict[AnyStr | _T1, AnyStr | _T2]: ...
+
     # We use @overload instead of a Union for reasons similar to those given for
     # overloading MutableMapping.update in stdlib/typing.pyi
     # The type: ignore is needed due to incompatible __or__/__ior__ signatures
@@ -978,11 +980,11 @@ On some platforms, path may also be specified as an open file descriptor;\\
 The list is in arbitrary order.  It does not include the special
 entries '.' and '..' even if they are present in the directory.
 """
-
 @overload
 def listdir(path: BytesPath) -> list[bytes]: ...
 @overload
 def listdir(path: int) -> list[str]: ...
+
 @final
 class DirEntry(Generic[AnyStr]):
     # This is what the scandir iterator yields
@@ -1091,11 +1093,11 @@ def fspath(path: str) -> str:
     object defines __fspath__(), then return the result of that method. All other
     types raise a TypeError.
     """
-
 @overload
 def fspath(path: bytes) -> bytes: ...
 @overload
 def fspath(path: PathLike[AnyStr]) -> AnyStr: ...
+
 def get_exec_path(env: Mapping[str, str] | None = None) -> list[str]:
     """Returns the sequence of directories that will be searched for the
     named executable (similar to a shell) when launching a process.
@@ -1263,7 +1265,6 @@ def getenv(key: str) -> str | None:
     The optional second argument can specify an alternate default.
     key, default and the result are str.
     """
-
 @overload
 def getenv(key: str, default: _T) -> str | _T: ...
 
@@ -1274,9 +1275,9 @@ if sys.platform != "win32":
         The optional second argument can specify an alternate default.
         key, default and the result are bytes.
         """
-
     @overload
     def getenvb(key: bytes, default: _T) -> bytes | _T: ...
+
     def putenv(name: StrOrBytesPath, value: StrOrBytesPath, /) -> None:
         """Change or add an environment variable."""
 
@@ -1369,6 +1370,7 @@ def fdopen(
     closefd: bool = True,
     opener: _Opener | None = None,
 ) -> IO[Any]: ...
+
 def close(fd: int) -> None:
     """Close a file descriptor."""
 
@@ -2042,11 +2044,11 @@ def scandir(path: None = None) -> _ScandirIterator[str]:
 
     If path is None, uses the path='.'.
     """
-
 @overload
 def scandir(path: int) -> _ScandirIterator[str]: ...
 @overload
 def scandir(path: GenericPath[AnyStr]) -> _ScandirIterator[AnyStr]: ...
+
 def stat(path: FileDescriptorOrPath, *, dir_fd: int | None = None, follow_symlinks: bool = True) -> stat_result:
     """Perform a stat system call on the given path.
 
@@ -2253,7 +2255,6 @@ if sys.platform != "win32":
             if '__pycache__' in dirs:
                 dirs.remove('__pycache__')  # don't visit __pycache__ directories
         """
-
     @overload
     def fwalk(
         top: BytesPath,
@@ -2263,6 +2264,7 @@ if sys.platform != "win32":
         follow_symlinks: bool = False,
         dir_fd: int | None = None,
     ) -> Iterator[tuple[bytes, list[bytes], list[bytes], int]]: ...
+
     if sys.platform == "linux":
         def getxattr(path: FileDescriptorOrPath, attribute: StrOrBytesPath, *, follow_symlinks: bool = True) -> bytes:
             """Return the value of extended attribute attribute on path.

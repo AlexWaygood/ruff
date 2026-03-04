@@ -129,7 +129,6 @@ class catch_warnings(Generic[_W_co]):
             should be used other than sys.modules['warnings'].
 
             """
-
         @overload
         def __init__(
             self: catch_warnings[list[WarningMessage]],
@@ -162,7 +161,6 @@ class catch_warnings(Generic[_W_co]):
             keyword-only.
 
             """
-
         @overload
         def __init__(
             self: catch_warnings[list[WarningMessage]], *, record: Literal[True], module: ModuleType | None = None

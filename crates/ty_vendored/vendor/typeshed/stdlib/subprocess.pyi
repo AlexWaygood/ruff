@@ -201,7 +201,6 @@ if sys.version_info >= (3, 11):
 
         The other arguments are the same as for the Popen constructor.
         """
-
     @overload
     def run(
         args: _CMD,
@@ -437,7 +436,6 @@ elif sys.version_info >= (3, 10):
 
         The other arguments are the same as for the Popen constructor.
         """
-
     @overload
     def run(
         args: _CMD,
@@ -665,7 +663,6 @@ else:
 
         The other arguments are the same as for the Popen constructor.
         """
-
     @overload
     def run(
         args: _CMD,
@@ -1129,7 +1126,6 @@ if sys.version_info >= (3, 11):
         decoded according to locale encoding, or by "encoding" if set. Text mode
         is triggered by setting any of text, encoding, errors or universal_newlines.
         """
-
     @overload
     def check_output(
         args: _CMD,
@@ -1353,7 +1349,6 @@ elif sys.version_info >= (3, 10):
         decoded according to locale encoding, or by "encoding" if set. Text mode
         is triggered by setting any of text, encoding, errors or universal_newlines.
         """
-
     @overload
     def check_output(
         args: _CMD,
@@ -1570,7 +1565,6 @@ else:
         decoded according to locale encoding, or by "encoding" if set. Text mode
         is triggered by setting any of text, encoding, errors or universal_newlines.
         """
-
     @overload
     def check_output(
         args: _CMD,
@@ -1865,7 +1859,6 @@ class Popen(Generic[AnyStr]):
             process_group: int | None = None,
         ) -> None:
             """Create new Popen instance."""
-
         @overload
         def __init__(
             self: Popen[str],
@@ -2055,7 +2048,6 @@ class Popen(Generic[AnyStr]):
             pipesize: int = -1,
         ) -> None:
             """Create new Popen instance."""
-
         @overload
         def __init__(
             self: Popen[str],
@@ -2238,7 +2230,6 @@ class Popen(Generic[AnyStr]):
             umask: int = -1,
         ) -> None:
             """Create new Popen instance."""
-
         @overload
         def __init__(
             self: Popen[str],

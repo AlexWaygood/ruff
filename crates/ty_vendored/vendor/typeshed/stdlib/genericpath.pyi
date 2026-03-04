@@ -36,7 +36,6 @@ if sys.version_info >= (3, 13):
 @overload
 def commonprefix(m: Sequence[LiteralString]) -> LiteralString:
     """Given a list of pathnames, returns the longest common leading component"""
-
 @overload
 def commonprefix(m: Sequence[StrPath]) -> str: ...
 @overload
@@ -45,6 +44,7 @@ def commonprefix(m: Sequence[BytesPath]) -> bytes | Literal[""]: ...
 def commonprefix(m: Sequence[list[SupportsRichComparisonT]]) -> Sequence[SupportsRichComparisonT]: ...
 @overload
 def commonprefix(m: Sequence[tuple[SupportsRichComparisonT, ...]]) -> Sequence[SupportsRichComparisonT]: ...
+
 def exists(path: FileDescriptorOrPath) -> bool:
     """Test whether a path exists.  Returns False for broken symbolic links"""
 

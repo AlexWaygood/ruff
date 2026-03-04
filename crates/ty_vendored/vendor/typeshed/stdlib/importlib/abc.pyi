@@ -421,6 +421,7 @@ if sys.version_info < (3, 11):
                 """
                 Return Traversable child in self
                 """
+
         # The documentation and runtime protocol allows *args, **kwargs arguments,
         # but this would mean that all implementers would have to support them,
         # which is not the case.
@@ -434,10 +435,10 @@ if sys.version_info < (3, 11):
             When opening as text, accepts encoding parameters such as those
             accepted by io.TextIOWrapper.
             """
-
         @overload
         @abstractmethod
         def open(self, mode: Literal["rb"]) -> IO[bytes]: ...
+
         @property
         @abstractmethod
         def name(self) -> str:
