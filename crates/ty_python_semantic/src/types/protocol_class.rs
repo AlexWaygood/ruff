@@ -142,7 +142,7 @@ impl<'db> ProtocolClass<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         Self(
             self.0
@@ -312,7 +312,7 @@ impl<'db> ProtocolInterface<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         Self::new(
             db,
@@ -415,7 +415,7 @@ impl<'db> ProtocolMemberData<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         Self {
             kind: self
@@ -493,7 +493,7 @@ impl<'db> ProtocolMemberKind<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         match self {
             ProtocolMemberKind::Method(callable) => ProtocolMemberKind::Method(

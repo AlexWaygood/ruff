@@ -12,11 +12,10 @@ use crate::{
         semantic_index,
     },
     types::{
-        ApplySpecialization, ApplyTypeMappingVisitor, CycleDetector, DynamicType, KnownClass,
-        KnownInstanceType, MaterializationKind, Parameter, Parameters, Type, TypeAliasType,
-        TypeContext, TypeMapping, TypeVarVariance, UnionBuilder, UnionType, any_over_type,
-        binding_type, definition_expression_type, tuple::Tuple, variance::VarianceInferable,
-        visitor,
+        ApplySpecialization, CycleDetector, DynamicType, KnownClass, KnownInstanceType,
+        MaterializationKind, Parameter, Parameters, Type, TypeAliasType, TypeContext, TypeMapping,
+        TypeVarVariance, UnionBuilder, UnionType, any_over_type, binding_type,
+        definition_expression_type, tuple::Tuple, variance::VarianceInferable, visitor,
     },
 };
 
@@ -269,12 +268,7 @@ impl<'db> TypeVarInstance<'db> {
         })
     }
 
-    fn materialize_impl(
-        self,
-        db: &'db dyn Db,
-        materialization_kind: MaterializationKind,
-        visitor: &ApplyTypeMappingVisitor<'db>,
-    ) -> Self {
+    fn materialize_impl(self, db: &'db dyn Db, materialization_kind: MaterializationKind) -> Self {
         Self::new(
             db,
             self.identity(db),
@@ -282,20 +276,20 @@ impl<'db> TypeVarInstance<'db> {
                 .and_then(|bound_or_constraints| match bound_or_constraints {
                     TypeVarBoundOrConstraintsEvaluation::Eager(bound_or_constraints) => Some(
                         bound_or_constraints
-                            .materialize_impl(db, materialization_kind, visitor)
+                            .materialize_impl(db, materialization_kind)
                             .into(),
                     ),
                     TypeVarBoundOrConstraintsEvaluation::LazyUpperBound => {
                         self.lazy_bound(db).map(|bound| {
                             TypeVarBoundOrConstraints::UpperBound(bound)
-                                .materialize_impl(db, materialization_kind, visitor)
+                                .materialize_impl(db, materialization_kind)
                                 .into()
                         })
                     }
                     TypeVarBoundOrConstraintsEvaluation::LazyConstraints => {
                         self.lazy_constraints(db).map(|constraints| {
                             TypeVarBoundOrConstraints::Constraints(constraints)
-                                .materialize_impl(db, materialization_kind, visitor)
+                                .materialize_impl(db, materialization_kind)
                                 .into()
                         })
                     }
@@ -303,11 +297,11 @@ impl<'db> TypeVarInstance<'db> {
             self.explicit_variance(db),
             self._default(db).and_then(|default| match default {
                 TypeVarDefaultEvaluation::Eager(ty) => {
-                    Some(ty.materialize(db, materialization_kind, visitor).into())
+                    Some(ty.materialize(db, materialization_kind).into())
                 }
                 TypeVarDefaultEvaluation::Lazy => self
                     .lazy_default(db)
-                    .map(|ty| ty.materialize(db, materialization_kind, visitor).into()),
+                    .map(|ty| ty.materialize(db, materialization_kind).into()),
             }),
         )
     }
@@ -843,7 +837,6 @@ impl<'db> BoundTypeVarInstance<'db> {
         self,
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
     ) -> Type<'db> {
         let mapped_specialization_type =
             |specialization: &ApplySpecialization<'a, 'db>| -> Option<Type<'db>> {
@@ -878,10 +871,7 @@ impl<'db> BoundTypeVarInstance<'db> {
                     if mapped == Type::TypeVar(self) {
                         mapped
                     } else {
-                        // Materialization uses a different mapping mode. Reuse of the outer
-                        // visitor can incorrectly hit a cache entry from specialization.
-                        let materialization_visitor = ApplyTypeMappingVisitor::default();
-                        mapped.materialize(db, *materialization_kind, &materialization_visitor)
+                        mapped.materialize(db, *materialization_kind)
                     }
                 })
                 .unwrap_or(Type::TypeVar(self)),
@@ -910,7 +900,7 @@ impl<'db> BoundTypeVarInstance<'db> {
             | TypeMapping::EagerExpansion
             | TypeMapping::RescopeReturnCallables(_) => Type::TypeVar(self),
             TypeMapping::Materialize(materialization_kind) => {
-                Type::TypeVar(self.materialize_impl(db, *materialization_kind, visitor))
+                Type::TypeVar(self.materialize_impl(db, *materialization_kind))
             }
         }
     }
@@ -951,16 +941,10 @@ impl<'db> BoundTypeVarInstance<'db> {
         bound_typevar_default_type(db, self)
     }
 
-    fn materialize_impl(
-        self,
-        db: &'db dyn Db,
-        materialization_kind: MaterializationKind,
-        visitor: &ApplyTypeMappingVisitor<'db>,
-    ) -> Self {
+    fn materialize_impl(self, db: &'db dyn Db, materialization_kind: MaterializationKind) -> Self {
         Self::new(
             db,
-            self.typevar(db)
-                .materialize_impl(db, materialization_kind, visitor),
+            self.typevar(db).materialize_impl(db, materialization_kind),
             self.binding_context(db),
             self.paramspec_attr(db),
         )
@@ -1306,16 +1290,11 @@ impl<'db> TypeVarConstraints<'db> {
         }
     }
 
-    fn materialize_impl(
-        self,
-        db: &'db dyn Db,
-        materialization_kind: MaterializationKind,
-        visitor: &ApplyTypeMappingVisitor<'db>,
-    ) -> Self {
+    fn materialize_impl(self, db: &'db dyn Db, materialization_kind: MaterializationKind) -> Self {
         let materialized = self
             .elements(db)
             .iter()
-            .map(|ty| ty.materialize(db, materialization_kind, visitor))
+            .map(|ty| ty.materialize(db, materialization_kind))
             .collect::<Box<_>>();
         TypeVarConstraints::new(db, materialized)
     }
@@ -1365,22 +1344,15 @@ pub(super) fn walk_type_var_bounds<'db, V: visitor::TypeVisitor<'db> + ?Sized>(
 }
 
 impl<'db> TypeVarBoundOrConstraints<'db> {
-    fn materialize_impl(
-        self,
-        db: &'db dyn Db,
-        materialization_kind: MaterializationKind,
-        visitor: &ApplyTypeMappingVisitor<'db>,
-    ) -> Self {
+    fn materialize_impl(self, db: &'db dyn Db, materialization_kind: MaterializationKind) -> Self {
         match self {
-            TypeVarBoundOrConstraints::UpperBound(bound) => TypeVarBoundOrConstraints::UpperBound(
-                bound.materialize(db, materialization_kind, visitor),
-            ),
+            TypeVarBoundOrConstraints::UpperBound(bound) => {
+                TypeVarBoundOrConstraints::UpperBound(bound.materialize(db, materialization_kind))
+            }
             TypeVarBoundOrConstraints::Constraints(constraints) => {
-                TypeVarBoundOrConstraints::Constraints(constraints.materialize_impl(
-                    db,
-                    materialization_kind,
-                    visitor,
-                ))
+                TypeVarBoundOrConstraints::Constraints(
+                    constraints.materialize_impl(db, materialization_kind),
+                )
             }
         }
     }

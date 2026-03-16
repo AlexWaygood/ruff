@@ -944,7 +944,7 @@ impl<'db> FunctionType<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         let updated_signature =
             self.signature(db)

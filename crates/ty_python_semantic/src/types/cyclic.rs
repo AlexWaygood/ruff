@@ -46,18 +46,6 @@ use crate::types::Type;
 /// ensures we bail out before hitting a stack overflow.
 const MAX_RECURSION_DEPTH: u32 = 64;
 
-pub(crate) type TypeTransformer<'db, Tag> = CycleDetector<Tag, Type<'db>, Type<'db>>;
-
-impl<Tag> Default for TypeTransformer<'_, Tag> {
-    fn default() -> Self {
-        // TODO: proper recursive type handling
-
-        // This must be Any, not e.g. a todo type, because Any is the normalized form of the
-        // dynamic type (that is, todo types are normalized to Any).
-        CycleDetector::new(Type::any())
-    }
-}
-
 pub(crate) type PairVisitor<'db, Tag, C> = CycleDetector<Tag, (Type<'db>, Type<'db>), C>;
 
 #[derive(Debug)]

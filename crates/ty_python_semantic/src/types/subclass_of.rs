@@ -139,7 +139,7 @@ impl<'db> SubclassOfType<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Type<'db> {
         match self.subclass_of {
             SubclassOfInner::Class(class) => Type::SubclassOf(Self {
@@ -158,7 +158,7 @@ impl<'db> SubclassOfType<'db> {
                 _ => Type::SubclassOf(self),
             },
             SubclassOfInner::TypeVar(typevar) => {
-                let mapped = typevar.apply_type_mapping_impl(db, type_mapping, visitor);
+                let mapped = typevar.apply_type_mapping_impl(db, type_mapping);
                 if mapped.is_never() {
                     Type::Never
                 } else {

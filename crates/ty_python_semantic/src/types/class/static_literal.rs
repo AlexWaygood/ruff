@@ -25,7 +25,7 @@ use crate::{
         use_def_map,
     },
     types::{
-        ApplyTypeMappingVisitor, BoundTypeVarInstance, CallArguments, CallableType, ClassBase,
+        BoundTypeVarInstance, CallArguments, CallableType, ClassBase,
         ClassLiteral, ClassType, DATACLASS_FLAGS, DataclassFlags, DataclassParams, GenericAlias,
         GenericContext, KnownClass, KnownInstanceType, MaterializationKind, MemberLookupPolicy,
         MetaclassCandidate, MetaclassTransformInfo, Parameter, Parameters, PropertyInstanceType,
@@ -381,11 +381,7 @@ impl<'db> StaticClassLiteral<'db> {
         self.apply_specialization(db, |generic_context| {
             generic_context
                 .default_specialization(db, self.known(db))
-                .materialize_impl(
-                    db,
-                    MaterializationKind::Top,
-                    &ApplyTypeMappingVisitor::default(),
-                )
+                .materialize_impl(db, MaterializationKind::Top)
         })
     }
 

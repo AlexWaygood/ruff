@@ -1,7 +1,6 @@
 use compact_str::ToCompactString;
 use itertools::Itertools;
 use ruff_diagnostics::{Edit, Fix};
-use rustc_hash::FxHashMap;
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -21,7 +20,6 @@ use ty_module_resolver::{KnownModule, Module, ModuleName, resolve_module};
 
 pub(crate) use self::callable::UpcastPolicy;
 pub use self::cyclic::CycleDetector;
-pub(crate) use self::cyclic::TypeTransformer;
 pub(crate) use self::diagnostic::register_lints;
 pub use self::diagnostic::{TypeCheckDiagnostics, UNDEFINED_REVEAL, UNRESOLVED_REFERENCE};
 pub(crate) use self::infer::{
@@ -86,7 +84,7 @@ pub use crate::types::typevar::{
 pub use crate::types::variance::TypeVarVariance;
 use crate::types::variance::VarianceInferable;
 use crate::types::visitor::any_over_type;
-use crate::{Db, FxOrderSet, Program};
+use crate::{Db, FxOrderMap, FxOrderSet, Program};
 pub use class::KnownClass;
 pub(crate) use class::{ClassLiteral, ClassType, GenericAlias, StaticClassLiteral};
 use instance::Protocol;
@@ -233,8 +231,9 @@ fn definition_expression_type<'db>(
     }
 }
 
-/// A [`TypeTransformer`] that is used in `apply_type_mapping` methods.
-pub(crate) type ApplyTypeMappingVisitor<'db> = TypeTransformer<'db, TypeMapping<'db, 'db>>;
+/// A [`CycleDetector`] that is used in `apply_type_mapping` methods.
+type ApplyTypeMappingVisitor<'a, 'db> =
+    CycleDetector<TypeMapping<'db, 'db>, (Type<'db>, TypeMappingCacheKey<'a, 'db>), Type<'db>>;
 
 /// A [`CycleDetector`] that is used in `find_legacy_typevars` methods.
 pub(crate) type FindLegacyTypeVarsVisitor<'db> = CycleDetector<FindLegacyTypeVars, Type<'db>, ()>;
@@ -481,7 +480,7 @@ impl<'db> PropertyInstanceType<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         let getter = self
             .getter(db)
@@ -1069,22 +1068,14 @@ impl<'db> Type<'db> {
     /// most general form of the type that is fully static.
     #[must_use]
     pub(crate) fn top_materialization(&self, db: &'db dyn Db) -> Type<'db> {
-        self.materialize(
-            db,
-            MaterializationKind::Top,
-            &ApplyTypeMappingVisitor::default(),
-        )
+        self.materialize(db, MaterializationKind::Top)
     }
 
     /// Returns the bottom materialization (or lower bound materialization) of this type, which is
     /// the most specific form of the type that is fully static.
     #[must_use]
     pub(crate) fn bottom_materialization(&self, db: &'db dyn Db) -> Type<'db> {
-        self.materialize(
-            db,
-            MaterializationKind::Bottom,
-            &ApplyTypeMappingVisitor::default(),
-        )
+        self.materialize(db, MaterializationKind::Bottom)
     }
 
     /// If this type is an instance type where the class has a tuple spec, returns the tuple spec.
@@ -1149,13 +1140,11 @@ impl<'db> Type<'db> {
         &self,
         db: &'db dyn Db,
         materialization_kind: MaterializationKind,
-        visitor: &ApplyTypeMappingVisitor<'db>,
     ) -> Type<'db> {
-        self.apply_type_mapping_impl(
+        self.apply_type_mapping(
             db,
             &TypeMapping::Materialize(materialization_kind),
             TypeContext::default(),
-            visitor,
         )
     }
 
@@ -5177,7 +5166,7 @@ impl<'db> Type<'db> {
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
     ) -> Type<'db> {
-        self.apply_type_mapping_impl(db, type_mapping, tcx, &ApplyTypeMappingVisitor::default())
+        self.apply_type_mapping_impl(db, type_mapping, tcx, &ApplyTypeMappingVisitor::new(self))
     }
 
     fn apply_type_mapping_impl<'a>(
@@ -5185,7 +5174,7 @@ impl<'db> Type<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Type<'db> {
         // If we are binding `typing.Self`, and this type is what we are binding `Self` to, return
         // early. This is not just an optimization, it also prevents us from infinitely expanding
@@ -5206,10 +5195,10 @@ impl<'db> Type<'db> {
         }
 
         match self {
-            Type::TypeVar(bound_typevar) => bound_typevar.apply_type_mapping_impl(db, type_mapping, visitor),
+            Type::TypeVar(bound_typevar) => visitor.visit((self, type_mapping.into()), || bound_typevar.apply_type_mapping_impl(db, type_mapping)),
             Type::KnownInstance(known_instance) => known_instance.apply_type_mapping_impl(db, type_mapping, tcx, visitor),
 
-            Type::FunctionLiteral(function) => visitor.visit(self, || {
+            Type::FunctionLiteral(function) => visitor.visit((self, type_mapping.into()), || {
                 match type_mapping {
                     // Promote the types within the signature before promoting the signature to its
                     // callable form.
@@ -5254,10 +5243,10 @@ impl<'db> Type<'db> {
             }
 
             Type::NominalInstance(instance) => {
-                instance.apply_type_mapping_impl(db, type_mapping, tcx, visitor)
+                visitor.visit((self, type_mapping.into()), || instance.apply_type_mapping_impl(db, type_mapping, tcx, visitor))
             },
 
-            Type::NewTypeInstance(newtype) => visitor.visit(self, || {
+            Type::NewTypeInstance(newtype) => visitor.visit((self, type_mapping.into()), || {
                 Type::NewTypeInstance(newtype.map_base_class_type(db, |class_type| {
                     class_type.apply_type_mapping_impl(db, type_mapping, tcx, visitor)
                 }))
@@ -5307,7 +5296,7 @@ impl<'db> Type<'db> {
             }
 
             Type::TypedDict(typed_dict) => {
-                Type::TypedDict(typed_dict.apply_type_mapping_impl(db, type_mapping, tcx, visitor))
+                visitor.visit((self, type_mapping.into()), || Type::TypedDict(typed_dict.apply_type_mapping_impl(db, type_mapping, tcx, visitor)))
             }
 
             Type::SubclassOf(subclass_of) => subclass_of.apply_type_mapping_impl(db, type_mapping, tcx, visitor),
@@ -5338,7 +5327,7 @@ impl<'db> Type<'db> {
             }
 
             // TODO(jelle): Materialize should be handled differently, since TypeIs is invariant
-            Type::TypeIs(type_is) => visitor.visit(self, || {
+            Type::TypeIs(type_is) => visitor.visit((self, type_mapping.into()), || {
                 type_is.with_type(
                     db,
                     type_is
@@ -5347,7 +5336,7 @@ impl<'db> Type<'db> {
                 )
             }),
 
-            Type::TypeGuard(type_guard) => visitor.visit(self, || {
+            Type::TypeGuard(type_guard) => visitor.visit((self, type_mapping.into()), || {
                 type_guard.with_type(
                     db,
                     type_guard
@@ -5371,7 +5360,7 @@ impl<'db> Type<'db> {
                 // IMPORTANT: All processing must happen inside a single visitor.visit() call so that if we encounter
                 // this same TypeAlias again (e.g., in `type RecursiveT = int | tuple[RecursiveT, ...]`), the visitor
                 // will detect the cycle and return the fallback value.
-                let mapped = visitor.visit(self, || {
+                let mapped = visitor.visit((self, type_mapping.into()), || {
                     match type_mapping {
                         TypeMapping::EagerExpansion => unreachable!("handled above"),
 
@@ -6087,7 +6076,7 @@ impl PromotionMode {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, get_size2::GetSize)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, get_size2::GetSize)]
 pub enum PromotionKind {
     /// Default promotion behaviour: recurse into nested types
     Regular,
@@ -6125,7 +6114,7 @@ fn class_mro_literals<'db>(
 ///
 /// Uses MRO-based matching: a `Self` typevar is bound only if its owner class
 /// is in the MRO of the self type's class.
-#[derive(Clone, Debug, Eq, PartialEq, get_size2::GetSize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, get_size2::GetSize)]
 pub struct SelfBinding<'db> {
     ty: Type<'db>,
     class_literal: Option<ClassLiteral<'db>>,
@@ -6227,7 +6216,7 @@ pub enum TypeMapping<'a, 'db> {
     EagerExpansion,
 
     /// Updates any `Callable` types in a function signature return type to be generic if possible.
-    RescopeReturnCallables(&'a FxHashMap<CallableType<'db>, CallableType<'db>>),
+    RescopeReturnCallables(&'a FxOrderMap<CallableType<'db>, CallableType<'db>>),
 }
 
 impl<'db> TypeMapping<'_, 'db> {
@@ -6311,6 +6300,66 @@ impl<'db> TypeMapping<'_, 'db> {
             | TypeMapping::ReplaceParameterDefaults
             | TypeMapping::EagerExpansion
             | TypeMapping::RescopeReturnCallables(_) => self.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum TypeMappingCacheKey<'a, 'db> {
+    ApplySpecialization(ApplySpecialization<'a, 'db>),
+    ApplySpecializationWithMaterialization {
+        specialization: ApplySpecialization<'a, 'db>,
+        materialization_kind: MaterializationKind,
+    },
+    UniqueSpecialization {
+        specialization: Vec<(BoundTypeVarInstance<'db>, Type<'db>)>,
+    },
+    Promote(PromotionMode, PromotionKind),
+    BindLegacyTypevars(BindingContext<'db>),
+    BindSelf(SelfBinding<'db>),
+    ReplaceSelf {
+        new_upper_bound: Type<'db>,
+    },
+    Materialize(MaterializationKind),
+    ReplaceParameterDefaults,
+    EagerExpansion,
+    RescopeReturnCallables(&'a FxOrderMap<CallableType<'db>, CallableType<'db>>),
+}
+
+impl<'a, 'db> From<&TypeMapping<'a, 'db>> for TypeMappingCacheKey<'a, 'db> {
+    fn from(mapping: &TypeMapping<'a, 'db>) -> Self {
+        match mapping {
+            TypeMapping::ApplySpecialization(specialization) => {
+                TypeMappingCacheKey::ApplySpecialization(specialization.clone())
+            }
+            TypeMapping::ApplySpecializationWithMaterialization {
+                specialization,
+                materialization_kind,
+            } => TypeMappingCacheKey::ApplySpecializationWithMaterialization {
+                specialization: specialization.clone(),
+                materialization_kind: *materialization_kind,
+            },
+            TypeMapping::UniqueSpecialization { specialization } => {
+                TypeMappingCacheKey::UniqueSpecialization {
+                    specialization: specialization.borrow().clone(),
+                }
+            }
+            TypeMapping::Promote(mode, kind) => TypeMappingCacheKey::Promote(*mode, *kind),
+            TypeMapping::BindLegacyTypevars(context) => {
+                TypeMappingCacheKey::BindLegacyTypevars(*context)
+            }
+            TypeMapping::BindSelf(binding) => TypeMappingCacheKey::BindSelf(binding.clone()),
+            TypeMapping::ReplaceSelf { new_upper_bound } => TypeMappingCacheKey::ReplaceSelf {
+                new_upper_bound: *new_upper_bound,
+            },
+            TypeMapping::Materialize(materialization_kind) => {
+                TypeMappingCacheKey::Materialize(*materialization_kind)
+            }
+            TypeMapping::ReplaceParameterDefaults => TypeMappingCacheKey::ReplaceParameterDefaults,
+            TypeMapping::EagerExpansion => TypeMappingCacheKey::EagerExpansion,
+            TypeMapping::RescopeReturnCallables(map) => {
+                TypeMappingCacheKey::RescopeReturnCallables(map)
+            }
         }
     }
 }

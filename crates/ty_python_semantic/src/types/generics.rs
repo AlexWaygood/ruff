@@ -35,7 +35,7 @@ use crate::types::{
     MaterializationKind, Type, TypeAliasType, TypeContext, TypeMapping, TypeVarBoundOrConstraints,
     TypeVarKind, TypeVarVariance, UnionType, declaration_type,
 };
-use crate::{Db, FxIndexMap, FxOrderMap, FxOrderSet};
+use crate::{Db, FxOrderMap, FxOrderSet};
 
 /// Returns an iterator of any generic context introduced by the given scope or any enclosing
 /// scope.
@@ -587,7 +587,7 @@ impl<'db> GenericContext<'db> {
                 function_definition: Definition<'db>,
             ) -> (
                 FxHashSet<BoundTypeVarInstance<'db>>,
-                FxHashMap<CallableType<'db>, CallableType<'db>>,
+                FxOrderMap<CallableType<'db>, CallableType<'db>>,
             ) {
                 let mut found_only_inside_callable_return = FxHashSet::default();
                 let replacements = self
@@ -615,7 +615,7 @@ impl<'db> GenericContext<'db> {
                         // Then create a new typevar, with a 'return suffix, for each of the
                         // typevars that only appear in this callable, and update the callable's
                         // signature (and generic context) to use those new typevars.
-                        let typevar_replacements: FxIndexMap<_, _> = bound_typevars
+                        let typevar_replacements: FxOrderMap<_, _> = bound_typevars
                             .iter()
                             .map(|bound_typevar| {
                                 (*bound_typevar, bound_typevar.with_name_suffix(db, "return"))
@@ -626,7 +626,7 @@ impl<'db> GenericContext<'db> {
                             db,
                             &TypeMapping::ApplySpecialization(apply),
                             TypeContext::default(),
-                            &ApplyTypeMappingVisitor::default(),
+                            &ApplyTypeMappingVisitor::new(Type::any()),
                         );
                         let generic_context = GenericContext::from_typevar_instances(
                             db,
@@ -1072,11 +1072,9 @@ impl<'db> Specialization<'db> {
         );
         match other.materialization_kind(db) {
             None => new_specialization,
-            Some(materialization_kind) => new_specialization.materialize_impl(
-                db,
-                materialization_kind,
-                &ApplyTypeMappingVisitor::default(),
-            ),
+            Some(materialization_kind) => {
+                new_specialization.materialize_impl(db, materialization_kind)
+            }
         }
     }
 
@@ -1085,7 +1083,12 @@ impl<'db> Specialization<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
     ) -> Self {
-        self.apply_type_mapping_impl(db, type_mapping, &[], &ApplyTypeMappingVisitor::default())
+        self.apply_type_mapping_impl(
+            db,
+            type_mapping,
+            &[],
+            &ApplyTypeMappingVisitor::new(Type::any()),
+        )
     }
 
     pub(crate) fn apply_type_mapping_impl<'a>(
@@ -1093,10 +1096,10 @@ impl<'db> Specialization<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: &[Type<'db>],
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         if let TypeMapping::Materialize(materialization_kind) = type_mapping {
-            return self.materialize_impl(db, *materialization_kind, visitor);
+            return self.materialize_impl(db, *materialization_kind);
         }
 
         let types: Box<[_]> = if let TypeMapping::UniqueSpecialization { specialization } =
@@ -1223,7 +1226,6 @@ impl<'db> Specialization<'db> {
         self,
         db: &'db dyn Db,
         materialization_kind: MaterializationKind,
-        visitor: &ApplyTypeMappingVisitor<'db>,
     ) -> Self {
         // The top and bottom materializations are fully static types already, so materializing them
         // further does nothing.
@@ -1240,17 +1242,14 @@ impl<'db> Specialization<'db> {
                     TypeVarVariance::Bivariant => {
                         // With bivariance, all specializations are subtypes of each other,
                         // so any materialization is acceptable.
-                        vartype.materialize(db, MaterializationKind::Top, visitor)
+                        vartype.materialize(db, MaterializationKind::Top)
                     }
-                    TypeVarVariance::Covariant => {
-                        vartype.materialize(db, materialization_kind, visitor)
-                    }
+                    TypeVarVariance::Covariant => vartype.materialize(db, materialization_kind),
                     TypeVarVariance::Contravariant => {
-                        vartype.materialize(db, materialization_kind.flip(), visitor)
+                        vartype.materialize(db, materialization_kind.flip())
                     }
                     TypeVarVariance::Invariant => {
-                        let top_materialization =
-                            vartype.materialize(db, MaterializationKind::Top, visitor);
+                        let top_materialization = vartype.materialize(db, MaterializationKind::Top);
                         if !vartype.is_equivalent_to(db, top_materialization) {
                             has_dynamic_invariant_typevar = true;
                         }
@@ -1265,7 +1264,7 @@ impl<'db> Specialization<'db> {
                 db,
                 &TypeMapping::Materialize(materialization_kind),
                 TypeContext::default(),
-                visitor,
+                &ApplyTypeMappingVisitor::new(Type::any()),
             )
         });
         let new_materialization_kind = if has_dynamic_invariant_typevar {
@@ -1592,7 +1591,7 @@ impl<'c, 'db> DisjointnessChecker<'_, 'c, 'db> {
 ///
 /// You will usually use [`Specialization`] instead of this type. This type is used when we need to
 /// substitute types for type variables before we have fully constructed a [`Specialization`].
-#[derive(Clone, Debug, Eq, PartialEq, get_size2::GetSize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, get_size2::GetSize)]
 pub enum ApplySpecialization<'a, 'db> {
     Specialization(Specialization<'db>),
     Partial {
@@ -1602,7 +1601,7 @@ pub enum ApplySpecialization<'a, 'db> {
         /// avoid recursively substituting a type inside of itself.
         skip: Option<usize>,
     },
-    ReturnCallables(&'a FxIndexMap<BoundTypeVarInstance<'db>, BoundTypeVarInstance<'db>>),
+    ReturnCallables(&'a FxOrderMap<BoundTypeVarInstance<'db>, BoundTypeVarInstance<'db>>),
 }
 
 impl<'db> ApplySpecialization<'_, 'db> {

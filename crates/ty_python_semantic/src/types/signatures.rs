@@ -129,16 +129,16 @@ impl<'db> CallableSignature<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
-        fn try_apply_type_mapping_for_paramspec<'db>(
+        fn try_apply_type_mapping_for_paramspec<'a, 'db>(
             db: &'db dyn Db,
             self_signature: &Signature<'db>,
             prefix_parameters: &[Parameter<'db>],
             paramspec_value: Type<'db>,
-            type_mapping: &TypeMapping<'_, 'db>,
+            type_mapping: &TypeMapping<'a, 'db>,
             tcx: TypeContext<'db>,
-            visitor: &ApplyTypeMappingVisitor<'db>,
+            visitor: &ApplyTypeMappingVisitor<'a, 'db>,
         ) -> Option<CallableSignature<'db>> {
             match paramspec_value {
                 Type::TypeVar(typevar) if typevar.is_paramspec(db) => {
@@ -562,7 +562,7 @@ impl<'db> Signature<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         Self {
             generic_context: self
@@ -680,7 +680,7 @@ impl<'db> Signature<'db> {
                 db,
                 &self_mapping,
                 TypeContext::default(),
-                &ApplyTypeMappingVisitor::default(),
+                &ApplyTypeMappingVisitor::new(Type::any()),
             );
             return_ty = return_ty.apply_type_mapping(db, &self_mapping, TypeContext::default());
         }
@@ -704,7 +704,7 @@ impl<'db> Signature<'db> {
             db,
             &self_mapping,
             TypeContext::default(),
-            &ApplyTypeMappingVisitor::default(),
+            &ApplyTypeMappingVisitor::new(Type::any()),
         );
         let return_ty =
             self.return_ty
@@ -1994,7 +1994,7 @@ impl<'db> Parameters<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         if let TypeMapping::Materialize(materialization_kind) = type_mapping
             && self.kind == ParametersKind::Gradual
@@ -2232,7 +2232,7 @@ impl<'db> Parameter<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         Self {
             annotated_type: self.annotated_type.apply_type_mapping_impl(
@@ -2488,7 +2488,7 @@ impl<'db> ParameterKind<'db> {
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
+        visitor: &ApplyTypeMappingVisitor<'a, 'db>,
     ) -> Self {
         let apply_to_default_type = |default_type: &Option<Type<'db>>| {
             if type_mapping == &TypeMapping::ReplaceParameterDefaults && default_type.is_some() {

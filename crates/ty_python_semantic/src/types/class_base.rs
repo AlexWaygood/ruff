@@ -3,9 +3,8 @@ use crate::types::generics::{ApplySpecialization, Specialization};
 use crate::types::mro::MroIterator;
 use crate::types::tuple::TupleType;
 use crate::types::{
-    ApplyTypeMappingVisitor, ClassLiteral, ClassType, DynamicType, KnownClass, KnownInstanceType,
-    MaterializationKind, SpecialFormType, StaticMroError, Type, TypeContext, TypeMapping,
-    todo_type,
+    ClassLiteral, ClassType, DynamicType, KnownClass, KnownInstanceType, MaterializationKind,
+    SpecialFormType, StaticMroError, Type, TypeContext, TypeMapping, todo_type,
 };
 use crate::{Db, DisplaySettings};
 
@@ -290,17 +289,19 @@ impl<'db> ClassBase<'db> {
         }
     }
 
-    fn apply_type_mapping_impl<'a>(
+    fn apply_type_mapping<'a>(
         self,
         db: &'db dyn Db,
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
-        visitor: &ApplyTypeMappingVisitor<'db>,
     ) -> Self {
         match self {
-            Self::Class(class) => {
-                Self::Class(class.apply_type_mapping_impl(db, type_mapping, tcx, visitor))
-            }
+            Self::Class(class) => Self::try_from_type(
+                db,
+                Type::from(class).apply_type_mapping(db, type_mapping, tcx),
+                None,
+            )
+            .unwrap_or(self),
             Self::Dynamic(_) | Self::Generic | Self::Protocol | Self::TypedDict => self,
         }
     }
@@ -311,13 +312,12 @@ impl<'db> ClassBase<'db> {
         specialization: Option<Specialization<'db>>,
     ) -> Self {
         if let Some(specialization) = specialization {
-            let new_self = self.apply_type_mapping_impl(
+            let new_self = self.apply_type_mapping(
                 db,
                 &TypeMapping::ApplySpecialization(ApplySpecialization::Specialization(
                     specialization,
                 )),
                 TypeContext::default(),
-                &ApplyTypeMappingVisitor::default(),
             );
             match specialization.materialization_kind(db) {
                 None => new_self,
@@ -329,12 +329,7 @@ impl<'db> ClassBase<'db> {
     }
 
     fn materialize(self, db: &'db dyn Db, kind: MaterializationKind) -> Self {
-        self.apply_type_mapping_impl(
-            db,
-            &TypeMapping::Materialize(kind),
-            TypeContext::default(),
-            &ApplyTypeMappingVisitor::default(),
-        )
+        self.apply_type_mapping(db, &TypeMapping::Materialize(kind), TypeContext::default())
     }
 
     pub(super) fn has_cyclic_mro(self, db: &'db dyn Db) -> bool {
