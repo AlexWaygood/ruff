@@ -5166,7 +5166,12 @@ impl<'db> Type<'db> {
         type_mapping: &TypeMapping<'a, 'db>,
         tcx: TypeContext<'db>,
     ) -> Type<'db> {
-        self.apply_type_mapping_impl(db, type_mapping, tcx, &ApplyTypeMappingVisitor::new(self))
+        self.apply_type_mapping_impl(
+            db,
+            type_mapping,
+            tcx,
+            &ApplyTypeMappingVisitor::new(Type::any()),
+        )
     }
 
     fn apply_type_mapping_impl<'a>(
@@ -5305,10 +5310,10 @@ impl<'db> Type<'db> {
                 Type::PropertyInstance(property.apply_type_mapping_impl(db, type_mapping, tcx, visitor))
             }
 
-            Type::Union(union) => union.map_leave_aliases(db, |element| {
+            Type::Union(union) => visitor.visit((self, type_mapping.into()), ||union.map_leave_aliases(db, |element| {
                 element.apply_type_mapping_impl(db, type_mapping, tcx, visitor)
-            }),
-            Type::Intersection(intersection) => {
+            })),
+            Type::Intersection(intersection) => visitor.visit((self, type_mapping.into()), ||{
                 let mut builder = IntersectionBuilder::new(db);
                 for positive in intersection.positive(db) {
                     builder =
@@ -5324,7 +5329,7 @@ impl<'db> Type<'db> {
                     }
                 }
                 builder.build()
-            }
+            }),
 
             // TODO(jelle): Materialize should be handled differently, since TypeIs is invariant
             Type::TypeIs(type_is) => visitor.visit((self, type_mapping.into()), || {
