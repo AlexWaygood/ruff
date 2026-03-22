@@ -1,13 +1,15 @@
 use crate::Db;
 use crate::db::tests::TestDb;
-use crate::place::{builtins_symbol, known_module_symbol};
+use crate::place::{builtins_symbol, global_symbol, known_module_symbol};
 use crate::types::enums::is_single_member_enum;
+use crate::types::known_instance::KnownInstanceType;
 use crate::types::tuple::TupleType;
 use crate::types::{
     BoundMethodType, EnumLiteralType, IntersectionBuilder, IntersectionType, KnownClass, Parameter,
     Parameters, Signature, SpecialFormType, SubclassOfType, Type, UnionType,
 };
 use quickcheck::{Arbitrary, Gen};
+use ruff_db::files::system_path_to_file;
 use ruff_python_ast::name::Name;
 use rustc_hash::FxHashSet;
 use ty_module_resolver::KnownModule;
@@ -65,6 +67,9 @@ pub(crate) enum Ty {
     /// where the class has `Any` in its MRO
     UnittestMockInstance,
     UnittestMockLiteral,
+    /// A `typing.NewType` instance type, looked up from a pre-written test module.
+    /// The `&'static str` is the symbol name in the test module.
+    NewTypeInstance(&'static str),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -235,6 +240,17 @@ impl Ty {
                 db,
                 Signature::new(params.into_parameters(db), returns.into_type(db)),
             ),
+            Ty::NewTypeInstance(name) => {
+                let file = system_path_to_file(db, super::setup::NEWTYPE_MODULE_PATH)
+                    .expect("NewType test module must exist");
+                let ty = global_symbol(db, file, name).place.expect_type();
+                match ty {
+                    Type::KnownInstance(KnownInstanceType::NewType(newtype)) => {
+                        Type::NewTypeInstance(newtype)
+                    }
+                    _ => panic!("Expected NewType symbol for `{name}`, got {ty:?}"),
+                }
+            }
         }
     }
 }
@@ -313,6 +329,8 @@ fn arbitrary_core_type(g: &mut Gen, fully_static: bool) -> Ty {
             class: "int",
             method: "bit_length",
         },
+        Ty::NewTypeInstance("NewTypeOfInt"),
+        Ty::NewTypeInstance("NewTypeOfStr"),
     ];
     let types = if fully_static {
         &types[fully_static_index..]
