@@ -29,12 +29,14 @@ use crate::types::typevar::{
     BoundTypeVarIdentity, TypeVarIdentity, TypeVarInstance, walk_type_var_bounds,
 };
 use crate::types::variance::VarianceInferable;
-use crate::types::visitor::{TypeCollector, TypeVisitor, walk_type_with_recursion_guard};
+use crate::types::visitor::{
+    TypeCollector, TypeVisitor, any_over_type, walk_type_with_recursion_guard,
+};
 use crate::types::{
     ApplyTypeMappingVisitor, BindingContext, BoundTypeVarInstance, CallableType, CallableTypes,
-    ClassLiteral, FindLegacyTypeVarsVisitor, IntersectionBuilder, IntersectionType, KnownClass,
-    KnownInstanceType, MaterializationKind, Type, TypeContext, TypeMapping,
-    TypeVarBoundOrConstraints, TypeVarKind, TypeVarVariance, UnionType, declaration_type,
+    ClassLiteral, FindLegacyTypeVarsVisitor, IntersectionType, KnownClass, KnownInstanceType,
+    MaterializationKind, Type, TypeContext, TypeMapping, TypeVarBoundOrConstraints, TypeVarKind,
+    TypeVarVariance, UnionType, declaration_type,
 };
 use crate::{Db, FxIndexMap, FxOrderMap, FxOrderSet};
 
@@ -313,6 +315,21 @@ pub(super) fn walk_generic_context<'db, V: TypeVisitor<'db> + ?Sized>(
 impl get_size2::GetSize for GenericContext<'_> {}
 
 impl<'db> GenericContext<'db> {
+    fn upper_bound_mentions_self(self, db: &'db dyn Db, upper_bound: Type<'db>) -> bool {
+        any_over_type(db, upper_bound, false, |ty| match ty {
+            Type::ClassLiteral(class) => class
+                .as_static()
+                .is_some_and(|class| class.generic_context(db) == Some(self)),
+            Type::TypeAlias(alias) => {
+                alias.specialization(db).is_none() && alias.generic_context(db) == Some(self)
+            }
+            Type::KnownInstance(KnownInstanceType::TypeAliasType(alias)) => {
+                alias.specialization(db).is_none() && alias.generic_context(db) == Some(self)
+            }
+            _ => false,
+        })
+    }
+
     /// Creates a generic context from a list of PEP-695 type parameters.
     pub(crate) fn from_type_params(
         db: &'db dyn Db,
@@ -954,13 +971,22 @@ impl<'db> GenericContext<'db> {
                     TypeContext::default(),
                 );
                 expanded[idx] = default;
+                continue;
             }
 
             if let Some(upper_bound) = typevar.typevar(db).upper_bound(db) {
-                let ty = IntersectionBuilder::new(db)
-                    .add_positive(upper_bound)
-                    .add_positive(Type::unknown())
-                    .build();
+                let ty = if self.upper_bound_mentions_self(db, upper_bound) {
+                    // Avoid expanding a self-referential bound while we're still computing this
+                    // context's default specialization, or we'll recurse forever through
+                    // `default_specialization -> fill_in_defaults`.
+                    //
+                    // We intentionally fall back to `Unknown` here instead of manufacturing a
+                    // self-referential `upper_bound & Unknown`: the latter escapes into recursive
+                    // type normalization and can spin there instead.
+                    Type::unknown()
+                } else {
+                    IntersectionType::from_two_elements(db, upper_bound, Type::unknown())
+                };
                 expanded[idx] = ty;
                 continue;
             }

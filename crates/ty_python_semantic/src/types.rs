@@ -801,6 +801,21 @@ impl<'db> Type<'db> {
         })
     }
 
+    fn requires_unknown_specialization_in_type_expression(
+        db: &'db dyn Db,
+        generic_context: GenericContext<'db>,
+        typevar_binding_context: Option<Definition<'db>>,
+    ) -> bool {
+        let Some(binding_context) = typevar_binding_context else {
+            return false;
+        };
+
+        generic_context.variables(db).any(|bound_typevar| {
+            bound_typevar.binding_context(db).definition() == Some(binding_context)
+                || bound_typevar.typevar(db).definition(db) == Some(binding_context)
+        })
+    }
+
     /// Returns `true` if this type supports eager `Self` binding via `bind_self_typevars`.
     ///
     /// `FunctionLiteral`, `BoundMethod`, and function-like `Callable` types return `false`
@@ -2626,22 +2641,37 @@ impl<'db> Type<'db> {
                     }),
                 qualifiers,
             } => (
-                union
-                    .map_with_boundness(db, |elem| {
+                union.map_with_boundness_and_qualifiers(db, |elem| {
+                    Self::try_call_dunder_get_on_attribute(
+                        db,
                         Place::Defined(DefinedPlace {
-                            ty: elem
-                                .try_call_dunder_get(db, instance, owner)
-                                .map_or(*elem, |(ty, _)| ty),
+                            ty: *elem,
                             origin,
                             definedness: boundness,
                             widening,
                         })
-                    })
-                    .with_qualifiers(qualifiers),
+                        .with_qualifiers(qualifiers),
+                        instance,
+                        owner,
+                    )
+                    .0
+                }),
                 // TODO: avoid the duplication here:
                 if union.elements(db).iter().all(|elem| {
-                    elem.try_call_dunder_get(db, instance, owner)
-                        .is_some_and(|(_, kind)| kind.is_data())
+                    Self::try_call_dunder_get_on_attribute(
+                        db,
+                        Place::Defined(DefinedPlace {
+                            ty: *elem,
+                            origin,
+                            definedness: boundness,
+                            widening,
+                        })
+                        .with_qualifiers(qualifiers),
+                        instance,
+                        owner,
+                    )
+                    .1
+                    .is_data()
                 }) {
                     AttributeKind::DataDescriptor
                 } else {
@@ -5006,7 +5036,20 @@ impl<'db> Type<'db> {
                 let ty = match class.known(db) {
                     Some(KnownClass::Complex) => KnownUnion::Complex.to_type(db),
                     Some(KnownClass::Float) => KnownUnion::Float.to_type(db),
-                    _ => Type::instance(db, class.default_specialization(db)),
+                    _ => {
+                        let class_type = if let Some(static_class) = class.as_static()
+                            && let Some(generic_context) = static_class.generic_context(db)
+                            && Self::requires_unknown_specialization_in_type_expression(
+                                db,
+                                generic_context,
+                                typevar_binding_context,
+                            ) {
+                            static_class.unknown_specialization(db)
+                        } else {
+                            class.default_specialization(db)
+                        };
+                        Type::instance(db, class_type)
+                    }
                 };
                 Ok(ty)
             }
@@ -5039,7 +5082,22 @@ impl<'db> Type<'db> {
             }),
 
             Type::KnownInstance(known_instance) => match known_instance {
-                KnownInstanceType::TypeAliasType(alias) => Ok(Type::TypeAlias(*alias)),
+                KnownInstanceType::TypeAliasType(alias) => {
+                    let alias = if alias.specialization(db).is_none()
+                        && let Some(generic_context) = alias.generic_context(db)
+                        && Self::requires_unknown_specialization_in_type_expression(
+                            db,
+                            generic_context,
+                            typevar_binding_context,
+                        ) {
+                        alias.apply_specialization(db, |generic_context| {
+                            generic_context.unknown_specialization(db)
+                        })
+                    } else {
+                        *alias
+                    };
+                    Ok(Type::TypeAlias(alias))
+                }
                 KnownInstanceType::NewType(newtype) => Ok(Type::NewTypeInstance(*newtype)),
                 KnownInstanceType::TypeVar(typevar) => {
                     if !inference_flags.contains(InferenceFlags::ALLOW_PARAMSPEC_TYPE_EXPR)

@@ -1008,9 +1008,10 @@ def _(x: Intersection[Sequence[Sub1], Sequence[Sub2], Sequence[Unrelated1]]) -> 
     reveal_type(first(x))  # revealed: Sub1 | Sub2
 
 # An intersection with two positive elements, neither of which satisfies the bound. In this case,
-# only the error related to the first element is reported.
+# only the first bound-related error is reported.
 def _(x: Intersection[Sequence[Unrelated1], Sequence[Unrelated2]]) -> None:
     # TODO: We only report the first error here, but we should report both.
+    # error: [invalid-argument-type] "Argument to function `first` is incorrect: Expected `Sequence[Base & Unknown]`, found `Sequence[Unrelated1] & Sequence[Unrelated2]`"
     # error: [invalid-argument-type] "Argument to function `first` is incorrect: Argument type `Unrelated1` does not satisfy upper bound `Base` of type variable `T`"
-    reveal_type(first(x))  # revealed: Unknown
+    reveal_type(first(x))  # revealed: Base & Unknown
 ```
