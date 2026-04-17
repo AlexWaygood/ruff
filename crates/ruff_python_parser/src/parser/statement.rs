@@ -1843,7 +1843,7 @@ impl<'src> Parser<'src> {
         // for await x in z: ...
         // for yield x in y: ...
         // for [x, 1, y, *["a"]] in z: ...
-        self.validate_assignment_target(&target.expr);
+        self.validate_assignment_target(&mut target.expr);
 
         // test_err for_stmt_missing_in_keyword
         // for a b: ...
@@ -2471,7 +2471,7 @@ impl<'src> Parser<'src> {
             .parse_conditional_expression_or_higher_impl(ExpressionContext::starred_conditional());
 
         // This has the same semantics as an assignment target.
-        self.validate_assignment_target(&target.expr);
+        self.validate_assignment_target(&mut target.expr);
 
         helpers::set_expr_ctx(&mut target.expr, ExprContext::Store);
 
@@ -3737,8 +3737,12 @@ impl<'src> Parser<'src> {
     /// If the expression is a list or tuple, then validate each element in the list.
     /// If it's a starred expression, then validate the value of the starred expression.
     ///
+    /// As a side effect, recover from a malformed `UnaryOp(Not, Name(""))` sub-target
+    /// (produced for input like `a, not = ...`) by rewriting it as a single `Name` with
+    /// [`ExprContext::Invalid`], so later passes don't see a phantom empty name.
+    ///
     /// Report an error for each invalid assignment expression found.
-    pub(super) fn validate_assignment_target(&mut self, expr: &Expr) {
+    pub(super) fn validate_assignment_target(&mut self, expr: &mut Expr) {
         match expr {
             Expr::Starred(ast::ExprStarred { value, .. }) => self.validate_assignment_target(value),
             Expr::List(ast::ExprList { elts, .. }) | Expr::Tuple(ast::ExprTuple { elts, .. }) => {
@@ -3747,6 +3751,24 @@ impl<'src> Parser<'src> {
                 }
             }
             Expr::Name(_) | Expr::Attribute(_) | Expr::Subscript(_) => {}
+            Expr::UnaryOp(ast::ExprUnaryOp {
+                op: ast::UnaryOp::Not,
+                operand,
+                ..
+            }) if matches!(operand.as_ref(), Expr::Name(name) if name.id.is_empty()) => {
+                // Recover from `a, not = ...`, which the parser sees as
+                // `UnaryOp(Not, Name(""))`. Rewrite the node to a plain `Name("not")`
+                // marked as invalid so downstream code doesn't stumble over the empty
+                // inner name.
+                let range = expr.range();
+                self.add_error(ParseErrorType::InvalidAssignmentTarget, range);
+                *expr = Expr::Name(ast::ExprName {
+                    id: ast::name::Name::new_static("not"),
+                    range,
+                    ctx: ExprContext::Invalid,
+                    node_index: AtomicNodeIndex::NONE,
+                });
+            }
             _ => self.add_error(ParseErrorType::InvalidAssignmentTarget, expr.range()),
         }
     }

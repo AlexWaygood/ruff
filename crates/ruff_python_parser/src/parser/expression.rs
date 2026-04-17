@@ -2444,7 +2444,7 @@ impl<'src> Parser<'src> {
             self.parse_expression_list(ExpressionContext::starred_conditional().with_in_excluded());
 
         helpers::set_expr_ctx(&mut target.expr, ExprContext::Store);
-        self.validate_assignment_target(&target.expr);
+        self.validate_assignment_target(&mut target.expr);
 
         self.expect(TokenKind::In);
         let iter = self.parse_simple_expression(ExpressionContext::default());

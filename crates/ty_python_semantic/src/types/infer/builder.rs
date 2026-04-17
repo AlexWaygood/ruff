@@ -3048,7 +3048,12 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                     infer_assigned_ty(self, TypeContext::default());
                 }
 
-                self.infer_definition(name);
+                // Names marked as invalid by error recovery (e.g. `a, not = ...`
+                // rewritten from `UnaryOp(Not, Name(""))`) never had a definition
+                // created during semantic indexing, so skip them here too.
+                if !matches!(name.ctx, ast::ExprContext::Invalid) {
+                    self.infer_definition(name);
+                }
             }
             ast::Expr::Starred(ast::ExprStarred {
                 value: starred_value,
