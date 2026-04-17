@@ -3055,7 +3055,17 @@ impl<'ast> Visitor<'ast> for SemanticIndexBuilder<'_, 'ast> {
                 // child evaluation can introduce bindings (for example via walrus operators),
                 // and those bindings need to exist before we register parent/member associations.
                 let mut deferred_effects = None;
-                if let Some(mut place_expr) = PlaceExpr::try_from_expr(expr) {
+                // Skip names produced by parser error recovery (e.g. the empty `Name` that
+                // sits inside `UnaryOp(Not, Name(""))` for input like `a, not = ...`).
+                // Attaching a binding to them would create a symbol with no text that
+                // later passes can't reason about, and has already caused LSP panics.
+                let is_invalid_recovery_name = matches!(
+                    expr,
+                    ast::Expr::Name(ast::ExprName { id, .. }) if id.is_empty()
+                );
+                if let Some(mut place_expr) =
+                    (!is_invalid_recovery_name).then(|| PlaceExpr::try_from_expr(expr)).flatten()
+                {
                     if let Some(method_scope_id) = self.is_method_or_eagerly_executed_in_method()
                         && let PlaceExpr::Member(member) = &mut place_expr
                         && member.is_instance_attribute_candidate()

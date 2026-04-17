@@ -3048,7 +3048,12 @@ impl<'db, 'ast> TypeInferenceBuilder<'db, 'ast> {
                     infer_assigned_ty(self, TypeContext::default());
                 }
 
-                self.infer_definition(name);
+                // Empty names are artifacts of parser error recovery (e.g. `a, not = ...`
+                // produces `UnaryOp(Not, Name(""))`). Semantic indexing skips them, so
+                // there's no definition to look up here.
+                if !name.id.is_empty() {
+                    self.infer_definition(name);
+                }
             }
             ast::Expr::Starred(ast::ExprStarred {
                 value: starred_value,
