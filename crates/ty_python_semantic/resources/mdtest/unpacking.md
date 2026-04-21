@@ -842,7 +842,6 @@ def _(arg: tuple[int, bytes, int] | tuple[int, int, str, int, bytes]):
 ```py
 def _(arg: tuple[int, bytes] | tuple[int, str]):
     # error: [invalid-assignment] "Not enough values to unpack: Expected 3"
-    # error: [invalid-assignment] "Not enough values to unpack: Expected 3"
     a, b, c = arg
     reveal_type(a)  # revealed: Unknown
     reveal_type(b)  # revealed: Unknown

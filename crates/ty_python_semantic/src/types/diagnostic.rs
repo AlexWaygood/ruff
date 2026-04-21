@@ -31,7 +31,7 @@ use crate::types::{
     binding_type, protocol_class::ProtocolClass,
 };
 use crate::types::{KnownInstanceType, MemberLookupPolicy, TypedDictType, UnionType};
-use crate::{Db, DisplaySettings, FxIndexMap, Program, declare_lint};
+use crate::{Db, DisplaySettings, FxIndexMap, FxIndexSet, Program, declare_lint};
 use itertools::Itertools;
 use ruff_db::source::source_text;
 use ruff_db::{
@@ -3398,7 +3398,7 @@ declare_lint! {
 /// A collection of type check diagnostics.
 #[derive(Default, Eq, PartialEq, get_size2::GetSize)]
 pub struct TypeCheckDiagnostics {
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: FxIndexSet<Diagnostic>,
     used_suppressions: FxHashSet<FileSuppressionId>,
 }
 
@@ -3429,11 +3429,11 @@ pub(crate) fn report_mismatched_type_name<'db>(
 
 impl TypeCheckDiagnostics {
     pub(crate) fn push(&mut self, diagnostic: Diagnostic) {
-        self.diagnostics.push(diagnostic);
+        self.diagnostics.insert(diagnostic);
     }
 
     pub(super) fn extend(&mut self, other: &TypeCheckDiagnostics) {
-        self.diagnostics.extend_from_slice(&other.diagnostics);
+        self.diagnostics.extend(other.diagnostics.iter().cloned());
         self.used_suppressions.extend(&other.used_suppressions);
     }
 
@@ -3458,7 +3458,7 @@ impl TypeCheckDiagnostics {
         self.diagnostics.shrink_to_fit();
     }
 
-    pub(crate) fn into_diagnostics(self) -> Vec<Diagnostic> {
+    pub(crate) fn into_diagnostics(self) -> FxIndexSet<Diagnostic> {
         self.diagnostics
     }
 
@@ -3466,12 +3466,12 @@ impl TypeCheckDiagnostics {
         self.diagnostics.is_empty() && self.used_suppressions.is_empty()
     }
 
-    pub fn iter(&self) -> std::slice::Iter<'_, Diagnostic> {
+    pub fn iter(&self) -> indexmap::set::Iter<'_, Diagnostic> {
         self.diagnostics().iter()
     }
 
-    fn diagnostics(&self) -> &[Diagnostic] {
-        self.diagnostics.as_slice()
+    fn diagnostics(&self) -> &FxIndexSet<Diagnostic> {
+        &self.diagnostics
     }
 }
 
@@ -3483,7 +3483,7 @@ impl std::fmt::Debug for TypeCheckDiagnostics {
 
 impl IntoIterator for TypeCheckDiagnostics {
     type Item = Diagnostic;
-    type IntoIter = std::vec::IntoIter<Diagnostic>;
+    type IntoIter = indexmap::set::IntoIter<Diagnostic>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.into_diagnostics().into_iter()
@@ -3492,7 +3492,7 @@ impl IntoIterator for TypeCheckDiagnostics {
 
 impl<'a> IntoIterator for &'a TypeCheckDiagnostics {
     type Item = &'a Diagnostic;
-    type IntoIter = std::slice::Iter<'a, Diagnostic>;
+    type IntoIter = indexmap::set::Iter<'a, Diagnostic>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {

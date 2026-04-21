@@ -84,7 +84,7 @@ pub use crate::types::typevar::{
 pub use crate::types::variance::TypeVarVariance;
 use crate::types::variance::VarianceInferable;
 use crate::types::visitor::any_over_type;
-use crate::{Db, FxOrderSet, Program};
+use crate::{Db, FxIndexSet, FxOrderSet, Program};
 pub use class::KnownClass;
 pub(crate) use class::{ClassLiteral, ClassType, GenericAlias, StaticClassLiteral};
 use instance::Protocol;
@@ -149,7 +149,7 @@ mod definition;
 mod property_tests;
 mod subscript;
 
-pub fn check_types(db: &dyn Db, file: File) -> Vec<Diagnostic> {
+pub fn check_types(db: &dyn Db, file: File) -> FxIndexSet<Diagnostic> {
     let _span = tracing::trace_span!("check_types", ?file).entered();
     tracing::debug!("Checking file '{path}'", path = file.path(db));
 

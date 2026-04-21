@@ -96,7 +96,6 @@ Q = TypeVar("T")
 class Outer(Generic[Q]):
     class Ok(Generic[S]): ...
     # error: [shadowed-type-variable]
-    # error: [shadowed-type-variable]
     class Bad(Generic[Q]): ...
 ```
 

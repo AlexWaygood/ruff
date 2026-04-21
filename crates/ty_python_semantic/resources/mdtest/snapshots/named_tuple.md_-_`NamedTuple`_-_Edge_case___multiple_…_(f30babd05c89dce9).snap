@@ -25,8 +25,7 @@ mdtest path: crates/ty_python_semantic/resources/mdtest/named_tuple.md
 10 |         # TODO: there should only be one diagnostic here...
 11 |         #
 12 |         # error: [invalid-named-tuple] "Cannot overwrite NamedTuple attribute `_asdict`"
-13 |         # error: [invalid-named-tuple] "Cannot overwrite NamedTuple attribute `_asdict`"
-14 |         _asdict = True
+13 |         _asdict = True
 ```
 
 # Diagnostics
@@ -43,20 +42,9 @@ error[invalid-named-tuple]: NamedTuple field name cannot start with an underscor
 
 ```
 error[invalid-named-tuple]: Cannot overwrite NamedTuple attribute `_asdict`
-  --> src/mdtest_snippet.py:14:9
+  --> src/mdtest_snippet.py:13:9
    |
-14 |         _asdict = True
-   |         ^^^^^^^
-   |
-info: This will cause the class creation to fail at runtime
-
-```
-
-```
-error[invalid-named-tuple]: Cannot overwrite NamedTuple attribute `_asdict`
-  --> src/mdtest_snippet.py:14:9
-   |
-14 |         _asdict = True
+13 |         _asdict = True
    |         ^^^^^^^
    |
 info: This will cause the class creation to fail at runtime

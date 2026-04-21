@@ -25,8 +25,7 @@ mdtest path: crates/ty_python_semantic/resources/mdtest/generics/legacy/variable
 10 | class Outer(Generic[Q]):
 11 |     class Ok(Generic[S]): ...
 12 |     # error: [shadowed-type-variable]
-13 |     # error: [shadowed-type-variable]
-14 |     class Bad(Generic[Q]): ...
+13 |     class Bad(Generic[Q]): ...
 ```
 
 # Diagnostics
@@ -49,23 +48,7 @@ error[shadowed-type-variable]: Generic class `Bad` uses type variable `Q` alread
    |       ----------------- Type variable `Q` is bound in this enclosing scope
 11 |     class Ok(Generic[S]): ...
 12 |     # error: [shadowed-type-variable]
-13 |     # error: [shadowed-type-variable]
-14 |     class Bad(Generic[Q]): ...
-   |           ^^^^^^^^^^^^^^^ `Q` used in class definition here
-   |
-
-```
-
-```
-error[shadowed-type-variable]: Generic class `Bad` uses type variable `Q` already bound by an enclosing scope
-  --> src/mdtest_snippet.py:10:7
-   |
-10 | class Outer(Generic[Q]):
-   |       ----------------- Type variable `Q` is bound in this enclosing scope
-11 |     class Ok(Generic[S]): ...
-12 |     # error: [shadowed-type-variable]
-13 |     # error: [shadowed-type-variable]
-14 |     class Bad(Generic[Q]): ...
+13 |     class Bad(Generic[Q]): ...
    |           ^^^^^^^^^^^^^^^ `Q` used in class definition here
    |
 

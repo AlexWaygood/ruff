@@ -1817,7 +1817,6 @@ class Foo(NamedTuple):
         # TODO: there should only be one diagnostic here...
         #
         # error: [invalid-named-tuple] "Cannot overwrite NamedTuple attribute `_asdict`"
-        # error: [invalid-named-tuple] "Cannot overwrite NamedTuple attribute `_asdict`"
         _asdict = True
 ```
 

@@ -12,6 +12,7 @@ use ruff_db::{files::File, parsed::parsed_module, source::source_text};
 use ruff_python_ast::token::TokenKind;
 use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
 
+use crate::FxIndexSet;
 use crate::diagnostic::DiagnosticGuard;
 use crate::lint::{GetLintError, Level, LintMetadata, LintRegistry, LintStatus};
 pub use crate::suppression::add_ignore::{SuppressFix, suppress_all, suppress_single};
@@ -194,7 +195,7 @@ pub(crate) fn check_suppressions(
     db: &dyn Db,
     file: File,
     diagnostics: TypeCheckDiagnostics,
-) -> Vec<Diagnostic> {
+) -> FxIndexSet<Diagnostic> {
     let mut context = CheckSuppressionsContext::new(db, file, diagnostics);
 
     check_unknown_rule(&mut context);

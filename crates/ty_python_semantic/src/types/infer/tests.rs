@@ -1,4 +1,5 @@
 use super::builder::TypeInferenceBuilder;
+use crate::FxIndexSet;
 use crate::db::tests::{TestDb, setup_db};
 use crate::place::symbol;
 use crate::place::{ConsideredDefinitions, Place, global_symbol};
@@ -39,7 +40,7 @@ fn get_symbol<'db>(
 }
 
 #[track_caller]
-fn assert_diagnostic_messages(diagnostics: &[Diagnostic], expected: &[&str]) {
+fn assert_diagnostic_messages(diagnostics: &FxIndexSet<Diagnostic>, expected: &[&str]) {
     let messages: Vec<&str> = diagnostics
         .iter()
         .map(Diagnostic::primary_message)

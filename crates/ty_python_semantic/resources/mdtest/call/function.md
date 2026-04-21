@@ -734,7 +734,6 @@ def _(
     # The reason for two errors here is because of the two fixed elements in the tuple of `args8`
     # which are both `int`
     # error: [invalid-argument-type]
-    # error: [invalid-argument-type]
     f1(*args8)
 
     f1(*args9)  # error: [invalid-argument-type]
