@@ -1115,6 +1115,43 @@ impl<'a, 'c, 'db> TypeRelationChecker<'a, 'c, 'db> {
                 self.check_newtype_pair(db, source_newtype, target_newtype)
             }
 
+            (Type::Callable(source_callable), Type::Callable(target_callable)) => self
+                .with_recursion_guard(source, target, || {
+                    self.check_callable_pair(db, source_callable, target_callable)
+                }),
+
+            (_, Type::Callable(target_callable)) => {
+                self.with_recursion_guard(source, target, || {
+                    source
+                        .try_upcast_to_callable_with_policy(db, UpcastPolicy::from(self.relation))
+                        .when_some_and(db, self.constraints, |callables| {
+                            self.check_callables_vs_callable(db, &callables, target_callable)
+                        })
+                })
+            }
+
+            // `type[Any]` is assignable to arbitrary protocols as it has arbitrary attributes
+            // (this is handled by a lower-down branch), but it is only a subtype of a given
+            // protocol if `type` is a subtype of that protocol. Similarly, `type[T]` will
+            // always be assignable to any protocol if `type[<upper bound of T>]` is assignable
+            // to that protocol (handled lower down), but it is only a subtype of that protocol
+            // if `type` is a subtype of that protocol.
+            (Type::SubclassOf(source_subclass_ty), Type::ProtocolInstance(_))
+                if (source_subclass_ty.is_dynamic() || source_subclass_ty.is_type_var())
+                    && !self.relation.is_assignability() =>
+            {
+                self.check_type_pair(db, KnownClass::Type.to_instance(db), target)
+            }
+
+            (_, Type::ProtocolInstance(target_proto)) => {
+                self.with_recursion_guard(source, target, || {
+                    self.check_type_satisfies_protocol(db, source, target_proto)
+                })
+            }
+
+            // A protocol instance can never be a subtype of a nominal type, with the *sole* exception of `object`.
+            (Type::ProtocolInstance(_), _) => self.never(),
+
             (Type::Union(union), _) => {
                 union
                     .elements(db)
@@ -1388,43 +1425,6 @@ impl<'a, 'c, 'db> TypeRelationChecker<'a, 'c, 'db> {
                 | Type::FunctionLiteral(_)
                 | Type::ModuleLiteral(_),
             ) => self.never(),
-
-            (Type::Callable(source_callable), Type::Callable(target_callable)) => self
-                .with_recursion_guard(source, target, || {
-                    self.check_callable_pair(db, source_callable, target_callable)
-                }),
-
-            (_, Type::Callable(target_callable)) => {
-                self.with_recursion_guard(source, target, || {
-                    source
-                        .try_upcast_to_callable_with_policy(db, UpcastPolicy::from(self.relation))
-                        .when_some_and(db, self.constraints, |callables| {
-                            self.check_callables_vs_callable(db, &callables, target_callable)
-                        })
-                })
-            }
-
-            // `type[Any]` is assignable to arbitrary protocols as it has arbitrary attributes
-            // (this is handled by a lower-down branch), but it is only a subtype of a given
-            // protocol if `type` is a subtype of that protocol. Similarly, `type[T]` will
-            // always be assignable to any protocol if `type[<upper bound of T>]` is assignable
-            // to that protocol (handled lower down), but it is only a subtype of that protocol
-            // if `type` is a subtype of that protocol.
-            (Type::SubclassOf(source_subclass_ty), Type::ProtocolInstance(_))
-                if (source_subclass_ty.is_dynamic() || source_subclass_ty.is_type_var())
-                    && !self.relation.is_assignability() =>
-            {
-                self.check_type_pair(db, KnownClass::Type.to_instance(db), target)
-            }
-
-            (_, Type::ProtocolInstance(target_proto)) => {
-                self.with_recursion_guard(source, target, || {
-                    self.check_type_satisfies_protocol(db, source, target_proto)
-                })
-            }
-
-            // A protocol instance can never be a subtype of a nominal type, with the *sole* exception of `object`.
-            (Type::ProtocolInstance(_), _) => self.never(),
 
             (Type::TypedDict(source_td), Type::TypedDict(target_td)) => {
                 self.with_recursion_guard(source, target, || {
