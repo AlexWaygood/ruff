@@ -52,12 +52,13 @@ jobs:
       # Flag that is set to "true" when code related to the benchmarks changes.
       benchmarks: ${{ steps.check_benchmarks.outputs.changed }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-          # Speeds up the full-history fetch significantly.
-          filter: blob:none
-          persist-credentials: false
+      # Blobless clone speeds up the full-history fetch significantly.
+      - name: Clone repository
+        run: |
+          git clone --filter=blob:none "https://github.com/${{ github.repository }}" . \
+            || git clone --filter=blob:none "https://github.com/${{ github.repository }}" .
+          git fetch origin "${GITHUB_REF}"
+          git checkout FETCH_HEAD
 
       - name: Determine merge base
         id: merge_base
@@ -702,12 +703,13 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && github.event_name == 'pull_request' && (needs.determine_changes.outputs.ty == 'true' || needs.determine_changes.outputs.py-fuzzer == 'true') }}
     timeout-minutes: ${{ github.repository == 'astral-sh/ruff' && 10 || 20 }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-          # Speeds up the full-history fetch significantly.
-          filter: blob:none
-          persist-credentials: false
+      # Blobless clone speeds up the full-history fetch significantly.
+      - name: Clone repository
+        run: |
+          git clone --filter=blob:none "https://github.com/${{ github.repository }}" . \
+            || git clone --filter=blob:none "https://github.com/${{ github.repository }}" .
+          git fetch origin "${GITHUB_REF}"
+          git checkout FETCH_HEAD
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           version: "0.11.7"
