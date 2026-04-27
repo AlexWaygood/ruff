@@ -27,11 +27,17 @@ jobs:
     runs-on: ${{ github.repository == 'astral-sh/ruff' && 'depot-ubuntu-22.04-32' || 'ubuntu-latest' }}
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          path: ruff
-          fetch-depth: 0
-          persist-credentials: false
+      - name: Clone repository
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ github.token }}
+        run: |
+          # Blobless clone speeds up the full-history fetch significantly.
+          # The retry is safe: git cleans up partial state on failed clones.
+          git clone --filter=blob:none "https://x-access-token:${TOKEN}@github.com/${REPO}" ruff \
+            || git clone --filter=blob:none "https://x-access-token:${TOKEN}@github.com/${REPO}" ruff
+          git -C ruff fetch origin "${GITHUB_REF}"
+          git -C ruff checkout "${GITHUB_SHA}"
 
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
