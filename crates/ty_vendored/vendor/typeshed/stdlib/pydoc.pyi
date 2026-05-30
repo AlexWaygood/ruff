@@ -164,6 +164,7 @@ class Doc:
     @abstractmethod
     def docdata(self, object: object, name: str | None = None, *args: Any) -> str:
         """Raise an exception for unimplemented types."""
+
     if sys.version_info >= (3, 15):
         def getdocloc(self, object: object, basedir: str | None = None) -> str | None: ...
     else:
@@ -190,6 +191,7 @@ class HTMLDoc(Doc):
     escape = _repr_instance.escape
     def page(self, title: str, contents: str) -> str:
         """Format an HTML page."""
+
     if sys.version_info >= (3, 11):
         def heading(self, title: str, extras: str = "") -> str:
             """Format a page heading."""
@@ -208,6 +210,7 @@ class HTMLDoc(Doc):
 
         def multicolumn(self, list: list[_T], format: Callable[[_T], str]) -> str:
             """Format a list of items into a multi-column list."""
+
     else:
         def heading(self, title: str, fgcol: str, bgcol: str, extras: str = "") -> str:
             """Format a page heading."""
@@ -281,6 +284,7 @@ class HTMLDoc(Doc):
 
     def docother(self, object: object, name: str | None = None, mod: Any | None = None, *ignored: Unused) -> str:
         """Produce HTML documentation for a data object."""
+
     if sys.version_info >= (3, 11):
         def docroutine(  # type: ignore[override]
             self,
@@ -304,6 +308,7 @@ class HTMLDoc(Doc):
             self, object: object, name: str | None = None, mod: Any | None = None, cl: Any | None = None, *ignored: Unused
         ) -> str:
             """Produce html documentation for a data descriptor."""
+
     else:
         def docroutine(  # type: ignore[override]
             self,
@@ -322,6 +327,7 @@ class HTMLDoc(Doc):
 
         def docdata(self, object: object, name: str | None = None, mod: Any | None = None, cl: Any | None = None) -> str:  # type: ignore[override]
             """Produce html documentation for a data descriptor."""
+
     if sys.version_info >= (3, 11):
         def parentlink(self, object: type | ModuleType, modname: str) -> str:
             """Make a link for the enclosing class or module."""
@@ -365,6 +371,7 @@ class TextDoc(Doc):
 
     def formatvalue(self, object: object) -> str:
         """Format an argument default value as text."""
+
     if sys.version_info >= (3, 11):
         def docroutine(  # type: ignore[override]
             self,
@@ -400,6 +407,7 @@ class TextDoc(Doc):
             doc: Any | None = None,
         ) -> str:
             """Produce text documentation for a data object."""
+
     else:
         def docroutine(self, object: object, name: str | None = None, mod: str | None = None, cl: Any | None = None) -> str:  # type: ignore[override]
             """Produce text documentation for a function or method object."""
@@ -456,6 +464,7 @@ if sys.version_info >= (3, 13):
 
     def plain_pager(text: str, title: str = "") -> None:
         """Simply print unformatted text.  This is the ultimate fallback."""
+
     # For backwards compatibility.
     getpager = get_pager
     pipepager = pipe_pager
@@ -527,6 +536,7 @@ class Helper:
     def interact(self) -> None: ...
     def getline(self, prompt: str) -> str:
         """Read one line, using input() when appropriate."""
+
     if sys.version_info >= (3, 11):
         def help(self, request: Any, is_cli: bool = False) -> None: ...
     else:

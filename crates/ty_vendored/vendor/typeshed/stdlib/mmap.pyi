@@ -112,6 +112,7 @@ class mmap:
     def write_byte(self, byte: int, /) -> None: ...
     def __len__(self) -> int:
         """Return len(self)."""
+
     closed: bool
     if sys.platform != "win32":
         if sys.version_info >= (3, 15):
@@ -160,6 +161,7 @@ class mmap:
 
     def __release_buffer__(self, buffer: memoryview, /) -> None:
         """Release the buffer object that exposes the underlying memory of the object."""
+
     if sys.version_info >= (3, 13):
         def seekable(self) -> Literal[True]: ...
 

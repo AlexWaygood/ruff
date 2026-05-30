@@ -148,6 +148,7 @@ if sys.platform == "win32":
         is removed.  If the function fails, an OSError exception is raised.
         On unsupported Windows versions, NotImplementedError is raised.
         """
+
     if sys.version_info >= (3, 15):
         def DeleteTree(key: _KeyType, sub_key: str | None = None, /) -> None: ...
 
@@ -463,6 +464,7 @@ if sys.platform == "win32":
 
         Will generally raise NotImplementedError if executed on a 32bit OS.
         """
+
     HKEY_CLASSES_ROOT: Final[int]
     HKEY_CURRENT_USER: Final[int]
     HKEY_LOCAL_MACHINE: Final[int]

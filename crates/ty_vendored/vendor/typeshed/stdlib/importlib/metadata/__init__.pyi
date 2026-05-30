@@ -424,6 +424,7 @@ class PackagePath(pathlib.PurePosixPath):
     def read_binary(self) -> bytes: ...
     def locate(self) -> PathLike[str]:
         """Return a path-like object for this path"""
+
     # The following attributes are not defined on PackagePath, but are dynamically added by Distribution.files:
     hash: FileHash | None
     size: int | None
@@ -569,6 +570,7 @@ class Distribution(_distribution_parent):
     @property
     def name(self) -> str:
         """Return the 'Name' metadata for the distribution package."""
+
     if sys.version_info >= (3, 13):
         @property
         def origin(self) -> types.SimpleNamespace | None: ...
@@ -637,6 +639,7 @@ class MetadataPathFinder(DistributionFinder):
         (or all names if ``None`` indicated) along the paths in the list
         of directories ``context.path``.
         """
+
     if sys.version_info >= (3, 11):
         @classmethod
         def invalidate_caches(cls) -> None: ...

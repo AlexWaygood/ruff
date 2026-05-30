@@ -304,14 +304,17 @@ class _flags(_UninstantiableStructseq, tuple[int, ...]):
     @property
     def warn_default_encoding(self) -> int:
         """-X warn_default_encoding"""
+
     if sys.version_info >= (3, 11):
         @property
         def safe_path(self) -> bool:
             """-P"""
+
     if sys.version_info >= (3, 13):
         @property
         def gil(self) -> Literal[0, 1]:
             """-X gil"""
+
     if sys.version_info >= (3, 14):
         @property
         def thread_inherit_context(self) -> Literal[0, 1]:
@@ -320,6 +323,7 @@ class _flags(_UninstantiableStructseq, tuple[int, ...]):
         @property
         def context_aware_warnings(self) -> Literal[0, 1]:
             """-X context_aware_warnings"""
+
     # Whether or not this exists on lower versions of Python
     # may depend on which patch release you're using
     # (it was backported to all Python versions on 3.8+ as a security fix)
@@ -942,6 +946,7 @@ if sys.platform == "win32":
             This is equivalent to defining the PYTHONLEGACYWINDOWSFSENCODING
             environment variable before launching Python.
             """
+
     else:
         def _enablelegacywindowsfsencoding() -> None:
             """Changes the default filesystem encoding to mbcs:replace.
@@ -981,6 +986,7 @@ if sys.version_info >= (3, 12):
     if sys.version_info >= (3, 13):
         def getunicodeinternedsize(*, _only_immortal: bool = False) -> int:
             """Return the number of elements of the unicode interned dictionary"""
+
     else:
         def getunicodeinternedsize() -> int:
             """Return the number of elements of the unicode interned dictionary"""
@@ -993,13 +999,16 @@ if sys.version_info >= (3, 12):
 
     def is_stack_trampoline_active() -> bool:
         """Return *True* if a stack profiler trampoline is active."""
+
     # It always exists, but raises on non-linux platforms:
     if sys.platform == "linux":
         def activate_stack_trampoline(backend: str, /) -> None:
             """Activate stack profiler trampoline *backend*."""
+
     else:
         def activate_stack_trampoline(backend: str, /) -> NoReturn:
             """Activate stack profiler trampoline *backend*."""
+
     from . import _monitoring
 
     monitoring = _monitoring
@@ -1034,6 +1043,7 @@ if sys.version_info >= (3, 14):
 
         This function should be used for specialized purposes only.
         """
+
     from . import __jit
 
     _jit = __jit

@@ -659,6 +659,7 @@ class Signature:
         """Constructs Signature from the given list of Parameter
         objects and 'return_annotation'.  All arguments are optional.
         """
+
     empty = _empty
     @property
     def parameters(self) -> types.MappingProxyType[str, Parameter]: ...
@@ -681,6 +682,7 @@ class Signature:
         Pass 'parameters' and/or 'return_annotation' arguments
         to override them in the new copy.
         """
+
     __replace__ = replace
     if sys.version_info >= (3, 14):
         @classmethod
@@ -722,6 +724,7 @@ class Signature:
             marks. This is useful when the signature was created with the
             STRING format or when ``from __future__ import annotations`` was used.
             """
+
     elif sys.version_info >= (3, 13):
         def format(self, *, max_width: int | None = None) -> str:
             """Create a string representation of the Signature object.
@@ -879,6 +882,7 @@ class Parameter:
         annotation: Any = ...,
     ) -> Self:
         """Creates a customized copy of the Parameter."""
+
     if sys.version_info >= (3, 13):
         __replace__ = replace
 

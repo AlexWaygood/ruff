@@ -270,6 +270,7 @@ if sys.version_info >= (3, 12):
         """Test whether a path is a junction
         Junctions are not supported on the current platform
         """
+
     if sys.version_info >= (3, 15):
         @overload
         def splitroot(path: AnyOrLiteralStr, /) -> tuple[AnyOrLiteralStr, AnyOrLiteralStr, AnyOrLiteralStr]: ...

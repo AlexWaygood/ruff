@@ -97,6 +97,7 @@ class date:
     @classmethod
     def fromordinal(cls, n: int, /) -> Self:
         """int -> date corresponding to a proleptic Gregorian ordinal."""
+
     if sys.version_info >= (3, 15):
         @classmethod
         def fromisoformat(cls, string: str, /) -> Self: ...
@@ -120,6 +121,7 @@ class date:
     def day(self) -> int: ...
     def ctime(self) -> str:
         """Return ctime() style string."""
+
     if sys.version_info >= (3, 14):
         if sys.version_info >= (3, 15):
             @classmethod
@@ -128,12 +130,14 @@ class date:
             @classmethod
             def strptime(cls, date_string: str, format: str, /) -> Self:
                 """string, format -> new date parsed from a string (like time.strptime())."""
+
     # On <3.12, the name of the parameter in the pure-Python implementation
     # didn't match the name in the C implementation,
     # meaning it is only *safe* to pass it as a keyword argument on 3.12+
     if sys.version_info >= (3, 12):
         def strftime(self, format: str) -> str:
             """format -> strftime() style string."""
+
     else:
         def strftime(self, format: str, /) -> str:
             """format -> strftime() style string."""
@@ -149,6 +153,7 @@ class date:
 
     def toordinal(self) -> int:
         """Return proleptic Gregorian ordinal.  January 1 of year 1 is day 1."""
+
     if sys.version_info >= (3, 13):
         def __replace__(self, /, *, year: SupportsIndex = ..., month: SupportsIndex = ..., day: SupportsIndex = ...) -> Self:
             """The same as replace()."""
@@ -235,6 +240,7 @@ class time:
         of the time to include. Valid options are 'auto', 'hours', 'minutes',
         'seconds', 'milliseconds' and 'microseconds'.
         """
+
     if sys.version_info >= (3, 15):
         @classmethod
         def fromisoformat(cls, string: str, /) -> Self: ...
@@ -251,12 +257,14 @@ class time:
             @classmethod
             def strptime(cls, date_string: str, format: str, /) -> Self:
                 """string, format -> new time parsed from a string (like time.strptime())."""
+
     # On <3.12, the name of the parameter in the pure-Python implementation
     # didn't match the name in the C implementation,
     # meaning it is only *safe* to pass it as a keyword argument on 3.12+
     if sys.version_info >= (3, 12):
         def strftime(self, format: str) -> str:
             """format -> strftime() style string."""
+
     else:
         def strftime(self, format: str, /) -> str:
             """format -> strftime() style string."""
@@ -272,6 +280,7 @@ class time:
 
     def dst(self) -> timedelta | None:
         """Return self.tzinfo.dst(self)."""
+
     if sys.version_info >= (3, 13):
         def __replace__(
             self,
@@ -464,6 +473,7 @@ class datetime(date):
     @classmethod
     def combine(cls, date: _Date, time: _Time, tzinfo: _TzInfo | None = ...) -> Self:
         """date, time -> datetime with same date and time fields"""
+
     if sys.version_info >= (3, 15):
         @classmethod
         def fromisoformat(cls, string: str, /) -> Self: ...
@@ -482,6 +492,7 @@ class datetime(date):
 
     def timetz(self) -> _Time:
         """Return time object with same time and tzinfo."""
+
     if sys.version_info >= (3, 13):
         def __replace__(
             self,
@@ -524,6 +535,7 @@ class datetime(date):
         of the time to include. Valid options are 'auto', 'hours', 'minutes',
         'seconds', 'milliseconds' and 'microseconds'.
         """
+
     if sys.version_info >= (3, 15):
         @classmethod
         def strptime(cls, string: str, format: str, /) -> Self: ...

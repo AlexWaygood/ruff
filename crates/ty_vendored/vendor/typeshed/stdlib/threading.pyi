@@ -207,6 +207,7 @@ class Thread:
         created. The identifier is available even after the thread has exited.
 
         """
+
     daemon: bool
     """A boolean value indicating whether this thread is a daemon thread.
 
@@ -260,6 +261,7 @@ class Thread:
             else to the thread.
 
             """
+
     else:
         def __init__(
             self,
@@ -451,6 +453,7 @@ class _RLock:
         There is no return value.
 
         """
+
     __enter__ = acquire
     def __exit__(self, t: type[BaseException] | None, v: BaseException | None, tb: TracebackType | None) -> None: ...
 

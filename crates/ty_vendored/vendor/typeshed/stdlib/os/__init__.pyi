@@ -943,6 +943,7 @@ class stat_result(structseq[float], tuple[int, int, int, int, int, int, int, flo
     @property
     def st_mtime(self) -> float:  # time of most recent content modification,
         """time of last modification"""
+
     # platform dependent (time of most recent metadata change on Unix, or the time of creation on Windows)
     if sys.version_info >= (3, 12) and sys.platform == "win32":
         @property
@@ -963,10 +964,12 @@ In the future, this property will contain the last metadata change time.""")
     @property
     def st_mtime_ns(self) -> int:  # time of most recent content modification in nanoseconds
         """time of last modification in nanoseconds"""
+
     # platform dependent (time of most recent metadata change on Unix, or the time of creation on Windows) in nanoseconds
     @property
     def st_ctime_ns(self) -> int:
         """time of last change in nanoseconds"""
+
     if sys.platform == "win32":
         @property
         def st_file_attributes(self) -> int:
@@ -975,6 +978,7 @@ In the future, this property will contain the last metadata change time.""")
         @property
         def st_reparse_tag(self) -> int:
             """Windows reparse tag"""
+
         if sys.version_info >= (3, 12):
             @property
             def st_birthtime(self) -> float:  # time of file creation in seconds
@@ -983,6 +987,7 @@ In the future, this property will contain the last metadata change time.""")
             @property
             def st_birthtime_ns(self) -> int:  # time of file creation in nanoseconds
                 """time of creation in nanoseconds"""
+
     else:
         @property
         def st_blocks(self) -> int:  # number of blocks allocated for file
@@ -995,6 +1000,7 @@ In the future, this property will contain the last metadata change time.""")
         @property
         def st_rdev(self) -> int:  # type of device if an inode device
             """device type (if inode device)"""
+
         if sys.platform != "linux":
             # These properties are available on MacOS, but not Ubuntu.
             # On other Unix systems (such as FreeBSD), the following attributes may be
@@ -1006,10 +1012,12 @@ In the future, this property will contain the last metadata change time.""")
             @property
             def st_birthtime(self) -> float:  # time of file creation in seconds
                 """time of creation"""
+
     if sys.platform == "darwin":
         @property
         def st_flags(self) -> int:  # user defined flags for file
             """user defined flags for file"""
+
     # Attributes documented as sometimes appearing, but deliberately omitted from the stub: `st_creator`, `st_rsize`, `st_type`.
     # See https://github.com/python/typeshed/pull/6560#issuecomment-991253327
 
@@ -1078,6 +1086,7 @@ class DirEntry(Generic[AnyStr]):
 
     def __class_getitem__(cls, item: Any, /) -> GenericAlias:
         """See PEP 585"""
+
     if sys.version_info >= (3, 12):
         def is_junction(self) -> bool:
             """Return True if the entry is a junction; cached per entry."""
@@ -1261,6 +1270,7 @@ if sys.platform != "win32":
 
     def setpriority(which: int, who: int, priority: int) -> None:
         """Set program scheduling priority."""
+
     if sys.platform != "darwin":
         def getresuid() -> tuple[int, int, int]:
             """Return a tuple of the current process's real, effective, and saved user ids."""
@@ -1291,6 +1301,7 @@ if sys.platform != "win32":
 
     def setregid(rgid: int, egid: int, /) -> None:
         """Set the current process's real and effective group ids."""
+
     if sys.platform != "darwin":
         def setresgid(rgid: int, egid: int, sgid: int, /) -> None:
             """Set the current process's real, effective, and saved group ids."""
@@ -1571,6 +1582,7 @@ if sys.platform != "win32":
         Return a tuple of (master_fd, slave_fd) containing open file descriptors
         for both the master and slave ends.
         """
+
     if sys.platform != "darwin":
         def fdatasync(fd: FileDescriptorLike) -> None:
             """Force write of fd to disk without forcing update of metadata."""
@@ -1618,6 +1630,7 @@ if sys.platform != "win32":
         the file.  Returns the number of bytes written.  Does not change the
         current file offset.
         """
+
     # In CI, stubtest sometimes reports that these are available on MacOS, sometimes not
     def preadv(fd: int, buffers: SupportsLenAndGetItem[WriteableBuffer], offset: int, flags: int = 0, /) -> int:
         """Reads from a file descriptor into a number of mutable bytes-like objects.
@@ -1655,6 +1668,7 @@ if sys.platform != "win32":
 
         Using non-zero flags requires Linux 4.7 or newer.
         """
+
     if sys.platform != "darwin":
         RWF_APPEND: Final[int]
         RWF_DSYNC: Final[int]
@@ -1665,6 +1679,7 @@ if sys.platform != "win32":
     if sys.platform == "linux":
         def sendfile(out_fd: FileDescriptor, in_fd: FileDescriptor, offset: int | None, count: int) -> int:
             """Copy count bytes from file descriptor in_fd to file descriptor out_fd."""
+
     else:
         def sendfile(
             out_fd: FileDescriptor,
@@ -2554,6 +2569,7 @@ if sys.platform != "win32":
 
     def nice(increment: int, /) -> int:
         """Add increment to the priority of process and return the new priority."""
+
     if sys.platform != "darwin" and sys.platform != "linux":
         def plock(op: int, /) -> None: ...
 
@@ -2786,6 +2802,7 @@ else:
         Returns a tuple of information about the child process:
             (pid, status)
         """
+
     # Added to MacOS in 3.13
     if sys.platform != "darwin" or sys.version_info >= (3, 13):
         @final
@@ -2826,6 +2843,7 @@ else:
             Returns either waitid_result or None if WNOHANG is specified and there are
             no children in a waitable state.
             """
+
     from resource import struct_rusage
 
     def wait3(options: int) -> tuple[int, int, struct_rusage]:
@@ -2869,6 +2887,7 @@ else:
 
     def WTERMSIG(status: int) -> int:
         """Return the signal that terminated the process that provided the status value."""
+
     if sys.version_info >= (3, 15):
         def posix_spawn(
             path: StrOrBytesPath,
@@ -2974,6 +2993,7 @@ else:
             scheduler
               A tuple with the scheduler policy (optional) and parameters.
             """
+
     else:
         def posix_spawn(
             path: StrOrBytesPath,
@@ -3050,6 +3070,7 @@ else:
             scheduler
               A tuple with the scheduler policy (optional) and parameters.
             """
+
     POSIX_SPAWN_OPEN: Final = 0
     POSIX_SPAWN_CLOSE: Final = 1
     POSIX_SPAWN_DUP2: Final = 2
@@ -3078,6 +3099,7 @@ if sys.platform != "win32":
 
     def sched_yield() -> None:  # some flavors of Unix
         """Voluntarily relinquish the CPU."""
+
     if sys.platform != "darwin":
         def sched_setscheduler(pid: int, policy: int, param: sched_param, /) -> None:  # some flavors of Unix
             """Set the scheduling policy for the process identified by pid.
@@ -3141,6 +3163,7 @@ if sys.version_info >= (3, 13):
             Return the number of logical CPUs usable by the calling thread of the
             current process. Return None if indeterminable.
             """
+
     else:
         def process_cpu_count() -> int | None:
             """Return the number of logical CPUs in the system.

@@ -141,6 +141,7 @@ class PathFinder(importlib.abc.MetaPathFinder):
 
         The search is based on sys.path_hooks and sys.path_importer_cache.
         """
+
     if sys.version_info < (3, 12):
         @classmethod
         @deprecated("Deprecated since Python 3.4; removed in Python 3.12. Use `find_spec()` instead.")

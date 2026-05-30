@@ -183,6 +183,7 @@ class TarFile:
             can be determined, 'mode' is overridden by 'fileobj's mode.
             'fileobj' is not closed, when TarFile is closed.
             """
+
     else:
         def __init__(
             self,
@@ -777,6 +778,7 @@ class TarFile:
         """Open lzma compressed tar archive name for reading or writing.
         Appending is not allowed.
         """
+
     if sys.version_info >= (3, 14):
         @overload
         @classmethod
@@ -851,6 +853,7 @@ class TarFile:
         TarFile is opened for reading. Return None if there is no more
         available.
         """
+
     # Calling this method without `filter` is deprecated, but it may be set either on the class or in an
     # individual call, so we can't mark it as @deprecated here.
     def extractall(
@@ -873,6 +876,7 @@ class TarFile:
         It can return a changed TarInfo or None to skip the member.
         String names of common filters are accepted.
         """
+
     # Same situation as for `extractall`.
     def extract(
         self,

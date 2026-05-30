@@ -111,6 +111,7 @@ if sys.version_info >= (3, 11):
             """
             Read contents of self as bytes
             """
+
         if sys.version_info >= (3, 15):
             @abstractmethod
             def read_text(self, encoding: str | None = None, errors: str | None = None) -> str: ...

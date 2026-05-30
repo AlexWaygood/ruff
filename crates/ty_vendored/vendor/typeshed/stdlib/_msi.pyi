@@ -81,6 +81,7 @@ if sys.platform == "win32":
         count
           the number of fields of the record
         """
+
     MSICOLINFO_NAMES: Final[int]
     MSICOLINFO_TYPES: Final[int]
     MSIDBOPEN_CREATE: Final[int]

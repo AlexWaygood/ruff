@@ -656,6 +656,7 @@ else:
 
     def get_overloads(func: Callable[..., object]) -> Sequence[Callable[..., object]]:
         """Return all defined overloads for *func* as a sequence."""
+
     Required: _SpecialForm
     """A special typing construct to mark a key of a total=False TypedDict
     as required. For example:
@@ -934,6 +935,7 @@ else:
             assert get_original_bases(Spam) == (TypedDict,)
             assert get_original_bases(int) == (object,)
         """
+
     # mypy and pyright object to this being both ABC and Protocol.
     # At runtime it inherits from ABC and is not a Protocol, but it is on the
     # allowlist for use as a Protocol.
@@ -1201,6 +1203,7 @@ else:
 
         def __ror__(self, left: Any) -> _SpecialForm:
             """Return value|self."""
+
         if sys.version_info >= (3, 11):
             def __typing_subst__(self, arg: Any) -> Any: ...
 

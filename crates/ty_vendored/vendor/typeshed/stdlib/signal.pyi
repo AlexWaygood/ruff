@@ -199,6 +199,7 @@ else:
         signals specified in the signal set sigset.  The function accepts the signal
         and returns the signal number.
         """
+
     if sys.platform != "darwin":
         SIGCLD: Final = Signals.SIGCHLD  # alias
         SIGPOLL: Final = Signals.SIGIO  # alias

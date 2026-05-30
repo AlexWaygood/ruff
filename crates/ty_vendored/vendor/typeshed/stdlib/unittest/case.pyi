@@ -183,6 +183,7 @@ class TestCase:
 
     def debug(self) -> None:
         """Run the test without collecting errors in a TestResult"""
+
     if sys.version_info < (3, 11):
         def _addSkip(self, result: unittest.result.TestResult, test_case: TestCase, reason: str) -> None: ...
 
@@ -585,6 +586,7 @@ class TestCase:
         is optimized for sets specifically (parameters must support a
         difference method).
         """
+
     # assertDictEqual accepts only true dict instances. We can't use that here, since that would make
     # assertDictEqual incompatible with TypedDict.
     def assertDictEqual(self, d1: Mapping[Any, object], d2: Mapping[Any, object], msg: Any = None) -> None: ...
@@ -609,6 +611,7 @@ class TestCase:
 
         Cleanup items are called even if setUp fails (unlike tearDown).
         """
+
     if sys.version_info >= (3, 11):
         def enterContext(self, cm: AbstractContextManager[_T]) -> _T:
             """Enters the supplied context manager.
@@ -633,6 +636,7 @@ class TestCase:
         """Execute all class cleanup functions. Normally called for you after
         tearDownClass.
         """
+
     if sys.version_info >= (3, 11):
         @classmethod
         def enterClassContext(cls, cm: AbstractContextManager[_T]) -> _T:
@@ -656,6 +660,7 @@ class TestCase:
         raise a failure exception if first != second with a useful human
         readable error message for those types.
         """
+
     if sys.version_info < (3, 12):
         failUnlessEqual = assertEqual
         assertEquals = assertEqual
@@ -674,6 +679,7 @@ class TestCase:
         assertRaisesRegexp = assertRaisesRegex
         def assertDictContainsSubset(self, subset: Mapping[Any, Any], dictionary: Mapping[Any, Any], msg: object = None) -> None:
             """Checks whether dictionary is a superset of subset."""
+
     # Runtime has *args, **kwargs, but will error if any are supplied
     def __init_subclass__(cls, *args: Never, **kwargs: Never) -> None: ...
 

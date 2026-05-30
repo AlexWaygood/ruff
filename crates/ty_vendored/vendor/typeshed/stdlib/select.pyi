@@ -230,6 +230,7 @@ if sys.platform == "linux":
 
             Further operations on the epoll object will raise an exception.
             """
+
         closed: bool
         """True if the epoll handler is closed"""
 

@@ -321,6 +321,7 @@ class TypeVar:
 
     def __ror__(self, left: Any, /) -> _SpecialForm:  # AnnotationForm
         """Return value|self."""
+
     if sys.version_info >= (3, 11):
         def __typing_subst__(self, arg: Any, /) -> Any: ...
     if sys.version_info >= (3, 13):
@@ -919,6 +920,7 @@ class ParamSpec:
         @property
         def __default__(self) -> Any:  # AnnotationForm
             """The default value for this ParamSpec."""
+
     if sys.version_info >= (3, 13):
         def __new__(
             cls,
@@ -956,6 +958,7 @@ class ParamSpec:
     @property
     def kwargs(self) -> ParamSpecKwargs:
         """Represents keyword arguments."""
+
     if sys.version_info >= (3, 11):
         def __typing_subst__(self, arg: Any, /) -> Any: ...
         def __typing_prepare_subst__(self, alias: Any, args: Any, /) -> tuple[Any, ...]: ...
@@ -965,6 +968,7 @@ class ParamSpec:
 
     def __ror__(self, left: Any, /) -> _SpecialForm:
         """Return value|self."""
+
     if sys.version_info >= (3, 13):
         def has_default(self) -> bool: ...
     if sys.version_info >= (3, 14):
@@ -1432,6 +1436,7 @@ class Generator(Iterator[_YieldT_co], Protocol[_YieldT_co, _SendT_contra, _Retur
     if sys.version_info >= (3, 13):
         def close(self) -> _ReturnT_co | None:
             """Raise GeneratorExit inside generator."""
+
     else:
         def close(self) -> None:
             """Raise GeneratorExit inside generator."""
@@ -1671,6 +1676,7 @@ class AbstractSet(Collection[_T_co]):
         freedom for __eq__ or __hash__.  We match the algorithm used
         by the built-in frozenset type.
         """
+
     # Mixin methods
     @classmethod
     def _from_iterable(cls, it: Iterable[_S], /) -> AbstractSet[_S]:
@@ -1711,6 +1717,7 @@ class MutableSet(AbstractSet[_T]):
     @abstractmethod
     def discard(self, value: _T, /) -> None:
         """Remove an element.  Do not raise an exception if absent."""
+
     # Mixin methods
     def clear(self) -> None:
         """This is slow (creates N new iterators!) but effective."""
@@ -2563,6 +2570,7 @@ if sys.version_info >= (3, 12):
 
         def __ror__(self, left: Any, /) -> _SpecialForm:
             """Return value|self."""
+
         if sys.version_info >= (3, 14):
             def __iter__(self) -> Any:  # Unpack[Self]
                 """Implement iter(self)."""

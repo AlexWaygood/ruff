@@ -478,6 +478,7 @@ class SSLSocket(socket.socket):
         """Return the current compression algorithm in use, or ``None`` if
         compression was not negotiated or not supported by one of the peers.
         """
+
     if sys.version_info >= (3, 15):
         def group(self) -> str | None: ...
         def client_sigalg(self) -> str | None: ...
@@ -759,6 +760,7 @@ class SSLObject:
         """The currently set server hostname (for SNI), or ``None`` if no
         server hostname is set.
         """
+
     session: SSLSession | None
     """The SSLSession for client socket."""
 
@@ -821,6 +823,7 @@ class SSLObject:
         """Return the current compression algorithm in use, or ``None`` if
         compression was not negotiated or not supported by one of the peers.
         """
+
     if sys.version_info >= (3, 15):
         def group(self) -> str | None: ...
         def client_sigalg(self) -> str | None: ...

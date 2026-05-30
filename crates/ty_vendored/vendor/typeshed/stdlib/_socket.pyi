@@ -826,10 +826,12 @@ class socket:
     @property
     def proto(self) -> int:
         """the socket protocol"""
+
     # F811: "Redefinition of unused `timeout`"
     @property
     def timeout(self) -> float | None:
         """the socket timeout"""
+
     if sys.platform == "win32":
         def __init__(
             self, family: int = ..., type: int = ..., proto: int = ..., fileno: SupportsIndex | bytes | None = None
@@ -920,6 +922,7 @@ class socket:
         operations. A timeout of None indicates that timeouts on socket
         operations are disabled.
         """
+
     if sys.platform == "win32":
         def ioctl(self, control: int, option: int | tuple[int, int, int] | bool, /) -> None:
             """ioctl(cmd, option) -> long
@@ -953,6 +956,7 @@ class socket:
 
         Like recv(buffersize, flags) but also return the sender's address info.
         """
+
     if sys.platform != "win32":
         def recvmsg(self, bufsize: int, ancbufsize: int = 0, flags: int = 0, /) -> tuple[bytes, list[_CMSG], int, Any]:
             """recvmsg(bufsize[, ancbufsize[, flags]]) -> (data, ancdata, msg_flags, address)
@@ -1088,6 +1092,7 @@ class socket:
             the message.  The return value is the number of bytes of non-ancillary
             data sent.
             """
+
     if sys.platform == "linux":
         def sendmsg_afalg(
             self, msg: Iterable[ReadableBuffer] = ..., *, op: int, iv: Any = ..., assoclen: int = ..., flags: int = 0

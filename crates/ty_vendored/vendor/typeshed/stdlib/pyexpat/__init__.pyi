@@ -71,6 +71,7 @@ class XMLParserType:
 
     def SetReparseDeferralEnabled(self, enabled: bool, /) -> None:
         """Enable/Disable reparse deferral; enabled by default with Expat >=2.6.0."""
+
     # Added in Python 3.10.20, 3.11.15, 3.12.3, 3.13.10, 3.14.1
     def SetAllocTrackerActivationThreshold(self, threshold: int, /) -> None:
         """Sets the number of allocated bytes of dynamic memory needed to activate protection against disproportionate use of RAM.
@@ -93,6 +94,7 @@ class XMLParserType:
 
         By default, parser objects have a maximum amplification factor of 100.0.
         """
+
     if sys.version_info >= (3, 15):
         def SetBillionLaughsAttackProtectionActivationThreshold(self, threshold: int, /) -> None: ...
         def SetBillionLaughsAttackProtectionMaximumAmplification(self, max_factor: float, /) -> None: ...

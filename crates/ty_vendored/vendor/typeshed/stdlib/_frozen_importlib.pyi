@@ -103,6 +103,7 @@ class ModuleSpec:
     @property
     def parent(self) -> str | None:
         """The name of the module's parent."""
+
     has_location: bool
     def __eq__(self, other: object) -> bool: ...
     __hash__: ClassVar[None]  # type: ignore[assignment]
@@ -152,6 +153,7 @@ class BuiltinImporter(importlib.abc.MetaPathFinder, importlib.abc.InspectLoader)
     @classmethod
     def get_source(cls, fullname: str) -> None:
         """Return None as built-in modules do not have source code."""
+
     # Loader
     if sys.version_info < (3, 12):
         @staticmethod
@@ -217,6 +219,7 @@ class FrozenImporter(importlib.abc.MetaPathFinder, importlib.abc.InspectLoader):
     @classmethod
     def get_source(cls, fullname: str) -> None:
         """Return None as frozen modules do not have source code."""
+
     # Loader
     if sys.version_info < (3, 12):
         @staticmethod

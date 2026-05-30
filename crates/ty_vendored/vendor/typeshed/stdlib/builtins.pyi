@@ -191,6 +191,7 @@ class staticmethod(Generic[_P, _R_co]):
     def __wrapped__(self) -> Callable[_P, _R_co]: ...
     def __call__(self, *args: _P.args, **kwargs: _P.kwargs) -> _R_co:
         """Call self as a function."""
+
     if sys.version_info >= (3, 14):
         def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
         __annotate__: AnnotateFunc | None
@@ -285,6 +286,7 @@ class type:
 
     def __subclasses__(self: _typeshed.Self) -> list[_typeshed.Self]:
         """Return a list of immediate subclasses."""
+
     # Note: the documentation doesn't specify what the return type is, the standard
     # implementation seems to be returning a list.
     def mro(self) -> list[type]:
@@ -299,6 +301,7 @@ class type:
     @classmethod
     def __prepare__(metacls, name: str, bases: tuple[type, ...], /, **kwds: Any) -> MutableMapping[str, object]:
         """Create the namespace for the class statement"""
+
     # `int | str` produces an instance of `UnionType`, but `int | int` produces an instance of `type`,
     # and `abc.ABC | abc.ABC` produces an instance of `abc.ABCMeta`.
     def __or__(self: _typeshed.Self, value: Any, /) -> types.UnionType | _typeshed.Self:
@@ -306,6 +309,7 @@ class type:
 
     def __ror__(self: _typeshed.Self, value: Any, /) -> types.UnionType | _typeshed.Self:
         """Return value|self."""
+
     if sys.version_info >= (3, 12):
         __type_params__: tuple[TypeVar | ParamSpec | TypeVarTuple, ...]
     __annotations__: dict[str, AnnotationForm]
@@ -414,6 +418,7 @@ class int:
         >>> (13).bit_count()
         3
         """
+
     if sys.version_info >= (3, 11):
         def to_bytes(
             self, length: SupportsIndex = 1, byteorder: Literal["little", "big"] = "big", *, signed: bool = False
@@ -460,6 +465,7 @@ class int:
             signed
               Indicates whether two's complement is used to represent the integer.
             """
+
     else:
         def to_bytes(self, length: SupportsIndex, byteorder: Literal["little", "big"], *, signed: bool = False) -> bytes:
             """Return an array of bytes representing an integer.
@@ -503,6 +509,7 @@ class int:
             signed
               Indicates whether two's complement is used to represent the integer.
             """
+
     if sys.version_info >= (3, 12):
         def is_integer(self) -> Literal[True]:
             """Returns True. Exists for duck type compatibility with float.is_integer."""
@@ -615,12 +622,14 @@ class int:
 
     def __floor__(self) -> int:
         """Flooring an Integral returns itself."""
+
     if sys.version_info >= (3, 14):
         def __round__(self, ndigits: SupportsIndex | None = None, /) -> int:
             """Rounding an Integral returns itself.
 
             Rounding with an ndigits argument also returns an integer.
             """
+
     else:
         def __round__(self, ndigits: SupportsIndex = ..., /) -> int:
             """Rounding an Integral returns itself.
@@ -811,6 +820,7 @@ class float:
 
     def __format__(self, format_spec: str, /) -> str:
         """Formats the float according to format_spec."""
+
     if sys.version_info >= (3, 14):
         @classmethod
         def from_number(cls, number: float | SupportsIndex | SupportsFloat, /) -> Self:
@@ -894,9 +904,11 @@ class complex:
 
     def __format__(self, format_spec: str, /) -> str:
         """Convert to a string according to format_spec."""
+
     if sys.version_info >= (3, 11):
         def __complex__(self) -> complex:
             """Convert this value to exact type complex."""
+
     if sys.version_info >= (3, 14):
         @classmethod
         def from_number(cls, number: complex | SupportsComplex | SupportsFloat | SupportsIndex, /) -> Self:
@@ -1697,6 +1709,7 @@ class bytes(Sequence[int]):
         If the separator is not found, returns a 3-tuple containing the original bytes
         object and two empty bytes objects.
         """
+
     if sys.version_info >= (3, 15):
         def replace(self, old: ReadableBuffer, new: ReadableBuffer, /, count: SupportsIndex = -1) -> bytes: ...
     else:
@@ -1866,6 +1879,7 @@ class bytes(Sequence[int]):
 
         The original string is never truncated.
         """
+
     if sys.version_info >= (3, 14):
         @classmethod
         def fromhex(cls, string: str | ReadableBuffer, /) -> Self:
@@ -1918,6 +1932,7 @@ class bytes(Sequence[int]):
 
     def __mod__(self, value: Any, /) -> bytes:
         """Return self%value."""
+
     # Incompatible with Sequence.__contains__
     def __contains__(self, key: SupportsIndex | ReadableBuffer, /) -> bool:  # type: ignore[override]
         """Return bool(key in self)."""
@@ -2219,6 +2234,7 @@ class bytearray(MutableSequence[int]):
         empty, return bytearray[:-len(suffix)].  Otherwise, return a copy of
         the original bytearray.
         """
+
     if sys.version_info >= (3, 15):
         def replace(self, old: ReadableBuffer, new: ReadableBuffer, /, count: SupportsIndex = -1) -> bytearray: ...
     else:
@@ -2362,6 +2378,7 @@ class bytearray(MutableSequence[int]):
         All characters occurring in the optional argument delete are removed.
         The remaining characters are mapped through the given translation table.
         """
+
     if sys.version_info >= (3, 15):
         def take_bytes(self, n: int | None = None, /) -> bytes: ...
 
@@ -2376,6 +2393,7 @@ class bytearray(MutableSequence[int]):
 
         The original string is never truncated.
         """
+
     if sys.version_info >= (3, 14):
         @classmethod
         def fromhex(cls, string: str | ReadableBuffer, /) -> Self:
@@ -2408,6 +2426,7 @@ class bytearray(MutableSequence[int]):
 
     def __iter__(self) -> Iterator[int]:
         """Implement iter(self)."""
+
     __hash__: ClassVar[None]  # type: ignore[assignment]
 
     @overload
@@ -2427,6 +2446,7 @@ class bytearray(MutableSequence[int]):
 
     def __add__(self, value: ReadableBuffer, /) -> bytearray:
         """Return self+value."""
+
     # The superclass wants us to accept Iterable[int], but that fails at runtime.
     def __iadd__(self, value: ReadableBuffer, /) -> Self:  # type: ignore[override]
         """Implement self+=value."""
@@ -2442,6 +2462,7 @@ class bytearray(MutableSequence[int]):
 
     def __mod__(self, value: Any, /) -> bytes:
         """Return self%value."""
+
     # Incompatible with Sequence.__contains__
     def __contains__(self, key: SupportsIndex | ReadableBuffer, /) -> bool:  # type: ignore[override]
         """Return bool(key in self)."""
@@ -2463,6 +2484,7 @@ class bytearray(MutableSequence[int]):
 
     def __release_buffer__(self, buffer: memoryview, /) -> None:
         """Release the buffer object that exposes the underlying memory of the object."""
+
     if sys.version_info >= (3, 14):
         def resize(self, size: int, /) -> None:
             """Resize the internal buffer of bytearray to len.
@@ -2625,6 +2647,7 @@ class memoryview(Sequence[_I]):
 
     def __release_buffer__(self, buffer: memoryview, /) -> None:
         """Release the buffer object that exposes the underlying memory of the object."""
+
     if sys.version_info >= (3, 14):
         def index(self, value: object, start: SupportsIndex = 0, stop: SupportsIndex = sys.maxsize, /) -> int:
             """Return the index of the first occurrence of a value.
@@ -2634,6 +2657,7 @@ class memoryview(Sequence[_I]):
 
         def count(self, value: object, /) -> int:
             """Count the number of occurrences of a value."""
+
     else:
         # These are inherited from the Sequence ABC, but don't actually exist on memoryview.
         # See https://github.com/python/cpython/issues/125420
@@ -2750,6 +2774,7 @@ class slice(Generic[_StartT_co, _StopT_co, _StepT_co]):
         S. Out of bounds indices are clipped in a manner consistent with the
         handling of normal slices.
         """
+
     if sys.version_info >= (3, 15):
         def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
 
@@ -2887,6 +2912,7 @@ class list(MutableSequence[_T]):
 
         Raises IndexError if list is empty or index is out of range.
         """
+
     # Signature of `list.index` should be kept in line with `collections.UserList.index()`
     # and multiprocessing.managers.ListProxy.index()
     def index(self, value: _T, start: SupportsIndex = 0, stop: SupportsIndex = sys.maxsize, /) -> int:
@@ -2932,6 +2958,7 @@ class list(MutableSequence[_T]):
 
     def __iter__(self) -> Iterator[_T]:
         """Implement iter(self)."""
+
     __hash__: ClassVar[None]  # type: ignore[assignment]
 
     @overload
@@ -3090,9 +3117,11 @@ class dict(MutableMapping[_KT, _VT]):
     def __eq__(self, value: object, /) -> bool: ...
     def __reversed__(self) -> Iterator[_KT]:
         """Return a reverse iterator over the dict keys."""
+
     __hash__: ClassVar[None]  # type: ignore[assignment]
     def __class_getitem__(cls, item: Any, /) -> GenericAlias:
         """See PEP 585"""
+
     if sys.version_info >= (3, 15):
         def __or__(self, value: dict[_T1, _T2] | frozendict[_T1, _T2], /) -> dict[_KT | _T1, _VT | _T2]: ...
 
@@ -4693,6 +4722,7 @@ class BaseException:
     def __setstate__(self, state: dict[str, Any] | None, /) -> None: ...
     def with_traceback(self, tb: TracebackType | None, /) -> Self:
         """Set self.__traceback__ to tb and return self."""
+
     # Necessary for security-focused static analyzers (e.g, pysa)
     # See https://github.com/python/typeshed/pull/14900
     def __str__(self) -> str: ...  # noqa: Y029

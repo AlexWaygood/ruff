@@ -363,6 +363,7 @@ class TracebackException:
             The message indicating which exception occurred is always the last
             string in the output.
             """
+
     else:
         def format(self, *, chain: bool = True) -> Generator[str]:
             """Format the exception.
@@ -376,6 +377,7 @@ class TracebackException:
             The message indicating which exception occurred is always the last
             string in the output.
             """
+
     if sys.version_info >= (3, 13):
         def format_exception_only(self, *, show_group: bool = False, _depth: int = 0) -> Generator[str]:
             """Format the exception part of the traceback.
@@ -394,6 +396,7 @@ class TracebackException:
             :exc:`BaseExceptionGroup`, the nested exceptions are included as
             well, recursively, with indentation relative to their nesting depth.
             """
+
     else:
         def format_exception_only(self) -> Generator[str]:
             """Format the exception part of the traceback.
@@ -408,6 +411,7 @@ class TracebackException:
             Following the message, generator also yields
             all the exception's ``__notes__``.
             """
+
     if sys.version_info >= (3, 11):
         def print(self, *, file: SupportsWrite[str] | None = None, chain: bool = True) -> None:
             """Print the result of self.format(chain=chain) to 'file'."""
@@ -466,6 +470,7 @@ class FrameSummary:
             :param line: If provided, use this instead of looking up the line in
                 the linecache.
             """
+
         end_lineno: int | None
         colno: int | None
         end_colno: int | None
@@ -489,6 +494,7 @@ class FrameSummary:
             :param line: If provided, use this instead of looking up the line in
                 the linecache.
             """
+
     filename: str
     lineno: int | None
     name: str
@@ -544,6 +550,7 @@ class StackSummary(list[FrameSummary]):
         Create a StackSummary object from a supplied list of
         FrameSummary objects or old-style list of tuples.
         """
+
     if sys.version_info >= (3, 11):
         def format_frame_summary(self, frame_summary: FrameSummary) -> str:
             """Format the lines for a single FrameSummary.

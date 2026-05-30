@@ -43,6 +43,7 @@ class SymbolTable:
             The value returned is one of the values in
             the ``SymbolTableType`` enumeration.
             """
+
     else:
         def get_type(self) -> str:
             """Return the type of the symbol table.
@@ -109,6 +110,7 @@ class Function(SymbolTable):
 
     def get_frees(self) -> tuple[str, ...]:
         """Return a tuple of free variables in the function."""
+
     if sys.version_info >= (3, 15):
         def get_cells(self) -> tuple[str, ...]: ...
 
@@ -137,6 +139,7 @@ class Symbol:
 
     def is_parameter(self) -> bool:
         """Return *True* if the symbol is a parameter."""
+
     if sys.version_info >= (3, 14):
         def is_type_parameter(self) -> bool:
             """Return *True* if the symbol is a type parameter."""
@@ -159,6 +162,7 @@ class Symbol:
         """Return *True* if a referenced symbol is
         not assigned to.
         """
+
     if sys.version_info >= (3, 14):
         def is_free_class(self) -> bool:
             """Return *True* if a class-scoped symbol is free from
@@ -172,12 +176,14 @@ class Symbol:
 
     def is_assigned(self) -> bool:
         """Return *True* if a symbol is assigned to."""
+
     if sys.version_info >= (3, 14):
         def is_comp_iter(self) -> bool:
             """Return *True* if the symbol is a comprehension iteration variable."""
 
         def is_comp_cell(self) -> bool:
             """Return *True* if the symbol is a cell in an inlined comprehension."""
+
     if sys.version_info >= (3, 15):
         def is_cell(self) -> bool: ...
 

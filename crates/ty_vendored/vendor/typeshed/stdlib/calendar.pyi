@@ -319,6 +319,7 @@ class HTMLCalendar(Calendar):
         """
         Return a formatted month as a table.
         """
+
     if sys.version_info >= (3, 15):
         def formatmonthpage(
             self, theyear: int, themonth: int, width: int = 3, css: str | None = "calendar.css", encoding: str | None = None

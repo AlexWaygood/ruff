@@ -134,6 +134,7 @@ class Timer:
         interested in.  After that, you should look at the entire
         vector and apply common sense rather than statistics.
         """
+
     if sys.version_info >= (3, 15):
         def autorange(
             self, callback: Callable[[int, float], object] | None = None, target_time: float = 0.2

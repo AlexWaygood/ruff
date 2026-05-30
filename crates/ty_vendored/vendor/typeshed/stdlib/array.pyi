@@ -201,6 +201,7 @@ class array(MutableSequence[_T]):
         otherwise a ValueError is raised.  Use array.tobytes().decode() to obtain a
         unicode string from an array of some other type.
         """
+
     __hash__: ClassVar[None]  # type: ignore[assignment]
     def __contains__(self, value: object, /) -> bool:
         """Return bool(key in self)."""
@@ -254,6 +255,7 @@ class array(MutableSequence[_T]):
 
     def __release_buffer__(self, buffer: memoryview, /) -> None:
         """Release the buffer object that exposes the underlying memory of the object."""
+
     if sys.version_info >= (3, 12):
         def __class_getitem__(cls, item: Any, /) -> GenericAlias:
             """See PEP 585"""

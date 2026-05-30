@@ -272,6 +272,7 @@ class CodeType:
             co_exceptiontable: bytes = ...,
         ) -> Self:
             """Return a copy of the code object with new values for the specified fields."""
+
     else:
         def replace(
             self,
@@ -294,6 +295,7 @@ class CodeType:
             co_linetable: bytes = ...,
         ) -> Self:
             """Return a copy of the code object with new values for the specified fields."""
+
     if sys.version_info >= (3, 13):
         __replace__ = replace
         """The same as replace()."""
@@ -445,6 +447,7 @@ class GeneratorType(Generator[_YieldT_co, _SendT_contra, _ReturnT_co]):
     @property
     def gi_yieldfrom(self) -> Iterator[_YieldT_co] | None:
         """object being iterated by yield from, or None"""
+
     if sys.version_info >= (3, 11):
         @property
         def gi_suspended(self) -> bool: ...
@@ -623,6 +626,7 @@ class MethodType:
     def __new__(cls, func: Callable[..., Any], instance: object, /) -> Self: ...
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Call self as a function."""
+
     if sys.version_info >= (3, 13):
         def __get__(self, instance: object, owner: type | None = None, /) -> Self:
             """Return an attribute of instance, which is of type owner."""
@@ -738,12 +742,14 @@ class FrameType:
     @property
     def f_lasti(self) -> int:
         """Return the index of the last attempted instruction in the frame."""
+
     # see discussion in #6769: f_lineno *can* sometimes be None,
     # but you should probably file a bug report with CPython if you encounter it being None in the wild.
     # An `int | None` annotation here causes too many false-positive errors, so applying `int | Any`.
     @property
     def f_lineno(self) -> int | MaybeNone:
         """Return the current line number in the frame."""
+
     if sys.version_info >= (3, 15):
         @property
         def f_locals(self) -> FrameLocalsProxyType | dict[str, Any]: ...
@@ -761,6 +767,7 @@ class FrameType:
 
     def clear(self) -> None:
         """Clear all references held by the frame."""
+
     if sys.version_info >= (3, 14):
         @property
         def f_generator(self) -> GeneratorType[Any, Any, Any] | CoroutineType[Any, Any, Any] | None:
@@ -952,6 +959,7 @@ class GenericAlias:
 
     def __ror__(self, value: Any, /) -> UnionType:
         """Return value|self."""
+
     # GenericAlias delegates attr access to `__origin__`
     def __getattr__(self, name: str) -> Any: ...
 
@@ -982,6 +990,7 @@ class UnionType:
     @property
     def __parameters__(self) -> tuple[Any, ...]:
         """Type variables in the types.UnionType."""
+
     # `(int | str) | Literal["foo"]` returns a generic alias to an instance of `_SpecialForm` (`Union`).
     # Normally we'd express this using the return type of `_SpecialForm.__ror__`,
     # but because `UnionType.__or__` accepts `Any`, type checkers will use

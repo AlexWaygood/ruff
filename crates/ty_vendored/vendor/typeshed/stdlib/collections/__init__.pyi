@@ -340,6 +340,7 @@ class deque(MutableSequence[_T]):
 
     def __len__(self) -> int:
         """Return len(self)."""
+
     __hash__: ClassVar[None]  # type: ignore[assignment]
     # These methods of deque don't take slices, unlike MutableSequence, hence the type: ignores
     def __getitem__(self, key: SupportsIndex, /) -> _T:  # type: ignore[override]
@@ -580,6 +581,7 @@ class Counter(dict[_T, int], Generic[_T]):
         Counter({'b': 3, 'c': 2, 'a': 1})
 
         """
+
     if sys.version_info >= (3, 15):
         def __xor__(self, other: Counter[_S]) -> Counter[_T | _S]: ...  # type: ignore[override]
 
@@ -591,6 +593,7 @@ class Counter(dict[_T, int], Generic[_T]):
         and flips the sign on negative counts.
 
         """
+
     # several type: ignores because __iadd__ is supposedly incompatible with __add__, etc.
     def __iadd__(self, other: SupportsItems[_T, int]) -> Self:  # type: ignore[misc]
         """Inplace add from another counter, keeping only positive counts.
@@ -631,6 +634,7 @@ class Counter(dict[_T, int], Generic[_T]):
         Counter({'b': 3, 'c': 2, 'a': 1})
 
         """
+
     if sys.version_info >= (3, 15):
         def __ixor__(self, other: Counter[_T]) -> Self: ...  # type: ignore[misc]
 
@@ -891,6 +895,7 @@ class ChainMap(MutableMapping[_KT, _VT]):
 
     def copy(self) -> Self:
         """New ChainMap or subclass with a new copy of maps[0] and refs to maps[1:]"""
+
     __copy__ = copy
     # All arguments to `fromkeys` are passed to `dict.fromkeys` at runtime,
     # so the signature should be kept in line with `dict.fromkeys`.

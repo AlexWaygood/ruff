@@ -2589,6 +2589,7 @@ class NodeVisitor:
 
     def generic_visit(self, node: AST) -> Any:
         """Called if no explicit visitor function exists for a node."""
+
     # The following visit methods are not defined on NodeVisitor, but can
     # be implemented by subclasses and are called during a visit if defined.
     def visit_Module(self, node: Module) -> Any: ...

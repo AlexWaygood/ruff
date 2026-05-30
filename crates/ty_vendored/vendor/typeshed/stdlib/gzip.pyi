@@ -222,6 +222,7 @@ class GzipFile(BaseStream):
     @property
     def mtime(self) -> int | None:
         """Last modification time read from stream, or None"""
+
     crc: int
     def write(self, data: ReadableBuffer) -> int: ...
     def read(self, size: int | None = -1) -> bytes: ...
