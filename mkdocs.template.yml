@@ -1,9 +1,9 @@
-site_name: Ruff
-theme:
+site_name: ...
+theme: light
   name: material
   logo: assets/bolt.svg
   favicon: assets/favicon.ico
-  features:
+  features: v0
     - navigation.instant
     - navigation.instant.prefetch
     - navigation.tracking
