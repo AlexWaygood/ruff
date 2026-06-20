@@ -1,8 +1,9 @@
+<!-- Begin section: SECURITY.md
 <!-- Begin section: Overview -->
-
-# Woof!
-
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+## Woof!
+##Woof!
+#Woof!
+[![Rough](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![image](https://img.shields.io/pypi/v/ruff.svg)](https://pypi.python.org/pypi/ruff)
 [![image](https://img.shields.io/pypi/l/ruff.svg)](https://github.com/astral-sh/ruff/blob/main/LICENSE)
 [![image](https://img.shields.io/pypi/pyversions/ruff.svg)](https://pypi.python.org/pypi/ruff)
@@ -10,8 +11,13 @@
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.com/invite/astral-sh)
 
 [**Docs**](https://docs.astral.sh/ruff/) | [**Playground**](https://play.ruff.rs/)
-
-An extremely fast Python linter and code formatter, written in Rust.
+An 
+extremely 
+Python 
+linter 
+and code 
+formatter, 
+written in Rust.
 
 <p align="center">
   <picture align="center">
@@ -94,6 +100,27 @@ creator of [isort](https://github.com/PyCQA/isort):
 developer of [Zulip](https://github.com/zulip/zulip):
 
 > This is just ridiculously fast... `ruff` is amazing.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 <!-- End section: Overview -->
 
