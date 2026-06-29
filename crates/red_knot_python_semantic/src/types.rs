@@ -8,6 +8,7 @@ use itertools::Itertools;
 use ruff_db::diagnostic::Severity;
 use ruff_db::files::File;
 use ruff_python_ast as ast;
+use ruff_python_ast::python_version::PythonVersion;
 use type_ordering::union_elements_ordering;
 
 pub(crate) use self::builder::{IntersectionBuilder, UnionBuilder};
@@ -32,7 +33,7 @@ use crate::semantic_index::{
     use_def_map, BindingWithConstraints, BindingWithConstraintsIterator, DeclarationWithConstraint,
     DeclarationsIterator,
 };
-use crate::stdlib::{builtins_symbol, known_module_symbol, typing_extensions_symbol};
+use crate::stdlib::{known_module_symbol, typing_extensions_symbol};
 use crate::suppression::check_suppressions;
 use crate::symbol::{Boundness, Symbol};
 use crate::types::call::{
@@ -43,7 +44,7 @@ use crate::types::diagnostic::INVALID_TYPE_FORM;
 use crate::types::infer::infer_unpack_types;
 use crate::types::mro::{Mro, MroError, MroIterator};
 use crate::types::narrow::narrowing_constraint;
-use crate::{Db, FxOrderSet, Module, Program, PythonVersion};
+use crate::{Db, FxOrderSet, Module, Program};
 
 mod builder;
 mod call;
@@ -106,14 +107,30 @@ fn widen_type_for_undeclared_public_symbol<'db>(
     }
 }
 
-/// Infer the public type of a symbol (its type as seen from outside its scope).
-fn symbol<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str) -> Symbol<'db> {
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+enum RequiresExplicitReExport {
+    Yes,
+    No,
+}
+
+impl RequiresExplicitReExport {
+    const fn is_yes(self) -> bool {
+        matches!(self, RequiresExplicitReExport::Yes)
+    }
+}
+
+fn symbol_impl<'db>(
+    db: &'db dyn Db,
+    scope: ScopeId<'db>,
+    name: &str,
+    requires_explicit_reexport: RequiresExplicitReExport,
+) -> Symbol<'db> {
     #[salsa::tracked]
     fn symbol_by_id<'db>(
         db: &'db dyn Db,
         scope: ScopeId<'db>,
-        is_dunder_slots: bool,
         symbol_id: ScopedSymbolId,
+        requires_explicit_reexport: RequiresExplicitReExport,
     ) -> Symbol<'db> {
         let use_def = use_def_map(db, scope);
 
@@ -121,7 +138,7 @@ fn symbol<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str) -> Symbol<'db> 
         // on inference from bindings.
 
         let declarations = use_def.public_declarations(symbol_id);
-        let declared = symbol_from_declarations(db, declarations);
+        let declared = symbol_from_declarations(db, declarations, requires_explicit_reexport);
         let is_final = declared.as_ref().is_ok_and(SymbolAndQualifiers::is_final);
         let declared = declared.map(|SymbolAndQualifiers(symbol, _)| symbol);
 
@@ -131,7 +148,7 @@ fn symbol<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str) -> Symbol<'db> 
             // Symbol is possibly declared
             Ok(Symbol::Type(declared_ty, Boundness::PossiblyUnbound)) => {
                 let bindings = use_def.public_bindings(symbol_id);
-                let inferred = symbol_from_bindings(db, bindings);
+                let inferred = symbol_from_bindings(db, bindings, requires_explicit_reexport);
 
                 match inferred {
                     // Symbol is possibly undeclared and definitely unbound
@@ -151,9 +168,17 @@ fn symbol<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str) -> Symbol<'db> 
             // Symbol is undeclared, return the union of `Unknown` with the inferred type
             Ok(Symbol::Unbound) => {
                 let bindings = use_def.public_bindings(symbol_id);
-                let inferred = symbol_from_bindings(db, bindings);
+                let inferred = symbol_from_bindings(db, bindings, requires_explicit_reexport);
 
-                widen_type_for_undeclared_public_symbol(db, inferred, is_dunder_slots || is_final)
+                // `__slots__` is a symbol with special behavior in Python's runtime. It can be
+                // modified externally, but those changes do not take effect. We therefore issue
+                // a diagnostic if we see it being modified externally. In type inference, we
+                // can assign a "narrow" type to it even if it is not *declared*. This means, we
+                // do not have to call [`widen_type_for_undeclared_public_symbol`].
+                let is_considered_non_modifiable =
+                    is_final || symbol_table(db, scope).symbol(symbol_id).name() == "__slots__";
+
+                widen_type_for_undeclared_public_symbol(db, inferred, is_considered_non_modifiable)
             }
             // Symbol has conflicting declared types
             Err((declared_ty, _)) => {
@@ -203,16 +228,9 @@ fn symbol<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str) -> Symbol<'db> 
         }
     }
 
-    let table = symbol_table(db, scope);
-    // `__slots__` is a symbol with special behavior in Python's runtime. It can be
-    // modified externally, but those changes do not take effect. We therefore issue
-    // a diagnostic if we see it being modified externally. In type inference, we
-    // can assign a "narrow" type to it even if it is not *declared*. This means, we
-    // do not have to call [`widen_type_for_undeclared_public_symbol`].
-    let is_dunder_slots = name == "__slots__";
-    table
+    symbol_table(db, scope)
         .symbol_id_by_name(name)
-        .map(|symbol| symbol_by_id(db, scope, is_dunder_slots, symbol))
+        .map(|symbol| symbol_by_id(db, scope, symbol, requires_explicit_reexport))
         .unwrap_or(Symbol::Unbound)
 }
 
@@ -251,21 +269,97 @@ fn module_type_symbols<'db>(db: &'db dyn Db) -> smallvec::SmallVec<[ast::name::N
         .collect()
 }
 
-/// Looks up a module-global symbol by name in a file.
+/// Return the symbol for a member of `types.ModuleType`.
+pub(crate) fn module_type_symbol<'db>(db: &'db dyn Db, name: &str) -> Symbol<'db> {
+    if module_type_symbols(db)
+        .iter()
+        .any(|module_type_member| &**module_type_member == name)
+    {
+        KnownClass::ModuleType.to_instance(db).member(db, name)
+    } else {
+        Symbol::Unbound
+    }
+}
+
+/// Infer the public type of a symbol (its type as seen from outside its scope) in the given
+/// `scope`.
+fn symbol<'db>(db: &'db dyn Db, scope: ScopeId<'db>, name: &str) -> Symbol<'db> {
+    symbol_impl(db, scope, name, RequiresExplicitReExport::No)
+}
+
+/// Infers the public type of a module-global symbol as seen from within the same file.
+///
+/// If it's not defined explicitly in the global scope, it will look it up in `types.ModuleType`
+/// with a few very special exceptions.
+///
+/// Use [`imported_symbol`] to perform the lookup as seen from outside the file (e.g. via imports).
 pub(crate) fn global_symbol<'db>(db: &'db dyn Db, file: File, name: &str) -> Symbol<'db> {
-    // Not defined explicitly in the global scope?
-    // All modules are instances of `types.ModuleType`;
-    // look it up there (with a few very special exceptions)
-    symbol(db, global_scope(db, file), name).or_fall_back_to(db, || {
-        if module_type_symbols(db)
-            .iter()
-            .any(|module_type_member| &**module_type_member == name)
-        {
-            KnownClass::ModuleType.to_instance(db).member(db, name)
-        } else {
+    symbol_impl(
+        db,
+        global_scope(db, file),
+        name,
+        RequiresExplicitReExport::No,
+    )
+    .or_fall_back_to(db, || module_type_symbol(db, name))
+}
+
+/// Infers the public type of an imported symbol.
+pub(crate) fn imported_symbol<'db>(db: &'db dyn Db, module: &Module, name: &str) -> Symbol<'db> {
+    // If it's not found in the global scope, check if it's present as an instance on
+    // `types.ModuleType` or `builtins.object`.
+    //
+    // We do a more limited version of this in `global_symbol`, but there are two crucial
+    // differences here:
+    // - If a member is looked up as an attribute, `__init__` is also available on the module, but
+    //   it isn't available as a global from inside the module
+    // - If a member is looked up as an attribute, members on `builtins.object` are also available
+    //   (because `types.ModuleType` inherits from `object`); these attributes are also not
+    //   available as globals from inside the module.
+    //
+    // The same way as in `global_symbol`, however, we need to be careful to ignore
+    // `__getattr__`. Typeshed has a fake `__getattr__` on `types.ModuleType` to help out with
+    // dynamic imports; we shouldn't use it for `ModuleLiteral` types where we know exactly which
+    // module we're dealing with.
+    external_symbol_impl(db, module.file(), name).or_fall_back_to(db, || {
+        if name == "__getattr__" {
             Symbol::Unbound
+        } else {
+            KnownClass::ModuleType.to_instance(db).member(db, name)
         }
     })
+}
+
+/// Lookup the type of `symbol` in the builtins namespace.
+///
+/// Returns `Symbol::Unbound` if the `builtins` module isn't available for some reason.
+///
+/// Note that this function is only intended for use in the context of the builtins *namespace*
+/// and should not be used when a symbol is being explicitly imported from the `builtins` module
+/// (e.g. `from builtins import int`).
+pub(crate) fn builtins_symbol<'db>(db: &'db dyn Db, symbol: &str) -> Symbol<'db> {
+    resolve_module(db, &KnownModule::Builtins.name())
+        .map(|module| {
+            external_symbol_impl(db, module.file(), symbol).or_fall_back_to(db, || {
+                // We're looking up in the builtins namespace and not the module, so we should
+                // do the normal lookup in `types.ModuleType` and not the special one as in
+                // `imported_symbol`.
+                module_type_symbol(db, symbol)
+            })
+        })
+        .unwrap_or(Symbol::Unbound)
+}
+
+fn external_symbol_impl<'db>(db: &'db dyn Db, file: File, name: &str) -> Symbol<'db> {
+    symbol_impl(
+        db,
+        global_scope(db, file),
+        name,
+        if file.is_stub(db.upcast()) {
+            RequiresExplicitReExport::Yes
+        } else {
+            RequiresExplicitReExport::No
+        },
+    )
 }
 
 /// Infer the type of a binding.
@@ -317,19 +411,24 @@ fn definition_expression_type<'db>(
 fn symbol_from_bindings<'db>(
     db: &'db dyn Db,
     bindings_with_constraints: BindingWithConstraintsIterator<'_, 'db>,
+    requires_explicit_reexport: RequiresExplicitReExport,
 ) -> Symbol<'db> {
     let visibility_constraints = bindings_with_constraints.visibility_constraints;
     let mut bindings_with_constraints = bindings_with_constraints.peekable();
 
-    let unbound_visibility = if let Some(BindingWithConstraints {
-        binding: None,
-        constraints: _,
-        visibility_constraint,
-    }) = bindings_with_constraints.peek()
-    {
-        visibility_constraints.evaluate(db, *visibility_constraint)
-    } else {
-        Truthiness::AlwaysFalse
+    let is_non_exported = |binding: Definition<'db>| {
+        requires_explicit_reexport.is_yes() && !binding.is_reexported(db)
+    };
+
+    let unbound_visibility = match bindings_with_constraints.peek() {
+        Some(BindingWithConstraints {
+            binding,
+            visibility_constraint,
+            constraints: _,
+        }) if binding.map_or(true, is_non_exported) => {
+            visibility_constraints.evaluate(db, *visibility_constraint)
+        }
+        _ => Truthiness::AlwaysFalse,
     };
 
     let mut types = bindings_with_constraints.filter_map(
@@ -339,6 +438,11 @@ fn symbol_from_bindings<'db>(
              visibility_constraint,
          }| {
             let binding = binding?;
+
+            if is_non_exported(binding) {
+                return None;
+            }
+
             let static_visibility = visibility_constraints.evaluate(db, visibility_constraint);
 
             if static_visibility.is_always_false() {
@@ -438,18 +542,23 @@ type SymbolFromDeclarationsResult<'db> =
 fn symbol_from_declarations<'db>(
     db: &'db dyn Db,
     declarations: DeclarationsIterator<'_, 'db>,
+    requires_explicit_reexport: RequiresExplicitReExport,
 ) -> SymbolFromDeclarationsResult<'db> {
     let visibility_constraints = declarations.visibility_constraints;
     let mut declarations = declarations.peekable();
 
-    let undeclared_visibility = if let Some(DeclarationWithConstraint {
-        declaration: None,
-        visibility_constraint,
-    }) = declarations.peek()
-    {
-        visibility_constraints.evaluate(db, *visibility_constraint)
-    } else {
-        Truthiness::AlwaysFalse
+    let is_non_exported = |declaration: Definition<'db>| {
+        requires_explicit_reexport.is_yes() && !declaration.is_reexported(db)
+    };
+
+    let undeclared_visibility = match declarations.peek() {
+        Some(DeclarationWithConstraint {
+            declaration,
+            visibility_constraint,
+        }) if declaration.map_or(true, is_non_exported) => {
+            visibility_constraints.evaluate(db, *visibility_constraint)
+        }
+        _ => Truthiness::AlwaysFalse,
     };
 
     let mut types = declarations.filter_map(
@@ -458,6 +567,11 @@ fn symbol_from_declarations<'db>(
              visibility_constraint,
          }| {
             let declaration = declaration?;
+
+            if is_non_exported(declaration) {
+                return None;
+            }
+
             let static_visibility = visibility_constraints.evaluate(db, visibility_constraint);
 
             if static_visibility.is_always_false() {
@@ -1651,6 +1765,7 @@ impl<'db> Type<'db> {
                     | KnownClass::Type
                     | KnownClass::Int
                     | KnownClass::Float
+                    | KnownClass::Complex
                     | KnownClass::Str
                     | KnownClass::List
                     | KnownClass::Tuple
@@ -1942,7 +2057,7 @@ impl<'db> Type<'db> {
     fn call(self, db: &'db dyn Db, arguments: &CallArguments<'_, 'db>) -> CallOutcome<'db> {
         match self {
             Type::FunctionLiteral(function_type) => {
-                let mut binding = bind_call(db, arguments, function_type.signature(db), Some(self));
+                let mut binding = bind_call(db, arguments, function_type.signature(db), self);
                 match function_type.known(db) {
                     Some(KnownFunction::RevealType) => {
                         let revealed_ty = binding.one_parameter_type().unwrap_or(Type::unknown());
@@ -2319,6 +2434,31 @@ impl<'db> Type<'db> {
         db: &'db dyn Db,
     ) -> Result<Type<'db>, InvalidTypeExpressionError<'db>> {
         match self {
+            // Special cases for `float` and `complex`
+            // https://typing.readthedocs.io/en/latest/spec/special-types.html#special-cases-for-float-and-complex
+            Type::ClassLiteral(ClassLiteralType { class })
+                if class.is_known(db, KnownClass::Float) =>
+            {
+                Ok(UnionType::from_elements(
+                    db,
+                    [
+                        KnownClass::Int.to_instance(db),
+                        KnownClass::Float.to_instance(db),
+                    ],
+                ))
+            }
+            Type::ClassLiteral(ClassLiteralType { class })
+                if class.is_known(db, KnownClass::Complex) =>
+            {
+                Ok(UnionType::from_elements(
+                    db,
+                    [
+                        KnownClass::Int.to_instance(db),
+                        KnownClass::Float.to_instance(db),
+                        KnownClass::Complex.to_instance(db),
+                    ],
+                ))
+            }
             // In a type expression, a bare `type` is interpreted as "instance of `type`", which is
             // equivalent to `type[object]`.
             Type::ClassLiteral(_) | Type::SubclassOf(_) => Ok(self.to_instance(db)),
@@ -2694,6 +2834,7 @@ pub enum KnownClass {
     Type,
     Int,
     Float,
+    Complex,
     Str,
     List,
     Tuple,
@@ -2739,6 +2880,7 @@ impl<'db> KnownClass {
             Self::Tuple => "tuple",
             Self::Int => "int",
             Self::Float => "float",
+            Self::Complex => "complex",
             Self::FrozenSet => "frozenset",
             Self::Str => "str",
             Self::Set => "set",
@@ -2808,6 +2950,7 @@ impl<'db> KnownClass {
             | Self::Type
             | Self::Int
             | Self::Float
+            | Self::Complex
             | Self::Str
             | Self::List
             | Self::Tuple
@@ -2857,6 +3000,7 @@ impl<'db> KnownClass {
             | Self::Tuple
             | Self::Int
             | Self::Float
+            | Self::Complex
             | Self::Str
             | Self::Set
             | Self::FrozenSet
@@ -2893,6 +3037,7 @@ impl<'db> KnownClass {
             "type" => Self::Type,
             "int" => Self::Int,
             "float" => Self::Float,
+            "complex" => Self::Complex,
             "str" => Self::Str,
             "set" => Self::Set,
             "frozenset" => Self::FrozenSet,
@@ -2932,6 +3077,7 @@ impl<'db> KnownClass {
             | Self::Type
             | Self::Int
             | Self::Float
+            | Self::Complex
             | Self::Str
             | Self::List
             | Self::Tuple
@@ -3795,28 +3941,7 @@ impl<'db> ModuleLiteralType<'db> {
             }
         }
 
-        // If it's not found in the global scope, check if it's present as an instance
-        // on `types.ModuleType` or `builtins.object`.
-        //
-        // We do a more limited version of this in `global_symbol_ty`,
-        // but there are two crucial differences here:
-        // - If a member is looked up as an attribute, `__init__` is also available
-        //   on the module, but it isn't available as a global from inside the module
-        // - If a member is looked up as an attribute, members on `builtins.object`
-        //   are also available (because `types.ModuleType` inherits from `object`);
-        //   these attributes are also not available as globals from inside the module.
-        //
-        // The same way as in `global_symbol_ty`, however, we need to be careful to
-        // ignore `__getattr__`. Typeshed has a fake `__getattr__` on `types.ModuleType`
-        // to help out with dynamic imports; we shouldn't use it for `ModuleLiteral` types
-        // where we know exactly which module we're dealing with.
-        symbol(db, global_scope(db, self.module(db).file()), name).or_fall_back_to(db, || {
-            if name == "__getattr__" {
-                Symbol::Unbound
-            } else {
-                KnownClass::ModuleType.to_instance(db).member(db, name)
-            }
-        })
+        imported_symbol(db, &self.module(db), name)
     }
 }
 
@@ -4293,7 +4418,7 @@ impl<'db> Class<'db> {
 
             let declarations = use_def.public_declarations(symbol_id);
 
-            match symbol_from_declarations(db, declarations) {
+            match symbol_from_declarations(db, declarations, RequiresExplicitReExport::No) {
                 Ok(SymbolAndQualifiers(Symbol::Type(declared_ty, _), qualifiers)) => {
                     // The attribute is declared in the class body.
 
@@ -4315,7 +4440,7 @@ impl<'db> Class<'db> {
                     // in a method, and it could also be *bound* in the class body (and/or in a method).
 
                     let bindings = use_def.public_bindings(symbol_id);
-                    let inferred = symbol_from_bindings(db, bindings);
+                    let inferred = symbol_from_bindings(db, bindings, RequiresExplicitReExport::No);
                     let inferred_ty = inferred.ignore_possibly_unbound();
 
                     Self::implicit_instance_attribute(db, body_scope, name, inferred_ty).into()
@@ -4857,12 +4982,12 @@ pub(crate) mod tests {
     use super::*;
     use crate::db::tests::{setup_db, TestDbBuilder};
     use crate::stdlib::typing_symbol;
-    use crate::PythonVersion;
     use ruff_db::files::system_path_to_file;
     use ruff_db::parsed::parsed_module;
     use ruff_db::system::DbWithTestSystem;
     use ruff_db::testing::assert_function_query_was_not_run;
     use ruff_python_ast as ast;
+    use ruff_python_ast::python_version::PythonVersion;
     use test_case::test_case;
 
     /// Explicitly test for Python version <3.13 and >=3.13, to ensure that

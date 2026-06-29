@@ -63,13 +63,13 @@ use crate::types::diagnostic::{
 use crate::types::mro::MroErrorKind;
 use crate::types::unpacker::{UnpackResult, Unpacker};
 use crate::types::{
-    builtins_symbol, global_symbol, symbol, symbol_from_bindings, symbol_from_declarations,
-    todo_type, typing_extensions_symbol, Boundness, CallDunderResult, Class, ClassLiteralType,
-    DynamicType, FunctionType, InstanceType, IntersectionBuilder, IntersectionType,
-    IterationOutcome, KnownClass, KnownFunction, KnownInstanceType, MetaclassCandidate,
-    MetaclassErrorKind, SliceLiteralType, SubclassOfType, Symbol, SymbolAndQualifiers, Truthiness,
-    TupleType, Type, TypeAliasType, TypeAndQualifiers, TypeArrayDisplay, TypeQualifiers,
-    TypeVarBoundOrConstraints, TypeVarInstance, UnionBuilder, UnionType,
+    builtins_symbol, symbol, symbol_from_bindings, symbol_from_declarations, todo_type,
+    typing_extensions_symbol, Boundness, CallDunderResult, Class, ClassLiteralType, DynamicType,
+    FunctionType, InstanceType, IntersectionBuilder, IntersectionType, IterationOutcome,
+    KnownClass, KnownFunction, KnownInstanceType, MetaclassCandidate, MetaclassErrorKind,
+    RequiresExplicitReExport, SliceLiteralType, SubclassOfType, Symbol, SymbolAndQualifiers,
+    Truthiness, TupleType, Type, TypeAliasType, TypeAndQualifiers, TypeArrayDisplay,
+    TypeQualifiers, TypeVarBoundOrConstraints, TypeVarInstance, UnionBuilder, UnionType,
 };
 use crate::unpack::Unpack;
 use crate::util::subscript::{PyIndex, PySlice};
@@ -86,7 +86,7 @@ use super::slots::check_class_slots;
 use super::string_annotation::{
     parse_string_annotation, BYTE_STRING_TYPE_ANNOTATION, FSTRING_TYPE_ANNOTATION,
 };
-use super::{ParameterExpectation, ParameterExpectations};
+use super::{global_symbol, ParameterExpectation, ParameterExpectations};
 
 /// Infer all types for a [`ScopeId`], including all definitions and expressions in that scope.
 /// Use when checking a scope, or needing to provide a type for an arbitrary expression in the
@@ -735,7 +735,7 @@ impl<'db> TypeInferenceBuilder<'db> {
                 self.infer_type_alias_definition(type_alias.node(), definition);
             }
             DefinitionKind::Import(import) => {
-                self.infer_import_definition(import.node(), definition);
+                self.infer_import_definition(import.alias(), definition);
             }
             DefinitionKind::ImportFrom(import_from) => {
                 self.infer_import_from_definition(
@@ -871,22 +871,25 @@ impl<'db> TypeInferenceBuilder<'db> {
         let use_def = self.index.use_def_map(binding.file_scope(self.db()));
         let declarations = use_def.declarations_at_binding(binding);
         let mut bound_ty = ty;
-        let declared_ty = symbol_from_declarations(self.db(), declarations)
-            .map(|SymbolAndQualifiers(s, _)| s.ignore_possibly_unbound().unwrap_or(Type::unknown()))
-            .unwrap_or_else(|(ty, conflicting)| {
-                // TODO point out the conflicting declarations in the diagnostic?
-                let symbol_table = self.index.symbol_table(binding.file_scope(self.db()));
-                let symbol_name = symbol_table.symbol(binding.symbol(self.db())).name();
-                self.context.report_lint(
-                    &CONFLICTING_DECLARATIONS,
-                    node,
-                    format_args!(
-                        "Conflicting declared types for `{symbol_name}`: {}",
-                        conflicting.display(self.db())
-                    ),
-                );
-                ty.inner_type()
-            });
+        let declared_ty =
+            symbol_from_declarations(self.db(), declarations, RequiresExplicitReExport::No)
+                .map(|SymbolAndQualifiers(s, _)| {
+                    s.ignore_possibly_unbound().unwrap_or(Type::unknown())
+                })
+                .unwrap_or_else(|(ty, conflicting)| {
+                    // TODO point out the conflicting declarations in the diagnostic?
+                    let symbol_table = self.index.symbol_table(binding.file_scope(self.db()));
+                    let symbol_name = symbol_table.symbol(binding.symbol(self.db())).name();
+                    self.context.report_lint(
+                        &CONFLICTING_DECLARATIONS,
+                        node,
+                        format_args!(
+                            "Conflicting declared types for `{symbol_name}`: {}",
+                            conflicting.display(self.db())
+                        ),
+                    );
+                    ty.inner_type()
+                });
         if !bound_ty.is_assignable_to(self.db(), declared_ty) {
             report_invalid_assignment(&self.context, node, declared_ty, bound_ty);
             // allow declarations to override inference in case of invalid assignment
@@ -906,9 +909,10 @@ impl<'db> TypeInferenceBuilder<'db> {
         let use_def = self.index.use_def_map(declaration.file_scope(self.db()));
         let prior_bindings = use_def.bindings_at_declaration(declaration);
         // unbound_ty is Never because for this check we don't care about unbound
-        let inferred_ty = symbol_from_bindings(self.db(), prior_bindings)
-            .ignore_possibly_unbound()
-            .unwrap_or(Type::Never);
+        let inferred_ty =
+            symbol_from_bindings(self.db(), prior_bindings, RequiresExplicitReExport::No)
+                .ignore_possibly_unbound()
+                .unwrap_or(Type::Never);
         let ty = if inferred_ty.is_assignable_to(self.db(), ty.inner_type()) {
             ty
         } else {
@@ -3307,7 +3311,11 @@ impl<'db> TypeInferenceBuilder<'db> {
         // If we're inferring types of deferred expressions, always treat them as public symbols
         let local_scope_symbol = if self.is_deferred() {
             if let Some(symbol_id) = symbol_table.symbol_id_by_name(symbol_name) {
-                symbol_from_bindings(db, use_def.public_bindings(symbol_id))
+                symbol_from_bindings(
+                    db,
+                    use_def.public_bindings(symbol_id),
+                    RequiresExplicitReExport::No,
+                )
             } else {
                 assert!(
                     self.deferred_state.in_string_annotation(),
@@ -3317,7 +3325,11 @@ impl<'db> TypeInferenceBuilder<'db> {
             }
         } else {
             let use_id = name_node.scoped_use_id(db, scope);
-            symbol_from_bindings(db, use_def.bindings_at_use(use_id))
+            symbol_from_bindings(
+                db,
+                use_def.bindings_at_use(use_id),
+                RequiresExplicitReExport::No,
+            )
         };
 
         let symbol = local_scope_symbol.or_fall_back_to(db, || {
@@ -6076,7 +6088,7 @@ mod tests {
         let mut db = setup_db();
         let content = format!(
             r#"
-            from typing_extensions import assert_type
+            from typing_extensions import Literal, assert_type
 
             assert_type(not "{y}", bool)
             assert_type(not 10*"{y}", bool)
@@ -6098,7 +6110,7 @@ mod tests {
         let mut db = setup_db();
         let content = format!(
             r#"
-            from typing_extensions import assert_type
+            from typing_extensions import Literal, LiteralString, assert_type
 
             assert_type(2 * "hello", Literal["hellohello"])
             assert_type("goodbye" * 3, Literal["goodbyegoodbyegoodbye"])
@@ -6123,7 +6135,7 @@ mod tests {
         let mut db = setup_db();
         let content = format!(
             r#"
-            from typing_extensions import assert_type
+            from typing_extensions import Literal, LiteralString, assert_type
 
             assert_type("{y}", LiteralString)
             assert_type(10*"{y}", LiteralString)
@@ -6145,7 +6157,7 @@ mod tests {
         let mut db = setup_db();
         let content = format!(
             r#"
-            from typing_extensions import assert_type
+            from typing_extensions import LiteralString, assert_type
 
             assert_type("{y}", LiteralString)
             assert_type("a" + "{z}", LiteralString)
@@ -6165,7 +6177,7 @@ mod tests {
         let mut db = setup_db();
         let content = format!(
             r#"
-            from typing_extensions import assert_type
+            from typing_extensions import LiteralString, assert_type
 
             assert_type("{y}", LiteralString)
             assert_type("{y}" + "a", LiteralString)

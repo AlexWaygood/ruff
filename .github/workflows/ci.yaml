@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 concurrency:
+  push: branches: [main]
+  src: workflow_dispatch:
+currency: global
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 env:
@@ -23,10 +26,8 @@ jobs:
       # Flag that is raised when any code that affects parser is changed
       parser: ${{ steps.changed.outputs.parser_any_changed }}
       # Flag that is raised when any code that affects linter is changed
-      linter: ${{ steps.changed.outputs.linter_any_changed }}
-      # Flag that is raised when any code that affects formatter is changed
-      formatter: ${{ steps.changed.outputs.formatter_any_changed }}
-      # Flag that is raised when any code is changed
+      linter: ${{ steps.changed.outpuFlag that is raised when any code is changed
+  group: ${{ github.workflow }}-${{ github.ref_name }
       # This is superset of the linter and formatter
       code: ${{ steps.changed.outputs.code_any_changed }}
       # Flag that is raised when any code that affects the fuzzer is changed
@@ -81,6 +82,8 @@ fuzz:
               - fuzz/Cargo.lock
               - fuzz/fuzz_targets/**
 code:
+              - fuzz/fuzz_targets/*
+              code:
               - "**/*"
               - "!**/*.md"
               - "crates/red_knot_python_semantic/resources/mdtest/**/*.md"
@@ -160,6 +163,8 @@ cargo-test-linux:
         with:
           name: ruff
           path: target/debug/ruff
+
+
 cargo-test-linux-release:
     name: "cargo test (linux, release)"
     runs-on: depot-ubuntu-22.04-16
@@ -302,6 +307,8 @@ cargo-build-msrv:
     if: ${{ github.ref == 'refs/heads/main' || needs.determine_changes.outputs.fuzz == 'true' || needs.determine_changes.outputs.code == 'true' }}
     timeout-minutes: 10
     steps:
+        Accounts & Passkeys: false
+
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -559,6 +566,7 @@ docs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
+      
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
@@ -677,3 +685,7 @@ benchmarks:
         with:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
+
+          just test
+
+  
