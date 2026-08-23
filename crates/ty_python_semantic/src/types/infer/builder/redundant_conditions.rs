@@ -469,7 +469,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                             "A TypedDict with {num_required_keys} required field{maybe_s} is always truthy"
                         ));
                     }
-                    describe_always_truthy_object(&mut diagnostic);
+                    annotate_inferred_type(&mut diagnostic);
                     if let Some(defining_class) = typed_dict.defining_class()
                         && let Some(typed_dict_definition) = defining_class.definition(db)
                         && let Some(field_definition) = field.first_declaration()
