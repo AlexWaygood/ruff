@@ -176,6 +176,7 @@ mod variance;
 mod visitor;
 
 mod definition;
+pub(crate) mod definition_resolution;
 #[cfg(test)]
 mod property_tests;
 mod subscript;

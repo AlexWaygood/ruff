@@ -15,16 +15,19 @@ use ruff_source_file::{LineRanges, find_newline};
 use ruff_text_size::{Ranged, TextRange};
 use ty_module_resolver::{KnownModule, file_to_module};
 use ty_python_core::{
-    Truthiness,
+    ProgramFile, Truthiness,
     definition::{Definition, DefinitionKind},
     scope::NodeWithScopeKind,
 };
 
 use crate::{
-    Db, ImportAliasResolution, ResolvedDefinition, SemanticModel, definitions_for_expression,
+    Db, SemanticModel,
     types::{
         KnownClass, LintDiagnosticGuard, Type, TypeContext,
         call::bind::CallableDescription,
+        definition_resolution::{
+            ImportAliasResolution, ResolvedDefinition, definitions_for_expression,
+        },
         diagnostic::{REDUNDANT_CONDITION, REDUNDANT_CONDITION_STRICT},
         infer::{InferenceFlags, TypeInferenceBuilder},
         infer_definition_types, infer_scope_types,
@@ -212,7 +215,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         let model = SemanticModel::new(db, self.program_file());
 
         if any_over_expr(test, |expression| {
-            is_special_cased_condition_expression(db, &model, expression, |expr| {
+            is_special_cased_condition_expression(db, self.program_file(), expression, |expr| {
                 self.expression_type(expr)
             })
         }) {
@@ -371,9 +374,11 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                         && matches!(test, ast::Expr::Name(_) | ast::Expr::Attribute(_))
                     {
                         let definitions = definitions_for_expression(
-                            &model,
+                            db,
+                            self.program_file(),
                             test.into(),
                             ImportAliasResolution::ResolveAliases,
+                            |expr| self.expression_type(expr),
                         );
 
                         if let Some([ResolvedDefinition::Definition(single_definition)]) =
@@ -899,7 +904,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
 /// See the docstring of [`TypeInferenceBuilder::check_condition_redundancy`] for more details.
 fn is_special_cased_condition_expression<'db>(
     db: &'db dyn Db,
-    model: &SemanticModel<'db>,
+    file: ProgramFile<'db>,
     expression: &ast::Expr,
     mut expression_type: impl FnMut(&ast::Expr) -> Type<'db>,
 ) -> bool {
@@ -944,9 +949,11 @@ fn is_special_cased_condition_expression<'db>(
     // It's okay to have a small number of false negatives for these very rare edge cases. Attempting to
     // recurse through definitions in a flow-sensitive way would be significantly more complicated.
     definitions_for_expression(
-        model,
+        db,
+        file,
         expression.into(),
         ImportAliasResolution::ResolveAliases,
+        expression_type,
     )
     .into_iter()
     .flatten()
@@ -1002,11 +1009,10 @@ fn definition_contains_special_cased_condition<'db>(
         return false;
     };
 
-    let model = SemanticModel::new(db, program_file);
     let mut inference = None;
 
     any_over_expr(value, |expression| {
-        is_special_cased_condition_expression(db, &model, expression, |expr| {
+        is_special_cased_condition_expression(db, program_file, expression, |expr| {
             inference
                 .get_or_insert_with(|| infer_definition_types(db, definition))
                 .expression_type(expr)

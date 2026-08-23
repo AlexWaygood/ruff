@@ -3,10 +3,11 @@ use std::fmt::Write;
 
 use super::builder::TypeInferenceBuilder;
 use crate::db::tests::{TestDb, TestDbBuilder, setup_db};
+use crate::lint::{LintSource, RuleSelection};
 use crate::place::symbol;
 use crate::place::{ConsideredDefinitions, Place, PlaceAndQualifiers};
 use crate::types::{KnownClass, KnownInstanceType, check_types};
-use ruff_db::diagnostic::{Diagnostic, DiagnosticId};
+use ruff_db::diagnostic::{Diagnostic, DiagnosticId, Severity};
 use ruff_db::files::{File, system_path_to_file};
 use ruff_db::system::DbWithWritableSystem as _;
 use ruff_db::testing::{assert_function_query_was_not_run, assert_function_query_was_run};
@@ -525,6 +526,47 @@ fn simple_assignment_does_not_enter_salsa_cycle() {
             .collect::<Vec<_>>()
     });
     assert_eq!(cycles, Vec::<String>::new());
+}
+
+#[test]
+fn redundant_condition_lookup_does_not_reenter_scope_inference() -> anyhow::Result<()> {
+    for source in [
+        "if isinstance({}, dict):\n    pass\n",
+        "if isinstance(1.0, float):\n    pass\n",
+        "if isinstance(1j, complex):\n    pass\n",
+        "class C:\n    flag = (1, 2)\n\nif C.flag:\n    pass\n",
+    ] {
+        let registry = crate::default_lint_registry();
+        let mut rules = RuleSelection::from_registry(registry);
+        rules.enable(
+            registry.get("redundant-condition-strict")?,
+            Severity::Warning,
+            LintSource::File,
+        );
+        let mut db = TestDbBuilder::new()
+            .with_file("/src/main.py", source)
+            .with_rule_selection(rules)
+            .build()?;
+        let file = system_path_to_file(&db, "/src/main.py")?;
+        let diagnostics = check_types(&db, program_file(&db, file));
+        assert_eq!(diagnostics.len(), 1, "{source}\n{diagnostics:#?}");
+
+        let events = db.take_salsa_events();
+        let scope_cycles = salsa::attach(&db, || {
+            events
+                .iter()
+                .filter_map(|event| match event.kind {
+                    salsa::EventKind::WillIterateCycle { database_key, .. } => {
+                        Some(format!("{database_key:?}"))
+                    }
+                    _ => None,
+                })
+                .filter(|query| query.starts_with("infer_scope_types_impl("))
+                .collect::<Vec<_>>()
+        });
+        assert!(scope_cycles.is_empty(), "{source}\n{scope_cycles:#?}");
+    }
+    Ok(())
 }
 
 /// Test that a symbol known to be unbound in a scope does not still trigger cycle-causing
