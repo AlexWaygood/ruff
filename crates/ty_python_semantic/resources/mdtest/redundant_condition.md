@@ -1844,6 +1844,19 @@ def compound_truthy(x: str):
             pass
 ```
 
+The suppression currently hides redundant operands when the whole condition has ambiguous
+truthiness. This is a current limitation of the rule that we would ideally fix at some point in the
+future:
+
+```py
+def check(value: int, enabled: bool):
+    # TODO: Ideally, flag `value is not None`. This is deferred for now because the strict
+    # rule suppresses compound-condition operands to avoid duplicate diagnostics. Avoiding
+    # false positives is more important than avoiding false negatives.
+    if enabled and value is not None:
+        print(value)
+```
+
 ## Multiline conditions in concise diagnostics
 
 Concise diagnostics usually quote source code in their diagnostics:
@@ -2179,7 +2192,7 @@ The strict rule can still fire in assertion tests if the assertion test uses a w
 with `redundant-condition-strict`):
 
 ```py
- # error: [redundant-condition-strict] "Object of type `Literal["foo"]` is always truthy"
+# error: [redundant-condition-strict] "Object of type `Literal["foo"]` is always truthy"
 assert (value := "foo")
 ```
 

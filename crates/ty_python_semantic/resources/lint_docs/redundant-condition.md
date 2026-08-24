@@ -82,6 +82,7 @@ buggy. For example, the following code is valid Python, but is flagged by the ru
 def f(): ...
 def g(): ...
 
+
 def test(coinflip: bool):
     func = coinflip and f or g  # error: [redundant-condition]
     func()
