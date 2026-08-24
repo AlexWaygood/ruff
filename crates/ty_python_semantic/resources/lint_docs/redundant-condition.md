@@ -75,8 +75,29 @@ def test_my_data(data: list[int]):
 
 ## Known issues
 
-When an always-truthy condition is an awaitable, this rule sometimes offers an unsafe fix to add
-`await`. Applying this fix inside a synchronous generator expression turns it into an asynchronous
-generator. The consumer of the generator may also need to change if this fix is applied: for example,
-`list(...)` and a regular `for` loop cannot consume an asynchronous generator. Review the surrounding code before
-applying this fix; consuming the result may require an asynchronous comprehension or an `async for` loop.
+This rule can sometimes flag boolean expressions involving always-true objects that may not be
+buggy. For example, the following code is valid Python, but is flagged by the rule:
+
+```py
+def f(): ...
+def g(): ...
+
+def test(coinflip: bool):
+    func = coinflip and f or g  # error: [redundant-condition]
+    func()
+```
+
+However, this code is far from idiomatic. To avoid the diagnostic being emitted, use an `if`/`else`
+conditional expression instead, which has the added benefit of being easier to read:
+
+```py
+def test(coinflip: bool):
+    func = f if coinflip else g
+    func()
+```
+
+Another known issue is that if an always-truthy condition is an awaitable, this rule sometimes
+offers an unsafe fix to add `await`. Applying this fix inside a synchronous generator expression
+turns it into an asynchronous generator, but the consumer of the generator may also need to change
+if this fix is applied. For example, `list(...)` and a regular `for` loop cannot consume an
+asynchronous generator. Review the surrounding code before applying this fix.

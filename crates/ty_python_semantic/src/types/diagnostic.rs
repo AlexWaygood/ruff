@@ -1341,7 +1341,7 @@ declare_lint! {
     #[doc = include_str!("../../resources/lint_docs/redundant-condition.md")]
     pub(crate) static REDUNDANT_CONDITION = {
         summary: "detects conditions that are always truthy or always falsey",
-        status: LintStatus::stable("0.0.74"),
+        status: LintStatus::stable("0.0.75"),
         default_level: Level::Warn,
     }
 }
@@ -1350,7 +1350,7 @@ declare_lint! {
     #[doc = include_str!("../../resources/lint_docs/redundant-condition-strict.md")]
     pub(crate) static REDUNDANT_CONDITION_STRICT = {
         summary: "detects conditions that are always truthy or always falsey (strict)",
-        status: LintStatus::stable("0.0.74"),
+        status: LintStatus::stable("0.0.75"),
         default_level: Level::Ignore,
     }
 }
