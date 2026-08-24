@@ -2105,6 +2105,46 @@ if BAR >= (3, 14):  # no diagnostic
     pass
 ```
 
+Attribute aliases retain their environment-dependent origin. Different members of the same receiver
+can have different origins, and rebinding or narrowing the receiver can change which definition an
+attribute refers to.
+
+`attribute_aliases.py`:
+
+```py
+import sys
+from typing import Final
+
+class PlatformConfig:
+    enabled: Final = sys.platform == "linux"
+    fixed: Final = True
+
+class FixedConfig:
+    enabled: Final = True
+
+def rebound_receiver():
+    config = PlatformConfig()
+    if config.enabled:
+        pass
+    if config.fixed:  # error: [redundant-condition-strict] "Condition `config.fixed` is always true"
+        pass
+
+    config = FixedConfig()
+    if config.enabled:  # error: [redundant-condition-strict] "Condition `config.enabled` is always true"
+        pass
+
+def narrowed_receiver(config: PlatformConfig | FixedConfig):
+    if config.enabled:
+        pass
+
+    if isinstance(config, FixedConfig):
+        if config.enabled:  # error: [redundant-condition-strict] "Condition `config.enabled` is always true"
+            pass
+    else:
+        if config.enabled:
+            pass
+```
+
 Named expressions and unpacked assignments preserve the same environment-dependent origin as
 ordinary assignments. Their aliases remain exempt when tested later.
 
@@ -2143,7 +2183,7 @@ if ordinary:  # error: [redundant-condition-strict] "Condition `ordinary` is alw
 ```
 
 Following aliases also terminates when assignments form a cycle. An ordinary cycle does not make an
-always-truthy condition environment-dependent.
+always-truthy condition environment-dependent, whether the aliases are names or instance attributes.
 
 `cyclic_aliases.py`:
 
@@ -2155,6 +2195,33 @@ def plain_cycle(flag: bool):
         second = first
     if first:  # error: [redundant-condition] "Object of type `Literal["ready"]` is always truthy"
         pass
+
+class AttributeCycle:
+    def check(self, flag: bool):
+        self.first = self.second = "ready"
+        while flag:
+            self.first = self.second
+            self.second = self.first
+        if self.first:  # error: [redundant-condition] "Object of type `Literal["ready"]` is always truthy"
+            pass
+```
+
+An environment-dependent assignment is still recognized after following a cycle of
+instance-attribute aliases.
+
+```py
+import sys
+
+class PlatformAttributeCycle:
+    def check(self, flag: bool):
+        self.first = self.second = "ready"
+        while flag:
+            self.first = self.second
+            self.second = self.first
+            self.second = sys.platform
+        reveal_type(bool(self.first))  # revealed: Literal[True]
+        if self.first:
+            pass
 ```
 
 ## Deliberately exhaustive `if` statements

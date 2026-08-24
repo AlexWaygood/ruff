@@ -9,7 +9,9 @@ use ruff_db::{
     source::source_text,
 };
 use ruff_diagnostics::{Applicability, Edit, Fix};
-use ruff_python_ast::{self as ast, helpers::any_over_expr, token::parenthesized_range};
+use ruff_python_ast::{
+    self as ast, helpers::any_over_expr, name::Name, token::parenthesized_range,
+};
 use ruff_python_trivia::indentation_at_offset;
 use ruff_source_file::{LineRanges, find_newline};
 use ruff_text_size::{Ranged, TextRange};
@@ -17,17 +19,18 @@ use ty_module_resolver::{KnownModule, SearchPath, file_to_module};
 use ty_python_core::{
     ProgramFile, Truthiness,
     definition::{Definition, DefinitionKind},
-    scope::NodeWithScopeKind,
+    scope::{NodeWithScopeKind, ScopeId},
     semantic_index,
 };
 
 use crate::{
-    Db, SemanticModel,
+    Db, Program, ProgramEnvironment, SemanticModel,
     types::{
         KnownClass, LintDiagnosticGuard, Type, TypeContext,
         call::bind::CallableDescription,
         definition_resolution::{
-            ImportAliasResolution, ResolvedDefinition, definitions_for_expression,
+            ImportAliasResolution, ResolvedDefinition, definitions_for_attribute,
+            definitions_for_expression, definitions_for_name,
         },
         diagnostic::{REDUNDANT_CONDITION, REDUNDANT_CONDITION_STRICT},
         infer::{InferenceFlags, TypeInferenceBuilder},
@@ -966,24 +969,79 @@ fn is_special_cased_condition_expression<'db>(
         _ => {}
     }
 
-    if !matches!(expression, ast::Expr::Name(_) | ast::Expr::Attribute(_)) {
-        return false;
-    }
-
     // We don't recurse through definitions in a flow-sensitive way, but there isn't really any need to.
     // The main objective here is to avoid false positives. Flow-sensitive definitions of variables/attributes
     // where some paths define the place in terms of `sys.version_info` but other paths don't are pretty rare.
     // It's okay to have a small number of false negatives for these very rare edge cases. Attempting to
     // recurse through definitions in a flow-sensitive way would be significantly more complicated.
-    definitions_for_expression(
+    match expression {
+        ast::Expr::Name(name) => {
+            let index = semantic_index(db, file);
+            let Some(scope) = index.try_expression_scope_id(&ast::ExprRef::Name(name)) else {
+                return false;
+            };
+            name_contains_special_cased_condition(db, scope.to_scope_id(db, file), name.id.clone())
+        }
+        ast::Expr::Attribute(attribute) => attribute_contains_special_cased_condition(
+            db,
+            file.program(db),
+            expression_type(&attribute.value),
+            attribute.attr.id.clone(),
+        ),
+        _ => false,
+    }
+}
+
+/// Caches environment-dependent provenance across uses of the same name in a scope.
+///
+/// Name lookup considers every reachable binding, so repeating it for every condition can be
+/// quadratic in the number of assignments. Caching only the per-definition traversal does not
+/// avoid collecting and resolving those bindings again.
+#[salsa::tracked(
+    returns(copy),
+    cycle_initial = |_, _, _, _| false,
+    heap_size = ruff_memory_usage::heap_size
+)]
+// Salsa copies this attribute to both the query wrapper and its inner function. The wrapper
+// consumes `name`, so `#[expect]` would produce an unfulfilled lint expectation there.
+#[allow(clippy::needless_pass_by_value, reason = "Salsa owns the query key")]
+fn name_contains_special_cased_condition<'db>(
+    db: &'db dyn Db,
+    scope: ScopeId<'db>,
+    name: Name,
+) -> bool {
+    definitions_for_name(db, scope, &name, ImportAliasResolution::ResolveAliases)
+        .into_iter()
+        .filter_map(|resolved| resolved.definition())
+        .any(|definition| definition_contains_special_cased_condition(db, definition))
+}
+
+/// Caches environment-dependent provenance for a member of an already-inferred receiver type.
+///
+/// Attribute lookup can also repeatedly collect many bindings. Include the receiver type in the
+/// key because narrowing or rebinding a receiver can change which definitions its members resolve
+/// to. Taking that type from the caller avoids re-entering inference of the use-site scope.
+#[salsa::tracked(
+    returns(copy),
+    cycle_initial = |_, _, _, _, _| false,
+    heap_size = ruff_memory_usage::heap_size
+)]
+// Salsa copies this attribute to both the query wrapper and its inner function. The wrapper
+// consumes `name`, so `#[expect]` would produce an unfulfilled lint expectation there.
+#[allow(clippy::needless_pass_by_value, reason = "Salsa owns the query key")]
+fn attribute_contains_special_cased_condition<'db>(
+    db: &'db dyn Db,
+    program: Program<'db>,
+    receiver: Type<'db>,
+    name: Name,
+) -> bool {
+    definitions_for_attribute(
         db,
-        file,
-        expression.into(),
-        ImportAliasResolution::ResolveAliases,
-        expression_type,
+        &ProgramEnvironment::from_program(program),
+        receiver,
+        &name,
     )
     .into_iter()
-    .flatten()
     .filter_map(|resolved| resolved.definition())
     .any(|definition| definition_contains_special_cased_condition(db, definition))
 }
