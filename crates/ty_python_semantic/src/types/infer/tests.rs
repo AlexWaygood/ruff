@@ -12,6 +12,7 @@ use ruff_db::files::{File, system_path_to_file};
 use ruff_db::system::DbWithWritableSystem as _;
 use ruff_db::testing::{assert_function_query_was_not_run, assert_function_query_was_run};
 use ruff_python_ast::PythonVersion;
+use salsa::Database as _;
 use salsa::plumbing::AsId;
 use ty_python_core::definition::Definition;
 use ty_python_core::program::{Program, ProgramSettings};
@@ -565,6 +566,46 @@ fn redundant_condition_lookup_does_not_reenter_scope_inference() -> anyhow::Resu
                 .collect::<Vec<_>>()
         });
         assert!(scope_cycles.is_empty(), "{source}\n{scope_cycles:#?}");
+    }
+    Ok(())
+}
+
+#[test]
+fn repeated_tuple_conditions_share_definition_info() -> anyhow::Result<()> {
+    let repetitions = 100;
+    let names = "value = (1,)\nif value:\n    pass\n".repeat(repetitions);
+    let attributes = format!(
+        "class C:\n{}\n{}",
+        "    value = (1,)\n".repeat(repetitions),
+        "if C.value:\n    pass\n".repeat(repetitions),
+    );
+
+    for (source, query_name) in [
+        (names, "name_condition_definition_info"),
+        (attributes, "attribute_condition_definition_info"),
+    ] {
+        let mut db = TestDbBuilder::new()
+            .with_file("/src/main.py", &source)
+            .build()?;
+        let file = system_path_to_file(&db, "/src/main.py")?;
+        let diagnostics = check_types(&db, program_file(&db, file));
+        assert_eq!(diagnostics.len(), repetitions);
+
+        let events = db.take_salsa_events();
+        let lookups = events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    event.kind,
+                    salsa::EventKind::WillExecute { database_key }
+                        if db.ingredient_debug_name(database_key.ingredient_index()) == query_name
+                )
+            })
+            .count();
+        assert_eq!(
+            lookups, 1,
+            "{query_name} should be shared across conditions"
+        );
     }
     Ok(())
 }

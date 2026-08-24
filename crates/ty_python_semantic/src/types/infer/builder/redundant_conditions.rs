@@ -10,7 +10,7 @@ use ruff_db::{
 };
 use ruff_diagnostics::{Applicability, Edit, Fix};
 use ruff_python_ast::{
-    self as ast, helpers::any_over_expr, name::Name, token::parenthesized_range,
+    self as ast, PythonVersion, helpers::any_over_expr, name::Name, token::parenthesized_range,
 };
 use ruff_python_trivia::indentation_at_offset;
 use ruff_source_file::{LineRanges, find_newline};
@@ -19,7 +19,7 @@ use ty_module_resolver::{KnownModule, SearchPath, file_to_module};
 use ty_python_core::{
     ProgramFile, Truthiness,
     definition::{Definition, DefinitionKind},
-    scope::{NodeWithScopeKind, ScopeId},
+    scope::{NodeWithScopeKind, ScopeId, ScopeKind},
     semantic_index,
 };
 
@@ -30,7 +30,7 @@ use crate::{
         call::bind::CallableDescription,
         definition_resolution::{
             ImportAliasResolution, ResolvedDefinition, definitions_for_attribute,
-            definitions_for_expression, definitions_for_name,
+            definitions_for_name,
         },
         diagnostic::{REDUNDANT_CONDITION, REDUNDANT_CONDITION_STRICT},
         infer::{InferenceFlags, TypeInferenceBuilder},
@@ -233,7 +233,18 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
             ));
         };
 
-        let annotate_expression_inferred_as_bool = |diagnostic: &mut LintDiagnosticGuard| {
+        let describe_boolean_condition = |diagnostic: &mut LintDiagnosticGuard| {
+            let source = source_text(db, self.file());
+            let condition = &source[test.range()];
+            let is_true = test_truthiness.is_always_true();
+            if find_newline(condition).is_some() {
+                diagnostic.set_concise_message(format_args!("Condition is always {is_true}"));
+            } else {
+                diagnostic.set_concise_message(format_args!(
+                    "Condition `{condition}` is always {is_true}"
+                ));
+            }
+
             if let ast::Expr::Compare(ast::ExprCompare {
                 left,
                 ops,
@@ -387,17 +398,12 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                         && let Tuple::Fixed(fixed_length_tuple) = &*tuple_spec
                         && matches!(test, ast::Expr::Name(_) | ast::Expr::Attribute(_))
                     {
-                        let definitions = definitions_for_expression(
-                            db,
-                            self.program_file(),
-                            test.into(),
-                            ImportAliasResolution::ResolveAliases,
-                            |expr| self.expression_type(expr),
-                        );
+                        let definition_info =
+                            condition_definition_info(db, self.program_file(), test, |expr| {
+                                self.expression_type(expr)
+                            });
 
-                        if let Some([ResolvedDefinition::Definition(single_definition)]) =
-                            definitions.as_deref()
-                        {
+                        if let Some(single_definition) = definition_info.single_definition {
                             let file = single_definition.python_file(db);
                             let program_file = single_definition.program_file(db);
                             let module = parsed_module(db, file).load(db);
@@ -405,7 +411,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                                 DefinitionKind::AnnotatedAssignment(assignment) => {
                                     let annotation = assignment.annotation(&module);
                                     let annotation_type =
-                                        infer_definition_types(db, *single_definition)
+                                        infer_definition_types(db, single_definition)
                                             .try_expression_type(annotation)?;
                                     Some((annotation, annotation_type))
                                 }
@@ -544,12 +550,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 } else if test_type.is_subtype_of(db, env, KnownClass::Bool.to_instance(db, env)) {
                     let message = "Condition is always true";
                     let mut diagnostic = builder.into_diagnostic(message);
-                    let source = source_text(db, self.file());
-                    diagnostic.set_concise_message(format_args!(
-                        "Condition `{}` is always true",
-                        &source[test.range()]
-                    ));
-                    annotate_expression_inferred_as_bool(&mut diagnostic);
+                    describe_boolean_condition(&mut diagnostic);
                     Some(diagnostic)
                 } else {
                     let mut diagnostic = builder.into_diagnostic("Condition is always truthy");
@@ -609,12 +610,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     };
                     let mut diagnostic = builder.into_diagnostic(message);
                     if is_bool {
-                        let source = source_text(db, self.file());
-                        diagnostic.set_concise_message(format_args!(
-                            "Condition `{}` is always false",
-                            &source[test.range()]
-                        ));
-                        annotate_expression_inferred_as_bool(&mut diagnostic);
+                        describe_boolean_condition(&mut diagnostic);
                     } else {
                         diagnostic.set_concise_message(format_args!(
                             "Object of type `{}` is always falsy",
@@ -647,8 +643,19 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
         // A list, set, or dictionary comprehension inherits an enclosing annotation's restriction.
         // A generator expression in between creates its own scope where `await` is valid.
         let mut comprehension_in_annotation = false;
+        let mut in_eager_comprehension = false;
 
         for (scope_id, scope) in self.index.ancestor_scopes(self.scope().file_scope_id(db)) {
+            // Before Python 3.11, awaiting in a nested list, set, or dict comprehension cannot
+            // implicitly make its containing comprehension or generator expression asynchronous.
+            if in_eager_comprehension
+                && scope.kind() == ScopeKind::Comprehension
+                && self.program_environment().python_version(db) < PythonVersion::PY311
+                && !scope_id.is_async_comprehension(self.index)
+            {
+                return false;
+            }
+
             match scope.node() {
                 NodeWithScopeKind::Function(function) => {
                     return !comprehension_in_annotation && function.node(self.module()).is_async;
@@ -672,6 +679,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 | NodeWithScopeKind::ListComprehension(_)
                 | NodeWithScopeKind::SetComprehension(_) => {
                     comprehension_in_annotation |= scope_id.is_defined_in_annotation(self.index);
+                    in_eager_comprehension = true;
                 }
             }
         }
@@ -897,9 +905,15 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     .is_equivalent_to(db, env, Type::Never),
                 ast::Stmt::Return(ast::StmtReturn {
                     value: Some(expr), ..
-                }) => builder
-                    .expression_type(expr)
-                    .is_assignable_to(db, env, not_implemented),
+                }) => {
+                    // Known limitation: `Any` and `Unknown` are also assignable to
+                    // `NotImplementedType`, so an ordinary return can suppress a diagnostic here.
+                    // We prioritise minimising false positives over minimising false negatives
+                    // when recognizing potentially deliberate defensive checks.
+                    builder
+                        .expression_type(expr)
+                        .is_assignable_to(db, env, not_implemented)
+                }
                 ast::Stmt::If(ast::StmtIf {
                     body,
                     elif_else_clauses,
@@ -974,76 +988,115 @@ fn is_special_cased_condition_expression<'db>(
     // where some paths define the place in terms of `sys.version_info` but other paths don't are pretty rare.
     // It's okay to have a small number of false negatives for these very rare edge cases. Attempting to
     // recurse through definitions in a flow-sensitive way would be significantly more complicated.
+    condition_definition_info(db, file, expression, expression_type)
+        .contains_special_cased_condition
+}
+
+/// Resolves the condition's source definitions using a scope or an already-inferred receiver type.
+fn condition_definition_info<'db>(
+    db: &'db dyn Db,
+    file: ProgramFile<'db>,
+    expression: &ast::Expr,
+    mut expression_type: impl FnMut(&ast::Expr) -> Type<'db>,
+) -> ConditionDefinitionInfo<'db> {
     match expression {
         ast::Expr::Name(name) => {
             let index = semantic_index(db, file);
             let Some(scope) = index.try_expression_scope_id(&ast::ExprRef::Name(name)) else {
-                return false;
+                return ConditionDefinitionInfo::default();
             };
-            name_contains_special_cased_condition(db, scope.to_scope_id(db, file), name.id.clone())
+            name_condition_definition_info(db, scope.to_scope_id(db, file), name.id.clone())
         }
-        ast::Expr::Attribute(attribute) => attribute_contains_special_cased_condition(
+        ast::Expr::Attribute(attribute) => attribute_condition_definition_info(
             db,
             file.program(db),
             expression_type(&attribute.value),
             attribute.attr.id.clone(),
         ),
-        _ => false,
+        _ => ConditionDefinitionInfo::default(),
     }
 }
 
-/// Caches environment-dependent provenance across uses of the same name in a scope.
+/// The information needed for condition exemptions and annotation hints.
+///
+/// Retaining only the unique definition and the provenance result lets both uses share a lookup
+/// without caching a potentially large list of bindings.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, get_size2::GetSize, salsa::SalsaValue)]
+struct ConditionDefinitionInfo<'db> {
+    single_definition: Option<Definition<'db>>,
+    contains_special_cased_condition: bool,
+}
+
+impl<'db> ConditionDefinitionInfo<'db> {
+    /// Summarizes resolved definitions, following assignments to establish environment provenance.
+    fn from_definitions(db: &'db dyn Db, definitions: Vec<ResolvedDefinition<'db>>) -> Self {
+        let single_definition = match definitions.as_slice() {
+            [ResolvedDefinition::Definition(definition)] => Some(*definition),
+            _ => None,
+        };
+        let contains_special_cased_condition = definitions
+            .into_iter()
+            .filter_map(|resolved| resolved.definition())
+            .any(|definition| definition_contains_special_cased_condition(db, definition));
+        Self {
+            single_definition,
+            contains_special_cased_condition,
+        }
+    }
+}
+
+/// Caches definition information across uses of the same name in a scope.
 ///
 /// Name lookup considers every reachable binding, so repeating it for every condition can be
 /// quadratic in the number of assignments. Caching only the per-definition traversal does not
 /// avoid collecting and resolving those bindings again.
 #[salsa::tracked(
     returns(copy),
-    cycle_initial = |_, _, _, _| false,
+    cycle_initial = |_, _, _, _| ConditionDefinitionInfo::default(),
     heap_size = ruff_memory_usage::heap_size
 )]
 // Salsa copies this attribute to both the query wrapper and its inner function. The wrapper
 // consumes `name`, so `#[expect]` would produce an unfulfilled lint expectation there.
 #[allow(clippy::needless_pass_by_value, reason = "Salsa owns the query key")]
-fn name_contains_special_cased_condition<'db>(
+fn name_condition_definition_info<'db>(
     db: &'db dyn Db,
     scope: ScopeId<'db>,
     name: Name,
-) -> bool {
-    definitions_for_name(db, scope, &name, ImportAliasResolution::ResolveAliases)
-        .into_iter()
-        .filter_map(|resolved| resolved.definition())
-        .any(|definition| definition_contains_special_cased_condition(db, definition))
+) -> ConditionDefinitionInfo<'db> {
+    ConditionDefinitionInfo::from_definitions(
+        db,
+        definitions_for_name(db, scope, &name, ImportAliasResolution::ResolveAliases),
+    )
 }
 
-/// Caches environment-dependent provenance for a member of an already-inferred receiver type.
+/// Caches definition information for a member of an already-inferred receiver type.
 ///
 /// Attribute lookup can also repeatedly collect many bindings. Include the receiver type in the
 /// key because narrowing or rebinding a receiver can change which definitions its members resolve
 /// to. Taking that type from the caller avoids re-entering inference of the use-site scope.
 #[salsa::tracked(
     returns(copy),
-    cycle_initial = |_, _, _, _, _| false,
+    cycle_initial = |_, _, _, _, _| ConditionDefinitionInfo::default(),
     heap_size = ruff_memory_usage::heap_size
 )]
 // Salsa copies this attribute to both the query wrapper and its inner function. The wrapper
 // consumes `name`, so `#[expect]` would produce an unfulfilled lint expectation there.
 #[allow(clippy::needless_pass_by_value, reason = "Salsa owns the query key")]
-fn attribute_contains_special_cased_condition<'db>(
+fn attribute_condition_definition_info<'db>(
     db: &'db dyn Db,
     program: Program<'db>,
     receiver: Type<'db>,
     name: Name,
-) -> bool {
-    definitions_for_attribute(
+) -> ConditionDefinitionInfo<'db> {
+    ConditionDefinitionInfo::from_definitions(
         db,
-        &ProgramEnvironment::from_program(program),
-        receiver,
-        &name,
+        definitions_for_attribute(
+            db,
+            &ProgramEnvironment::from_program(program),
+            receiver,
+            &name,
+        ),
     )
-    .into_iter()
-    .filter_map(|resolved| resolved.definition())
-    .any(|definition| definition_contains_special_cased_condition(db, definition))
 }
 
 /// Determines whether a definition originates from an environment-dependent guard.

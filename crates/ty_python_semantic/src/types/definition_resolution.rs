@@ -170,41 +170,6 @@ pub(crate) fn definitions_for_name<'db>(
         .unwrap_or_default()
 }
 
-/// Resolves a name or attribute using expression types supplied by the caller.
-///
-/// During inference, the callback must read types from the active builder or the relevant
-/// definition-inference result. This adapter does not request completed scope inference.
-/// Import alias preservation applies to names; attribute definitions resolve imports to their targets.
-pub(crate) fn definitions_for_expression<'db>(
-    db: &'db dyn Db,
-    file: ProgramFile<'db>,
-    expression: ast::ExprRef<'_>,
-    alias_resolution: ImportAliasResolution,
-    mut expression_type: impl FnMut(&ast::Expr) -> Type<'db>,
-) -> Option<Vec<ResolvedDefinition<'db>>> {
-    match expression {
-        ast::ExprRef::Name(name) => {
-            let index = semantic_index(db, file);
-            let scope = index
-                .try_expression_scope_id(&expression)?
-                .to_scope_id(db, file);
-            Some(definitions_for_name(
-                db,
-                scope,
-                name.id.as_str(),
-                alias_resolution,
-            ))
-        }
-        ast::ExprRef::Attribute(attribute) => Some(definitions_for_attribute(
-            db,
-            &ProgramEnvironment::from_file(file),
-            expression_type(&attribute.value),
-            attribute.attr.as_str(),
-        )),
-        _ => None,
-    }
-}
-
 /// Resolves definitions in visible scopes, without falling back to implicit builtins.
 pub(crate) fn scoped_definitions_for_name<'db>(
     db: &'db dyn Db,

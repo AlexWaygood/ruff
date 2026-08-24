@@ -179,7 +179,7 @@ warning[redundant-condition]: An empty tuple is always falsy
 ```
 
 Annotating a variable as `tuple[X]` is almost always a mistake (the user almost always meant to
-write `tuple[X, ...]`), so we emit a specialized error message and autofix for this specific case:
+write `tuple[X, ...]`), so we point to the annotation and suggest an arbitrary-length tuple instead:
 
 ```py
 class Bar:
@@ -425,8 +425,8 @@ def check(value: Record):
 
 ## Tuple annotations in dependencies
 
-A one-element tuple annotation in a dependency explains why the condition is redundant, but we do
-not suggest changing that dependency's annotation to an arbitrary-length tuple.
+A one-element tuple annotation in a dependency also explains why the condition is redundant. The
+suggestion refers to the dependency's author, since the annotation is outside first-party code.
 
 ```toml
 [environment]
@@ -1473,6 +1473,159 @@ warning[redundant-condition]: Condition is always truthy
     |    ^^^^^^^^^^^ Inferred type is `CoroutineType[Any, Any, Unknown]`
 ```
 
+## `await` fixes in nested comprehensions before Python 3.11
+
+Before Python 3.11, an asynchronous comprehension cannot implicitly make its containing
+comprehension or generator expression asynchronous. Adding `await` in these nested conditions would
+therefore produce invalid syntax, so their diagnostics have no autofix.
+
+```toml
+[environment]
+python-version = "3.10"
+python-platform = "linux"
+
+[rules]
+redundant-condition-strict = "error"
+```
+
+```py
+async def predicate() -> bool:
+    return False
+
+def nested_in_generators():
+    lists = ([item for item in [1] if predicate()] for _ in [1])  # snapshot: redundant-condition
+    sets = ({item for item in [1] if predicate()} for _ in [1])  # snapshot: redundant-condition
+    dicts = ({item: item for item in [1] if predicate()} for _ in [1])  # snapshot: redundant-condition
+
+async def nested_in_list():
+    return [[item for item in [1] if predicate()] for _ in [1]]  # snapshot: redundant-condition
+```
+
+```snapshot
+warning[redundant-condition]: Condition is always truthy
+ --> src/mdtest_snippet.py:5:39
+  |
+5 |     lists = ([item for item in [1] if predicate()] for _ in [1])  # snapshot: redundant-condition
+  |                                       ^^^^^^^^^^^ Inferred type is `CoroutineType[Any, Any, bool]`
+
+
+warning[redundant-condition]: Condition is always truthy
+ --> src/mdtest_snippet.py:6:38
+  |
+6 |     sets = ({item for item in [1] if predicate()} for _ in [1])  # snapshot: redundant-condition
+  |                                      ^^^^^^^^^^^ Inferred type is `CoroutineType[Any, Any, bool]`
+
+
+warning[redundant-condition]: Condition is always truthy
+ --> src/mdtest_snippet.py:7:45
+  |
+7 |     dicts = ({item: item for item in [1] if predicate()} for _ in [1])  # snapshot: redundant-condition
+  |                                             ^^^^^^^^^^^ Inferred type is `CoroutineType[Any, Any, bool]`
+
+
+warning[redundant-condition]: Condition is always truthy
+  --> src/mdtest_snippet.py:10:38
+   |
+10 |     return [[item for item in [1] if predicate()] for _ in [1]]  # snapshot: redundant-condition
+   |                                      ^^^^^^^^^^^ Inferred type is `CoroutineType[Any, Any, bool]`
+```
+
+A containing generator that already uses `await` is asynchronous, so awaiting a nested condition is
+valid even on Python 3.10. A condition directly inside a generator also remains eligible.
+
+```py
+def already_async_generator():
+    return ([item for item in [1] if predicate()] for _ in [1] if await predicate())  # snapshot: redundant-condition
+
+def direct_generator():
+    return (item for item in [1] if predicate())  # snapshot: redundant-condition
+```
+
+```snapshot
+warning[redundant-condition]: Condition is always truthy
+  --> src/mdtest_snippet.py:12:38
+   |
+12 |     return ([item for item in [1] if predicate()] for _ in [1] if await predicate())  # snapshot: redundant-condition
+   |                                      ^^^^^^^^^^^ Inferred type is `CoroutineType[Any, Any, bool]`
+help: Did you mean to `await` this expression?
+   |
+11 | def already_async_generator():
+   -     return ([item for item in [1] if predicate()] for _ in [1] if await predicate())  # snapshot: redundant-condition
+12 +     return ([item for item in [1] if await predicate()] for _ in [1] if await predicate())  # snapshot: redundant-condition
+13 |
+   |
+note: This is an unsafe fix and may change runtime behavior
+
+
+warning[redundant-condition]: Condition is always truthy
+  --> src/mdtest_snippet.py:15:37
+   |
+15 |     return (item for item in [1] if predicate())  # snapshot: redundant-condition
+   |                                     ^^^^^^^^^^^ Inferred type is `CoroutineType[Any, Any, bool]`
+help: Did you mean to `await` this expression?
+   |
+14 | def direct_generator():
+   -     return (item for item in [1] if predicate())  # snapshot: redundant-condition
+15 +     return (item for item in [1] if await predicate())  # snapshot: redundant-condition
+   |
+note: This is an unsafe fix and may change runtime behavior
+```
+
+## `await` fixes in nested comprehensions on Python 3.11
+
+Python 3.11 allows a nested asynchronous comprehension to make its enclosing comprehension or
+generator expression asynchronous. Both conditions below can therefore receive an `await` fix.
+
+```toml
+[environment]
+python-version = "3.11"
+python-platform = "linux"
+
+[rules]
+redundant-condition-strict = "error"
+```
+
+```py
+async def predicate() -> bool:
+    return False
+
+def nested_in_generator():
+    return ([item for item in [1] if predicate()] for _ in [1])  # snapshot: redundant-condition
+
+async def nested_in_list():
+    return [[item for item in [1] if predicate()] for _ in [1]]  # snapshot: redundant-condition
+```
+
+```snapshot
+warning[redundant-condition]: Condition is always truthy
+ --> src/mdtest_snippet.py:5:38
+  |
+5 |     return ([item for item in [1] if predicate()] for _ in [1])  # snapshot: redundant-condition
+  |                                      ^^^^^^^^^^^ Inferred type is `CoroutineType[Any, Any, bool]`
+help: Did you mean to `await` this expression?
+  |
+4 | def nested_in_generator():
+  -     return ([item for item in [1] if predicate()] for _ in [1])  # snapshot: redundant-condition
+5 +     return ([item for item in [1] if await predicate()] for _ in [1])  # snapshot: redundant-condition
+6 |
+  |
+note: This is an unsafe fix and may change runtime behavior
+
+
+warning[redundant-condition]: Condition is always truthy
+ --> src/mdtest_snippet.py:8:38
+  |
+8 |     return [[item for item in [1] if predicate()] for _ in [1]]  # snapshot: redundant-condition
+  |                                      ^^^^^^^^^^^ Inferred type is `CoroutineType[Any, Any, bool]`
+help: Did you mean to `await` this expression?
+  |
+7 | async def nested_in_list():
+  -     return [[item for item in [1] if predicate()] for _ in [1]]  # snapshot: redundant-condition
+8 +     return [[item for item in [1] if await predicate()] for _ in [1]]  # snapshot: redundant-condition
+  |
+note: This is an unsafe fix and may change runtime behavior
+```
+
 ## Notebook cells
 
 Notebook cells do allow top-level `await`, so the same condition receives an autofix there:
@@ -1628,6 +1781,34 @@ def compound_truthy(x: str):
     match x:
         case str() if isinstance(x, str) and isinstance(x, str):  # error: [redundant-condition-strict]
             pass
+```
+
+## Multiline conditions in concise diagnostics
+
+Concise diagnostics usually quote source code in their diagnostics:
+
+```py
+if 1 + 1 == 2:  # error: [redundant-condition-strict] "Condition `1 + 1 == 2` is always true"
+    pass
+```
+
+But the source code is omitted if the full condition is split over multiple lines:
+
+```py
+def multiline_conditions(value: int):
+    if (
+        value is not None  # error: [redundant-condition-strict] "Condition is always true"
+        # Both operands are always true.
+        and value is not None
+    ):
+        pass
+
+    # fmt: off
+    if (value  # error: [redundant-condition-strict] "Condition is always false"
+        is
+        None):
+        pass
+    # fmt: on
 ```
 
 ## Replacing a redundant final `elif` with an assertion

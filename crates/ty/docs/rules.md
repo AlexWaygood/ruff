@@ -4542,7 +4542,7 @@ A common error in Python code is to make the mistake of thinking that indexing i
 object will get you an object of type `bytes`. But `bytes` work differently to `str`s in Python --
 although a string is a sequence of strings, a bytestring is a sequence of `int`s, so indexing into
 a `bytes` object gives you an `int`. This rule can catch that error by alerting you to the fact
-that comparing a `bytes` object with an `int` will always evaluate to `False`:
+that checking whether a `bytes` object is unequal to an `int` will always evaluate to `True`:
 
 ```py
 def validate_record(data: bytes) -> None:
@@ -4574,8 +4574,9 @@ def add_one(x: int) -> int:
     return x + 1
 ```
 
-The rule also exempts always-false `if` statements that are always followed by a terminal statement
-such as a `raise`, for example:
+The rule also exempts always-false `if` or `elif` conditions when their bodies end in a defensive
+check: a `raise`, an assertion that could fail, a call returning `Never`, or
+`return NotImplemented`:
 
 ```py
 def add_two(x: int) -> int:
@@ -4585,7 +4586,7 @@ def add_two(x: int) -> int:
 ```
 
 And an exemption is applied for always-true `if` or `elif` statements that are followed by branches
-which are always terminal:
+which contain defensive checks:
 
 ```py
 from typing_extensions import assert_never
@@ -4645,7 +4646,7 @@ if TYPE_CHECKING:  # inferred as always true, but no diagnostic
     pass
 ```
 
-Conditions involving literal integers and booleans in the AST are also exempted: there's no reason
+Some conditions involving literal integers and booleans in the AST are also exempted: there's no reason
 why you'd use a condition like this unless it was intentional.
 
 ```py
@@ -4748,7 +4749,7 @@ def main():
 Lastly, the rule cannot reliably distinguish in all cases comparisons that are intentionally
 always true/false from those that are unintentionally always true/false. The rule takes care to
 avoid flagging code that uses `if TYPE_CHECKING`, `if sys.version_info < (X, Y)`,
-`if sys.platform = ...` and `if os.name = ...`. But it cannot reliably determine that code like
+`if sys.platform == ...` and `if os.name == ...`. But it cannot reliably determine that code like
 this was written the way it was meant to:
 
 ```py
