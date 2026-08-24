@@ -2466,6 +2466,39 @@ class PlatformAttributeCycle:
             pass
 ```
 
+## Environment references in called lambdas and consumed generators
+
+Calls can execute lambda bodies or consume generator expressions. Environment references inside
+those bodies exempt the enclosing condition from both rules, including when the call's result is a
+non-boolean object whose truthiness is known.
+
+```py
+import sys
+
+if (lambda: sys.version_info >= (3, 12))():
+    pass
+if next(sys.platform == "linux" for _ in range(1)):
+    pass
+
+if (lambda: sys.platform)():
+    pass
+if next(sys.version_info for _ in range(1)):
+    pass
+```
+
+The exemption also follows assignments and aliases, including when a named generator is consumed.
+
+```py
+platform = (lambda: sys.platform)()
+if platform:
+    pass
+
+platforms = (sys.platform for _ in range(1))
+alias = platforms
+if next(alias):
+    pass
+```
+
 ## Deliberately exhaustive `if` statements
 
 A common pattern is to have an `if` condition that is deliberately always true or false, so that the
@@ -2729,54 +2762,17 @@ def eager_walruses(items: list[int]):
         pass
 ```
 
-## Walrus expressions in deferred bodies
+## Walrus expressions in called lambdas and consumed generators
 
-Creating a generator or lambda does not execute its body. A walrus in that body therefore does not
-move the enclosing condition to the strict rule. These conditions are reported even with the strict
-rule disabled, just like the equivalent generator without a walrus.
-
-```toml
-[environment]
-python-version = "3.14"
-
-[rules]
-redundant-condition-strict = "ignore"
-```
+Calling a lambda or consuming a generator can evaluate a walrus in its body. The nonempty tuples
+returned here are always truthy, but the assignments run when evaluating the conditions. These
+conditions therefore use only the strict rule.
 
 ```py
-def deferred_walruses(items: list[int]):
-    if (item for item in items):  # error: [redundant-condition]
-        pass
-    if (value for item in items if (value := item + 1)):  # error: [redundant-condition]
-        pass
-    if ((value := item) for item in items):  # error: [redundant-condition]
-        pass
-    if ((lambda: (value := 1)),):  # error: [redundant-condition]
-        pass
-```
-
-The same distinction applies to nested expressions: a tuple containing a generator does not execute
-the generator's body, and a lambda default that creates another lambda does not execute the inner
-body.
-
-```py
-def nested_deferred_walruses(items: list[int]):
-    if (((value := item) for item in items),):  # error: [redundant-condition]
-        pass
-    if ((lambda value=(lambda: (saved := 1)): value),):  # error: [redundant-condition]
-        pass
-```
-
-With the strict rule disabled, eagerly evaluated walruses still suppress these diagnostics. This
-includes assigning the generator itself, evaluating a lambda default, and building an eager
-comprehension inside the tested tuple.
-
-```py
-def eager_walruses(items: list[int]):
-    if saved := (item for item in items):
-        pass
-    if ((lambda value=(saved := 1): value),):
-        pass
-    if ([saved := item for item in items],):
-        pass
+if (lambda: (value := (1,)))():  # error: [redundant-condition-strict]
+    pass
+if next((value := (1,)) for _ in range(1)):  # error: [redundant-condition-strict]
+    pass
+if next((1,) for item in range(3) if (value := item > 0)):  # error: [redundant-condition-strict]
+    pass
 ```

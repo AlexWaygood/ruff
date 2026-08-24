@@ -4478,7 +4478,7 @@ Or to forget that `tuple[X]` means "A tuple with exactly one element" rather tha
 arbitrary number of elements" (for which you'd use `tuple[X, ...]`):
 
 ```py
-# you almost certainly meant to write `tuple[str, ...]` here rather than `tuple[str`]...
+# you almost certainly meant to write `tuple[str, ...]` here rather than `tuple[str]`...
 def consume_tuples(x: tuple[str]):
     # ...and that means that this later condition is inferred as always being True by ty:
     if x:  # error: [redundant-condition]
@@ -4492,7 +4492,8 @@ you collect them into a tuple:
 ```py
 def test_my_data(data: list[int]):
     # this will always be `True`, because the asserted object is a `types.GeneratorType` instance,
-    # not a `tuple`! `tuple(item for item in data if item > 42)` is probably what you meant instead.
+    # not a `tuple`! `assert any(item for item in data if item > 42)`
+    # is probably what you meant instead.
     assert (item for item in data if item > 42)  # error: [redundant-condition]
 ```
 

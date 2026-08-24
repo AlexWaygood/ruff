@@ -10,11 +10,7 @@ use ruff_db::{
 };
 use ruff_diagnostics::{Applicability, Edit, Fix};
 use ruff_python_ast::{
-    self as ast, PythonVersion,
-    helpers::any_over_expr,
-    name::Name,
-    token::parenthesized_range,
-    visitor::{self, Visitor},
+    self as ast, PythonVersion, helpers::any_over_expr, name::Name, token::parenthesized_range,
 };
 use ruff_python_trivia::indentation_at_offset;
 use ruff_source_file::{LineRanges, find_newline};
@@ -194,6 +190,9 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
             return None;
         }
 
+        // Scan deferred bodies, too: a surrounding call may execute a lambda or consume a generator.
+        // We do not try to determine when this happens. Avoiding false positives is more important
+        // than avoiding false negatives, both for environment exemptions and walrus classification.
         let rule = if test_type.is_assignable_to(db, env, int_instance) {
             if self
                 .index
@@ -208,7 +207,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 return None;
             }
             &REDUNDANT_CONDITION_STRICT
-        } else if contains_eager_named_expression(test) {
+        } else if any_over_expr(test, ast::Expr::is_named_expr) {
             if !self.context.is_lint_enabled(&REDUNDANT_CONDITION_STRICT) {
                 return None;
             }
@@ -381,7 +380,9 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     }
 
                     Some(diagnostic)
-                } else if let Some(tuple_spec) = test_type.tuple_instance_spec(db, env) {
+                } else if let Some(tuple_spec) = test_type.tuple_instance_spec(db, env)
+                    && tuple_spec.len().minimum() > 0
+                {
                     // This error message might not be 100% accurate for a tuple subclass
                     // that overrides `__len__` or `__bool__` in a way that's inconsistent
                     // with the tuple's inherited tuple spec, but you just shouldn't do that anyway.
@@ -946,43 +947,6 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
             KnownClass::NotImplementedType.to_instance(self.db(), self.program_environment());
         is_deliberately_unreachable_inner(self, suite, not_implemented)
     }
-}
-
-/// Returns whether the expression contains a walrus outside deferred generator and lambda bodies.
-fn contains_eager_named_expression(expression: &ast::Expr) -> bool {
-    #[derive(Default)]
-    struct NamedExpressionVisitor {
-        found: bool,
-    }
-
-    impl<'a> Visitor<'a> for NamedExpressionVisitor {
-        fn visit_expr(&mut self, expression: &'a ast::Expr) {
-            if self.found {
-                return;
-            }
-
-            match expression {
-                ast::Expr::Named(_) => self.found = true,
-                // Only the first iterable is evaluated when a generator is created.
-                ast::Expr::Generator(generator) => {
-                    if let Some(first) = generator.generators.first() {
-                        self.visit_expr(&first.iter);
-                    }
-                }
-                // Lambda defaults are evaluated immediately, but the body is deferred.
-                ast::Expr::Lambda(lambda) => {
-                    if let Some(parameters) = &lambda.parameters {
-                        self.visit_parameters(parameters);
-                    }
-                }
-                _ => visitor::walk_expr(self, expression),
-            }
-        }
-    }
-
-    let mut visitor = NamedExpressionVisitor::default();
-    visitor.visit_expr(expression);
-    visitor.found
 }
 
 /// Return `true` if any subexpression in `expression` is recognized as "tainted" by being defined
