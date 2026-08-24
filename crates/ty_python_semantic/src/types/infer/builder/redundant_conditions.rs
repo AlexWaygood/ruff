@@ -451,30 +451,33 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                                     "Inferred as a 1-element tuple due to this annotation",
                                 ));
 
-                                let resolver_file =
-                                    single_definition.program_file(db).resolver_file(db);
-
                                 let sole_element = fixed_length_tuple.elements_slice()[0];
-                                let suggested_type = Type::homogeneous_tuple(db, env, sole_element);
+                                let suggested_type = Type::homogeneous_tuple(db, env, sole_element)
+                                    .display(db, env)
+                                    .to_string_parts();
 
-                                let annotated_in_first_party_code = file == self.file()
-                                    || file_to_module(db, resolver_file)
-                                        .and_then(|module| module.search_path(db))
-                                        .is_some_and(SearchPath::is_first_party);
+                                if suggested_type.is_valid_syntax {
+                                    let resolver_file =
+                                        single_definition.program_file(db).resolver_file(db);
+                                    let annotated_in_first_party_code = file == self.file()
+                                        || file_to_module(db, resolver_file)
+                                            .and_then(|module| module.search_path(db))
+                                            .is_some_and(SearchPath::is_first_party);
 
-                                let annotation = if annotated_in_first_party_code {
-                                    diagnostic_annotation().message(format_args!(
-                                        "Did you mean `{}`?",
-                                        suggested_type.display(db, env)
-                                    ))
-                                } else {
-                                    diagnostic_annotation().message(format_args!(
-                                        "The author of this code might have meant `{}`?",
-                                        suggested_type.display(db, env)
-                                    ))
-                                };
+                                    let annotation = if annotated_in_first_party_code {
+                                        diagnostic_annotation().message(format_args!(
+                                            "Did you mean `{}`?",
+                                            suggested_type.label
+                                        ))
+                                    } else {
+                                        diagnostic_annotation().message(format_args!(
+                                            "The author of this code might have meant `{}`?",
+                                            suggested_type.label
+                                        ))
+                                    };
 
-                                diagnostic.annotate(annotation);
+                                    diagnostic.annotate(annotation);
+                                }
                             }
                         }
                     }
@@ -1151,17 +1154,46 @@ fn definition_contains_special_cased_condition<'db>(
         }
     }
 
-    let Some(value) = definition_kind.value(&module) else {
+    let source_expression = match definition_kind {
+        DefinitionKind::Assignment(assignment) => Some(assignment.value(&module)),
+        DefinitionKind::AnnotatedAssignment(assignment) => assignment.value(&module),
+        DefinitionKind::NamedExpression(named) => Some(&*named.node(&module).value),
+        DefinitionKind::AugmentedAssignment(assignment) => Some(&*assignment.node(&module).value),
+        DefinitionKind::For(for_statement) => Some(for_statement.iterable(&module)),
+        DefinitionKind::Comprehension(comprehension) => Some(comprehension.iterable(&module)),
+        DefinitionKind::WithItem(with_item) => Some(with_item.context_expr(&module)),
+        DefinitionKind::MatchPattern(pattern) => {
+            Some(pattern.predicate().subject(db).node_ref(db).node(&module))
+        }
+        DefinitionKind::Import(_)
+        | DefinitionKind::ImportFrom(_)
+        | DefinitionKind::ImportFromSubmodule(_)
+        | DefinitionKind::StarImport(_)
+        | DefinitionKind::Function(_)
+        | DefinitionKind::Class(_)
+        | DefinitionKind::TypeAlias(_)
+        | DefinitionKind::DictKeyAssignment(_)
+        | DefinitionKind::Parameter(_)
+        | DefinitionKind::LambdaParameter(_)
+        | DefinitionKind::ExceptHandler(_)
+        | DefinitionKind::TypeVar(_)
+        | DefinitionKind::ParamSpec(_)
+        | DefinitionKind::TypeVarTuple(_)
+        | DefinitionKind::LoopHeader(_)
+        | DefinitionKind::NestedBindings(_) => None,
+    };
+    let Some(source_expression) = source_expression else {
         return false;
     };
 
-    // Unpacked targets do not retain the types of their shared right-hand side. Read those
-    // types from the standalone expression query, without re-entering scope inference.
-    let standalone = semantic_index(db, program_file).try_expression(value);
+    // Binding inference does not always retain the source expression's types: unpacked targets
+    // share a source, and a comprehension's first iterable belongs to the enclosing scope.
+    // Read those types from the standalone expression query, without re-entering scope inference.
+    let standalone = semantic_index(db, program_file).try_expression(source_expression);
     let mut expression_inference = None;
     let mut definition_inference = None;
 
-    any_over_expr(value, |expression| {
+    any_over_expr(source_expression, |expression| {
         is_special_cased_condition_expression(db, program_file, expression, |expr| {
             if let Some(standalone) = standalone {
                 expression_inference

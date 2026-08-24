@@ -484,6 +484,40 @@ warning[redundant-condition]: A 1-element tuple is always truthy
    |        ^^^^^ Inferred type is `tuple[int]`
 ```
 
+The diagnostic still explains the one-element annotation when the suggested replacement would
+contain notation that cannot be used in a Python annotation, such as a type variable's scope suffix.
+In these cases, we omit the replacement suggestion, including when the type variable is nested
+inside another generic type.
+
+```py
+def check_generic[T](value: tuple[T]):
+    if value:  # snapshot: redundant-condition
+        pass
+
+def check_nested_generic[T](value: tuple[list[T]]):
+    if value:  # snapshot: redundant-condition
+        pass
+```
+
+```snapshot
+warning[redundant-condition]: A 1-element tuple is always truthy
+  --> src/mdtest_snippet.py:20:8
+   |
+19 | def check_generic[T](value: tuple[T]):
+   |                             -------- Inferred as a 1-element tuple due to this annotation
+20 |     if value:  # snapshot: redundant-condition
+   |        ^^^^^ Inferred type is `tuple[T@check_generic]`
+
+
+warning[redundant-condition]: A 1-element tuple is always truthy
+  --> src/mdtest_snippet.py:24:8
+   |
+23 | def check_nested_generic[T](value: tuple[list[T]]):
+   |                                    -------------- Inferred as a 1-element tuple due to this annotation
+24 |     if value:  # snapshot: redundant-condition
+   |        ^^^^^ Inferred type is `tuple[list[T@check_nested_generic]]`
+```
+
 ## Tuple annotations in dependencies
 
 A one-element tuple annotation in a dependency also explains why the condition is redundant. The
@@ -2447,6 +2481,24 @@ if ordinary:  # error: [redundant-condition-strict] "Condition `ordinary` is alw
     pass
 ```
 
+Augmented assignments also preserve the environment-dependent origin of their right-hand side.
+
+`augmented_assignment.py`:
+
+```py
+import sys
+
+platform = ""
+platform += sys.platform
+if platform == "win32":
+    pass
+
+fixed = ""
+fixed += "linux"
+if fixed == "win32":  # error: [redundant-condition-strict] "Condition `fixed == "win32"` is always false"
+    pass
+```
+
 Following aliases also terminates when assignments form a cycle. An ordinary cycle does not make an
 always-truthy condition environment-dependent, whether the aliases are names or instance attributes.
 
@@ -2487,6 +2539,96 @@ class PlatformAttributeCycle:
         reveal_type(bool(self.first))  # revealed: Literal[True]
         if self.first:
             pass
+```
+
+## Environment-dependent loop targets
+
+Loop targets inherit the environment-dependent origin of their iterable, including when the target
+is unpacked or an alias is tested inside the loop.
+
+```py
+import sys
+
+for is_windows in (sys.platform == "win32",):
+    if is_windows:
+        pass
+
+for platform, version in ((sys.platform, sys.version_info),):
+    alias = platform
+    if alias == "win32":
+        pass
+    if version >= (3, 14):
+        pass
+```
+
+Comprehension targets follow the same rule. The first iterable is evaluated in the enclosing scope;
+later iterables are evaluated in the comprehension's scope.
+
+```py
+[flag for flag in (sys.platform == "win32",) if flag]
+[flag for _ in range(1) for flag in (sys.platform == "win32",) if flag]
+[flag for flag, _ in ((sys.platform == "win32", 0),) if flag]
+```
+
+Loop and comprehension targets without an environment-dependent source still produce diagnostics.
+
+```py
+for fixed in (True,):
+    if fixed:  # error: [redundant-condition-strict] "Condition `fixed` is always true"
+        pass
+
+[fixed for fixed in (True,) if fixed]  # error: [redundant-condition-strict] "Condition `fixed` is always true"
+```
+
+## Environment-dependent pattern captures
+
+Pattern captures inherit the environment-dependent origin of the match subject. This applies to
+simple captures, unpacked captures, and aliases used in case guards.
+
+```py
+import sys
+
+match sys.platform:
+    case platform:
+        if platform == "win32":
+            pass
+
+match (sys.platform, sys.version_info):
+    case (platform, version):
+        if platform == "win32":
+            pass
+        if version >= (3, 14):
+            pass
+
+match sys.platform == "win32":
+    case is_windows if is_windows:
+        pass
+```
+
+A capture of an ordinary constant is not exempt.
+
+```py
+match True:
+    case fixed:
+        if fixed:  # error: [redundant-condition-strict] "Condition `fixed` is always true"
+            pass
+```
+
+## Environment-dependent context manager bindings
+
+A `with` target can also inherit an environment-dependent value from its context expression.
+
+```py
+import sys
+from contextlib import nullcontext
+
+with nullcontext(sys.version_info) as version:
+    if version >= (3, 14):
+        pass
+
+with nullcontext((1,)) as fixed:
+    if fixed:  # error: [redundant-condition] "Object of type `tuple[int]` is always truthy"
+        pass
 ```
 
 ## Environment references in called lambdas and consumed generators
