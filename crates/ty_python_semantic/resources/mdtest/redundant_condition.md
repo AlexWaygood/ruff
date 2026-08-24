@@ -423,6 +423,67 @@ def check(value: Record):
             pass
 ```
 
+## One-element tuple annotation hints
+
+A named tuple or another tuple subclass can deliberately have exactly one element. An annotation
+naming that class is not a mistaken use of `tuple[T]`, so we report its truthiness without
+suggesting an arbitrary-length tuple annotation.
+
+```py
+from typing import NamedTuple
+
+class Record(NamedTuple):
+    value: int
+
+class SingleTuple(tuple[int]):
+    pass
+
+def check(record: Record, single: SingleTuple):
+    if record:  # snapshot: redundant-condition
+        print(record.value)
+    if single:  # snapshot: redundant-condition
+        pass
+```
+
+```snapshot
+warning[redundant-condition]: A 1-element tuple is always truthy
+  --> src/mdtest_snippet.py:10:8
+   |
+10 |     if record:  # snapshot: redundant-condition
+   |        ^^^^^^ Inferred type is `Record`
+
+
+warning[redundant-condition]: A 1-element tuple is always truthy
+  --> src/mdtest_snippet.py:12:8
+   |
+12 |     if single:  # snapshot: redundant-condition
+   |        ^^^^^^ Inferred type is `SingleTuple`
+```
+
+An implicit type alias for `tuple[T]` still refers to the built-in tuple type, so it remains
+eligible for the annotation hint.
+
+```py
+IntTuple = tuple[int]
+
+def check_alias(value: IntTuple):
+    if value:  # snapshot: redundant-condition
+        pass
+```
+
+```snapshot
+warning[redundant-condition]: A 1-element tuple is always truthy
+  --> src/mdtest_snippet.py:17:8
+   |
+16 | def check_alias(value: IntTuple):
+   |                        --------
+   |                        |
+   |                        Inferred as a 1-element tuple due to this annotation
+   |                        Did you mean `tuple[int, ...]`?
+17 |     if value:  # snapshot: redundant-condition
+   |        ^^^^^ Inferred type is `tuple[int]`
+```
+
 ## Tuple annotations in dependencies
 
 A one-element tuple annotation in a dependency also explains why the condition is redundant. The
@@ -2651,4 +2712,71 @@ foo = ("foo",)
 # the disabled-by-default error code.
 if coinflip1() and (foo := ("bar",)) and coinflip2():  # error: [redundant-condition-strict]
     ...
+```
+
+Walruses in lambda defaults or eager comprehensions can run while the condition is evaluated. These
+conditions also use the strict rule.
+
+```py
+def eager_walruses(items: list[int]):
+    if ((lambda value=(saved := 1): value),):  # error: [redundant-condition-strict]
+        pass
+    if ([saved := item for item in items],):  # error: [redundant-condition-strict]
+        pass
+    if ({saved := item for item in items},):  # error: [redundant-condition-strict]
+        pass
+    if ({item: (saved := item) for item in items},):  # error: [redundant-condition-strict]
+        pass
+```
+
+## Walrus expressions in deferred bodies
+
+Creating a generator or lambda does not execute its body. A walrus in that body therefore does not
+move the enclosing condition to the strict rule. These conditions are reported even with the strict
+rule disabled, just like the equivalent generator without a walrus.
+
+```toml
+[environment]
+python-version = "3.14"
+
+[rules]
+redundant-condition-strict = "ignore"
+```
+
+```py
+def deferred_walruses(items: list[int]):
+    if (item for item in items):  # error: [redundant-condition]
+        pass
+    if (value for item in items if (value := item + 1)):  # error: [redundant-condition]
+        pass
+    if ((value := item) for item in items):  # error: [redundant-condition]
+        pass
+    if ((lambda: (value := 1)),):  # error: [redundant-condition]
+        pass
+```
+
+The same distinction applies to nested expressions: a tuple containing a generator does not execute
+the generator's body, and a lambda default that creates another lambda does not execute the inner
+body.
+
+```py
+def nested_deferred_walruses(items: list[int]):
+    if (((value := item) for item in items),):  # error: [redundant-condition]
+        pass
+    if ((lambda value=(lambda: (saved := 1)): value),):  # error: [redundant-condition]
+        pass
+```
+
+With the strict rule disabled, eagerly evaluated walruses still suppress these diagnostics. This
+includes assigning the generator itself, evaluating a lambda default, and building an eager
+comprehension inside the tested tuple.
+
+```py
+def eager_walruses(items: list[int]):
+    if saved := (item for item in items):
+        pass
+    if ((lambda value=(saved := 1): value),):
+        pass
+    if ([saved := item for item in items],):
+        pass
 ```

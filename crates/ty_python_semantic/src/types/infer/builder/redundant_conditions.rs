@@ -10,7 +10,11 @@ use ruff_db::{
 };
 use ruff_diagnostics::{Applicability, Edit, Fix};
 use ruff_python_ast::{
-    self as ast, PythonVersion, helpers::any_over_expr, name::Name, token::parenthesized_range,
+    self as ast, PythonVersion,
+    helpers::any_over_expr,
+    name::Name,
+    token::parenthesized_range,
+    visitor::{self, Visitor},
 };
 use ruff_python_trivia::indentation_at_offset;
 use ruff_source_file::{LineRanges, find_newline};
@@ -62,10 +66,10 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
     /// things:
     /// - The inferred type of the condition. If the type is assignable to `int`, including `bool`,
     ///   `redundant-condition-strict` is used. Otherwise, `redundant-condition` is used.
-    /// - Whether any walrus expressions appear inside the condition. Many expressions can have
-    ///   side effects, but walrus expressions *always* have side effects, so the chances that the
-    ///   user is *deliberately* using an always-truthy condition for the sole benefit of the side
-    ///   effect is much greater. These are therefore always reported under
+    /// - Whether any eagerly evaluated walrus expressions appear inside the condition. Many
+    ///   expressions can have side effects, but walrus expressions *always* have side effects,
+    ///   so the chances that the user is *deliberately* using an always-truthy condition for the
+    ///   sole benefit of the side effect is much greater. These are therefore always reported under
     ///   `redundant-condition-strict` to avoid the enabled-by-default rule being overly opinionated.
     ///
     /// Many exemptions are applied to the rule to avoid reporting deliberate uses of always-true
@@ -204,7 +208,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 return None;
             }
             &REDUNDANT_CONDITION_STRICT
-        } else if any_over_expr(test, ast::Expr::is_named_expr) {
+        } else if contains_eager_named_expression(test) {
             if !self.context.is_lint_enabled(&REDUNDANT_CONDITION_STRICT) {
                 return None;
             }
@@ -394,7 +398,10 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     };
                     describe_always_truthy_object(&mut diagnostic);
 
+                    // The ellipsis suggestion is for `tuple[T]`, not named tuples or other
+                    // subclasses whose fixed length is part of their definition.
                     if length == TupleLength::Fixed(1)
+                        && test_type.exact_tuple_instance_spec(db).is_some()
                         && let Tuple::Fixed(fixed_length_tuple) = &*tuple_spec
                         && matches!(test, ast::Expr::Name(_) | ast::Expr::Attribute(_))
                     {
@@ -939,6 +946,43 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
             KnownClass::NotImplementedType.to_instance(self.db(), self.program_environment());
         is_deliberately_unreachable_inner(self, suite, not_implemented)
     }
+}
+
+/// Returns whether the expression contains a walrus outside deferred generator and lambda bodies.
+fn contains_eager_named_expression(expression: &ast::Expr) -> bool {
+    #[derive(Default)]
+    struct NamedExpressionVisitor {
+        found: bool,
+    }
+
+    impl<'a> Visitor<'a> for NamedExpressionVisitor {
+        fn visit_expr(&mut self, expression: &'a ast::Expr) {
+            if self.found {
+                return;
+            }
+
+            match expression {
+                ast::Expr::Named(_) => self.found = true,
+                // Only the first iterable is evaluated when a generator is created.
+                ast::Expr::Generator(generator) => {
+                    if let Some(first) = generator.generators.first() {
+                        self.visit_expr(&first.iter);
+                    }
+                }
+                // Lambda defaults are evaluated immediately, but the body is deferred.
+                ast::Expr::Lambda(lambda) => {
+                    if let Some(parameters) = &lambda.parameters {
+                        self.visit_parameters(parameters);
+                    }
+                }
+                _ => visitor::walk_expr(self, expression),
+            }
+        }
+    }
+
+    let mut visitor = NamedExpressionVisitor::default();
+    visitor.visit_expr(expression);
+    visitor.found
 }
 
 /// Return `true` if any subexpression in `expression` is recognized as "tainted" by being defined
