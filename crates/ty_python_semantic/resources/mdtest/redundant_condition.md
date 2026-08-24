@@ -2148,9 +2148,10 @@ if 2:  # no diagnostic
 
 ## Defensive assertions
 
-Of the two rules, only `redundant-condition` is applied to tests in `assert` statements (and any
-subexpressions within those tests). This is to prevent false positives on defensive assertions such
-as the following, which are common in well written Python code:
+The rules are only applied to tests in `assert` statements (and any subexpressions within those
+tests) if the inferred type of the `assert` test is not inferred as being a subtype of `bool` or
+`int`. This is to prevent false positives on defensive assertions such as the following, which are
+common in well written Python code:
 
 ```py
 def f(x: str, y: str | int, z: str | int | bytes):
@@ -2171,6 +2172,15 @@ def func(): ...
 def assertion_boundaries(x: str, flag: bool):
     assert func and isinstance(x, str)  # error: [redundant-condition]
     assert flag, isinstance(x, str) and flag  # error: [redundant-condition-strict]
+```
+
+The strict rule can still fire in assertion tests if the assertion test uses a walrus expression
+(since tests that use walrus expressions are never flagged with `redundant-condition`, only ever
+with `redundant-condition-strict`):
+
+```py
+ # error: [redundant-condition-strict] "Object of type `Literal["foo"]` is always truthy"
+assert (value := "foo")
 ```
 
 ## `sys.version_info` checks, `sys.platform` checks, `os.name` checks, `if TYPE_CHECKING` checks
