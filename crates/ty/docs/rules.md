@@ -4429,7 +4429,8 @@ This rule is enabled by default, and is deliberately not comprehensive. In order
 positives, it is not emitted on any expression where the boolean test is inferred as evaluating to
 `True` itself, `False` itself, or an exact integer such as `1` or `0`. It also is not emitted on
 any expression where the boolean test uses a walrus operator. These cases are all covered by
-[`redundant-condition-strict`](#redundant-condition-strict), a sibling rule to this one that is disabled by default.
+[`redundant-condition-strict`](#redundant-condition-strict), a sibling rule to this one that is disabled by default and which
+exclusively covers cases that are exempted by this rule.
 
 **Why is this bad?**
 
@@ -4495,6 +4496,15 @@ def test_my_data(data: list[int]):
     assert (item for item in data if item > 42)  # error: [redundant-condition]
 ```
 
+**Known issues**
+
+
+When an always-truthy condition is an awaitable, this rule sometimes offers an unsafe fix to add
+`await`. Applying this fix inside a synchronous generator expression turns it into an asynchronous
+generator. The consumer of the generator may also need to change if this fix is applied: for example,
+`list(...)` and a regular `for` loop cannot consume an asynchronous generator. Review the surrounding code before
+applying this fix; consuming the result may require an asynchronous comprehension or an `async for` loop.
+
 ## `redundant-condition-strict`
 
 <small>
@@ -4551,6 +4561,101 @@ def trace(**kwargs: dict[str, str]) -> None:
         print("Tracing task")
 ```
 
+**Exemptions**
+
+
+A common pattern in Python code is to use defensive `assert`s to enforce behaviour at runtime, even
+when the asserted condition can be inferred statically to be always true. This rule applies an
+exemption for this pattern, since it's usually the case that this is deliberate:
+
+```py
+def add_one(x: int) -> int:
+    assert isinstance(x, int)  # no diagnostic
+    return x + 1
+```
+
+The rule also exempts always-false `if` statements that are always followed by a terminal statement
+such as a `raise`, for example:
+
+```py
+def add_two(x: int) -> int:
+    if not isinstance(x, int):  # no diagnostic
+        raise TypeError("need an int!!")
+    return x + 2
+```
+
+And an exemption is applied for always-true `if` or `elif` statements that are followed by branches
+which are always terminal:
+
+```py
+from typing_extensions import assert_never
+
+
+def parse_data(data: int | str):
+    if isinstance(data, int):
+        print("got an int")
+    elif isinstance(data, str):  # Always true, but no diagnostic, since
+        # the `else` branch following this branch is always terminal.
+        # (`assert_never` returns `Never`, indicating that it always raises an exception)
+        print("got a str")
+    else:
+        assert_never(data)
+
+
+def parse_data_early_return(data: int | str):
+    if isinstance(data, int):
+        print("got an int")
+        return
+
+    if isinstance(data, str):  # Always true, but no diagnostic, since
+        # the suite following this branch is always terminal
+        # (every control-flow path following this `if` statement ends in a `raise` statement)
+        print("got a str")
+        return
+
+    raise AssertionError("unexpected data")
+```
+
+Any conditions involving `sys.version_info`, `sys.platform`, `os.name` or `typing.TYPE_CHECKING`
+are exempted. The rule recursively follows the definitions of names and attributes across module
+boundaries to determine if a name or attribute was indirectly defined in relation to one of these
+highly special-cased symbols:
+
+```toml
+[environment]
+python-version = "3.14"
+python-platform = "linux"
+```
+
+```py
+import os
+import sys
+from typing import TYPE_CHECKING
+
+if sys.version_info >= (3, 14):  # inferred as always true here, but no diagnostic
+    pass
+
+if sys.platform == "win32":  # inferred as always false here, but no diagnostic
+    pass
+
+if os.name == "posix":  # inferred as always true here, but no diagnostic
+    pass
+
+if TYPE_CHECKING:  # inferred as always true, but no diagnostic
+    pass
+```
+
+Conditions involving literal integers and booleans in the AST are also exempted: there's no reason
+why you'd use a condition like this unless it was intentional.
+
+```py
+if True:  # inferred as always true (obviously), but no diagnostic
+    pass
+
+if 0:
+    pass  # inferred as always false, but no diagnostic
+```
+
 **Known issues**
 
 
@@ -4573,7 +4678,7 @@ def say_yes_or_no(what_to_say: YesOrNo):
         print("no")
 ```
 
-This snippet could be written more clearly as this, which would not trigger the rule:
+This snippet could be written more clearly as this, which would not trigger the rule owing to the exemptions described in the section above:
 
 ```py
 def say_yes_or_no(what_to_say: YesOrNo):
@@ -4584,7 +4689,7 @@ def say_yes_or_no(what_to_say: YesOrNo):
         print("no")
 ```
 
-or this, which would also be fine according to the rule's heuristics:
+or the snippet could also be rewritten as this, which would also be fine according to the rule's heuristics:
 
 ```py
 from typing_extensions import assert_never

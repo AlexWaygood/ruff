@@ -1171,12 +1171,13 @@ impl<'db> DefinitionKind<'db> {
 
     /// Returns the value expression for assignment-based definitions.
     ///
-    /// Returns `Some` for `Assignment` and `AnnotatedAssignment` (if it has a value),
-    /// `None` for all other definition kinds.
+    /// Returns `Some` for `Assignment`, `NamedExpression`, and `AnnotatedAssignment` (if it has
+    /// a value), and `None` for all other definition kinds.
     pub fn value<'ast>(&self, module: &'ast ParsedModuleRef) -> Option<&'ast ast::Expr> {
         match self {
             DefinitionKind::Assignment(assignment) => Some(assignment.value(module)),
             DefinitionKind::AnnotatedAssignment(assignment) => assignment.value(module),
+            DefinitionKind::NamedExpression(named) => Some(&named.node(module).value),
             _ => None,
         }
     }

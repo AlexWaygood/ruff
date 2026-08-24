@@ -13,11 +13,12 @@ use ruff_python_ast::{self as ast, helpers::any_over_expr, token::parenthesized_
 use ruff_python_trivia::indentation_at_offset;
 use ruff_source_file::{LineRanges, find_newline};
 use ruff_text_size::{Ranged, TextRange};
-use ty_module_resolver::{KnownModule, file_to_module};
+use ty_module_resolver::{KnownModule, SearchPath, file_to_module};
 use ty_python_core::{
     ProgramFile, Truthiness,
     definition::{Definition, DefinitionKind},
     scope::NodeWithScopeKind,
+    semantic_index,
 };
 
 use crate::{
@@ -30,7 +31,7 @@ use crate::{
         },
         diagnostic::{REDUNDANT_CONDITION, REDUNDANT_CONDITION_STRICT},
         infer::{InferenceFlags, TypeInferenceBuilder},
-        infer_definition_types, infer_scope_types,
+        infer_definition_types, infer_expression_types, infer_scope_types,
         tuple::{Tuple, TupleLength},
     },
 };
@@ -294,12 +295,18 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     // if the function returns something that is always truthy. They still probably
                     // meant to call the function, though, so it's still a useful suggestion/fix!
 
-                    // We specifically test assignability to `CoroutineType` here because (unlike
-                    // arbitrary other awaitables) we know that `CoroutineType` is always truthy.
-                    let coroutine = KnownClass::CoroutineType.to_instance(db, env);
+                    // A coroutine return type establishes that calling and awaiting the function
+                    // is appropriate. `Any`, `Unknown`, and `Never` do not establish this, even
+                    // though they are assignable to `CoroutineType`.
+                    // Use the top materialization so the unspecified generic arguments do not
+                    // prevent concrete coroutine types from being subtypes.
+                    let coroutine = KnownClass::CoroutineType
+                        .to_instance(db, env)
+                        .top_materialization(db, env);
                     let is_awaitable_coro_function = self.can_await_here()
                         && signature.iter().any(|signature| {
-                            signature.return_ty.is_assignable_to(db, env, coroutine)
+                            !signature.return_ty.is_never()
+                                && signature.return_ty.is_subtype_of(db, env, coroutine)
                         });
 
                     let kind = if test_type.is_function_literal() {
@@ -357,6 +364,10 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
 
                     Some(diagnostic)
                 } else if let Some(tuple_spec) = test_type.tuple_instance_spec(db, env) {
+                    // This error message might not be 100% accurate for a tuple subclass
+                    // that overrides `__len__` or `__bool__` in a way that's inconsistent
+                    // with the tuple's inherited tuple spec, but you just shouldn't do that anyway.
+
                     let length = tuple_spec.len();
                     let mut diagnostic = match length {
                         TupleLength::Fixed(size) => builder.into_diagnostic(format_args!(
@@ -426,20 +437,27 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                                 let resolver_file =
                                     single_definition.program_file(db).resolver_file(db);
 
-                                if let Some(module) = file_to_module(db, resolver_file)
-                                    && let Some(search_path) = module.search_path(db)
-                                    && search_path.is_first_party()
-                                {
-                                    let sole_element = fixed_length_tuple.elements_slice()[0];
-                                    let suggested_type =
-                                        Type::homogeneous_tuple(db, env, sole_element);
-                                    diagnostic.annotate(diagnostic_annotation().message(
-                                        format_args!(
-                                            "Did you mean `{}`?",
-                                            suggested_type.display(db, env)
-                                        ),
-                                    ));
-                                }
+                                let sole_element = fixed_length_tuple.elements_slice()[0];
+                                let suggested_type = Type::homogeneous_tuple(db, env, sole_element);
+
+                                let annotated_in_first_party_code = file == self.file()
+                                    || file_to_module(db, resolver_file)
+                                        .and_then(|module| module.search_path(db))
+                                        .is_some_and(SearchPath::is_first_party);
+
+                                let annotation = if annotated_in_first_party_code {
+                                    diagnostic_annotation().message(format_args!(
+                                        "Did you mean `{}`?",
+                                        suggested_type.display(db, env)
+                                    ))
+                                } else {
+                                    diagnostic_annotation().message(format_args!(
+                                        "The author of this code might have meant `{}`?",
+                                        suggested_type.display(db, env)
+                                    ))
+                                };
+
+                                diagnostic.annotate(annotation);
                             }
                         }
                     }
@@ -474,10 +492,10 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                         && let Some(typed_dict_definition) = defining_class.definition(db)
                         && let Some(field_definition) = field.first_declaration()
                     {
-                        let typed_dict_file = typed_dict_definition.file(db);
-                        debug_assert_eq!(typed_dict_file, field_definition.file(db));
                         let typed_dict_module =
                             parsed_module(db, typed_dict_definition.python_file(db)).load(db);
+                        let field_module =
+                            parsed_module(db, field_definition.python_file(db)).load(db);
                         diagnostic.annotate(
                             Annotation::secondary(Span::from(
                                 typed_dict_definition.focus_range(db, &typed_dict_module),
@@ -486,7 +504,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                         );
                         diagnostic.annotate(
                             Annotation::secondary(Span::from(
-                                field_definition.full_range(db, &typed_dict_module),
+                                field_definition.full_range(db, &field_module),
                             ))
                             .message(if num_required_keys == 1 {
                                 "Required field declared here"
@@ -537,7 +555,10 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                         test_type.display(db, env)
                     ));
                     annotate_inferred_type(&mut diagnostic);
-                    if test_type.try_await(db, env).is_ok() && self.can_await_here() {
+                    if !test_type.is_never()
+                        && test_type.try_await(db, env).is_ok()
+                        && self.can_await_here()
+                    {
                         diagnostic.help("Did you mean to `await` this expression?");
 
                         let fix = if test.precedence() <= ast::OperatorPrecedence::Await {
@@ -561,6 +582,9 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 } else if let Some(tuple) = test_type.tuple_instance_spec(db, env)
                     && tuple.len() == TupleLength::Fixed(0)
                 {
+                    // This error message might not be 100% accurate for a tuple subclass
+                    // that overrides `__len__` or `__bool__` in a way that's inconsistent
+                    // with the tuple's inherited tuple spec, but you just shouldn't do that anyway.
                     let message = "An empty tuple is always falsy";
                     let mut diagnostic = builder.into_diagnostic(message);
                     diagnostic.set_concise_message(message);
@@ -679,7 +703,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
             // 1. The strict check is enabled, and
             // 2. The test type is assignable to int (including bool), meaning it would actually
             //    trigger the strict check rather than the normal check.
-            let should_check_if_suite_deliberately_unreachable = || {
+            let should_check_if_suite_deliberately_unreachable = |test_type: Type<'db>| {
                 self.context.is_lint_enabled(&REDUNDANT_CONDITION_STRICT)
                     && test_type.is_assignable_to(db, env, KnownClass::Int.to_instance(db, env))
             };
@@ -689,7 +713,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     self.check_condition_redundancy(test, test_type, test_truthiness);
                 }
                 Truthiness::AlwaysFalse => {
-                    if !(should_check_if_suite_deliberately_unreachable()
+                    if !(should_check_if_suite_deliberately_unreachable(test_type)
                         && self.is_deliberately_unreachable_suite(body))
                     {
                         self.check_condition_redundancy(test, test_type, test_truthiness);
@@ -698,14 +722,14 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                 Truthiness::AlwaysTrue => match elif_else_clauses.as_slice() {
                     [single] => {
                         if !(single.test.is_none()
-                            && should_check_if_suite_deliberately_unreachable()
+                            && should_check_if_suite_deliberately_unreachable(test_type)
                             && self.is_deliberately_unreachable_suite(&single.body))
                         {
                             self.check_condition_redundancy(test, test_type, test_truthiness);
                         }
                     }
                     [] => {
-                        if !(should_check_if_suite_deliberately_unreachable()
+                        if !(should_check_if_suite_deliberately_unreachable(test_type)
                             && self.is_deliberately_unreachable_suite(&suite[i + 1..]))
                         {
                             self.check_condition_redundancy(test, test_type, test_truthiness);
@@ -735,7 +759,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                         self.check_condition_redundancy(test, test_type, test_truthiness);
                     }
                     Truthiness::AlwaysFalse => {
-                        if !(should_check_if_suite_deliberately_unreachable()
+                        if !(should_check_if_suite_deliberately_unreachable(test_type)
                             && self.is_deliberately_unreachable_suite(body))
                         {
                             self.check_condition_redundancy(test, test_type, test_truthiness);
@@ -744,14 +768,14 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     Truthiness::AlwaysTrue => match elif_else_clauses.get(elif_i + 1) {
                         Some(clause) => {
                             if !(clause.test.is_none()
-                                && should_check_if_suite_deliberately_unreachable()
+                                && should_check_if_suite_deliberately_unreachable(test_type)
                                 && self.is_deliberately_unreachable_suite(&clause.body))
                             {
                                 self.check_condition_redundancy(test, test_type, test_truthiness);
                             }
                         }
                         None => {
-                            if !(should_check_if_suite_deliberately_unreachable()
+                            if !(should_check_if_suite_deliberately_unreachable(test_type)
                                 && self.is_deliberately_unreachable_suite(&suite[i + 1..]))
                             {
                                 let possible_diagnostic = self.check_condition_redundancy(
@@ -761,7 +785,7 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                                 );
                                 if let Some(mut diagnostic) = possible_diagnostic
                                     && !diagnostic.has_applicable_fix(Applicability::DisplayOnly)
-                                    && should_check_if_suite_deliberately_unreachable()
+                                    && should_check_if_suite_deliberately_unreachable(test_type)
                                 {
                                     diagnostic.help(
                                         "Replace this `elif` with an `else` branch \
@@ -874,11 +898,14 @@ impl<'db> TypeInferenceBuilder<'db, '_> {
                     .expression_type(expr)
                     .is_assignable_to(db, env, not_implemented),
                 ast::Stmt::If(ast::StmtIf {
-                    elif_else_clauses, ..
+                    body,
+                    elif_else_clauses,
+                    ..
                 }) => {
                     elif_else_clauses
                         .last()
                         .is_some_and(|last_clause| last_clause.test.is_none())
+                        && is_deliberately_unreachable_inner(builder, body, not_implemented)
                         && elif_else_clauses.iter().all(|clause| {
                             is_deliberately_unreachable_inner(
                                 builder,
@@ -1009,13 +1036,25 @@ fn definition_contains_special_cased_condition<'db>(
         return false;
     };
 
-    let mut inference = None;
+    // Unpacked targets do not retain the types of their shared right-hand side. Read those
+    // types from the standalone expression query, without re-entering scope inference.
+    let standalone = semantic_index(db, program_file).try_expression(value);
+    let mut expression_inference = None;
+    let mut definition_inference = None;
 
     any_over_expr(value, |expression| {
         is_special_cased_condition_expression(db, program_file, expression, |expr| {
-            inference
-                .get_or_insert_with(|| infer_definition_types(db, definition))
-                .expression_type(expr)
+            if let Some(standalone) = standalone {
+                expression_inference
+                    .get_or_insert_with(|| {
+                        infer_expression_types(db, standalone, TypeContext::default())
+                    })
+                    .expression_type(expr)
+            } else {
+                definition_inference
+                    .get_or_insert_with(|| infer_definition_types(db, definition))
+                    .expression_type(expr)
+            }
         })
     })
 }

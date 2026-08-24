@@ -137,13 +137,13 @@ reveal_type(not b"hello" + b"world")  # revealed: Literal[False]
 ## Tuple
 
 ```py
-# error: [redundant-condition] "always truthy"
+# error: [redundant-condition] "Object of type `tuple[Literal[1]]` is always truthy"
 reveal_type(not (1,))  # revealed: Literal[False]
-# error: [redundant-condition] "always truthy"
+# error: [redundant-condition] "Object of type `tuple[Literal[1], Literal[2]]` is always truthy"
 reveal_type(not (1, 2))  # revealed: Literal[False]
-# error: [redundant-condition] "always truthy"
+# error: [redundant-condition] "Object of type `tuple[Literal[1], Literal[2], Literal[3]]` is always truthy"
 reveal_type(not (1, 2, 3))  # revealed: Literal[False]
-# error: [redundant-condition] "always falsy"
+# error: [redundant-condition] "An empty tuple is always falsy"
 reveal_type(not ())  # revealed: Literal[True]
 # error: [redundant-condition] "always truthy"
 reveal_type(not ("hello",))  # revealed: Literal[False]

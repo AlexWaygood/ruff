@@ -7,7 +7,8 @@ This rule is enabled by default, and is deliberately not comprehensive. In order
 positives, it is not emitted on any expression where the boolean test is inferred as evaluating to
 `True` itself, `False` itself, or an exact integer such as `1` or `0`. It also is not emitted on
 any expression where the boolean test uses a walrus operator. These cases are all covered by
-`redundant-condition-strict`, a sibling rule to this one that is disabled by default.
+`redundant-condition-strict`, a sibling rule to this one that is disabled by default and which
+exclusively covers cases that are exempted by this rule.
 
 ## Why is this bad?
 
@@ -70,3 +71,11 @@ def test_my_data(data: list[int]):
     # not a `tuple`! `tuple(item for item in data if item > 42)` is probably what you meant instead.
     assert (item for item in data if item > 42)  # error: [redundant-condition]
 ```
+
+## Known issues
+
+When an always-truthy condition is an awaitable, this rule sometimes offers an unsafe fix to add
+`await`. Applying this fix inside a synchronous generator expression turns it into an asynchronous
+generator. The consumer of the generator may also need to change if this fix is applied: for example,
+`list(...)` and a regular `for` loop cannot consume an asynchronous generator. Review the surrounding code before
+applying this fix; consuming the result may require an asynchronous comprehension or an `async for` loop.
